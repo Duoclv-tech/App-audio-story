@@ -1,0 +1,466 @@
+from pydantic import BaseModel, HttpUrl, model_validator
+from typing import Optional, List, Dict, Any
+from datetime import datetime
+
+# Story Schemas
+class StoryBase(BaseModel):
+    title: str
+    url: str
+    author: Optional[str] = None
+    total_chapters: Optional[int] = None
+    start_chapter: int = 1
+    end_chapter: Optional[int] = None
+    custom_chapter_urls: Optional[List[str]] = None  # List of custom URLs for manual input
+
+class StoryCreate(StoryBase):
+    auto_check: bool = True
+    auto_tts: bool = False
+
+class StoryUpdate(BaseModel):
+    title: Optional[str] = None
+    url: Optional[str] = None
+    author: Optional[str] = None
+    start_chapter: Optional[int] = None
+    end_chapter: Optional[int] = None
+    custom_chapter_urls: Optional[List[str]] = None
+    status: Optional[str] = None
+    current_step: Optional[int] = None
+
+class StoryResponse(StoryBase):
+    id: str
+    status: str
+    current_step: int
+    is_favorite: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class StoryWithStats(StoryResponse):
+    total_downloaded: int = 0
+    total_audio_generated: int = 0
+    has_merged_audio: bool = False
+
+# Chapter Schemas
+class ChapterBase(BaseModel):
+    chapter_number: int
+    title: Optional[str] = None
+    content: Optional[str] = None
+
+class ChapterCreate(ChapterBase):
+    story_id: str
+
+class ChapterUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    status: Optional[str] = None
+
+class CheckGrammarRequest(BaseModel):
+    content: str
+
+class ChapterResponse(ChapterBase):
+    id: str
+    story_id: str
+    char_count: int
+    has_censored_words: bool
+    censored_count: int
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Audio Schemas
+class AudioFileBase(BaseModel):
+    file_path: str
+    file_size: Optional[int] = None
+    duration: Optional[float] = None
+    format: str = 'mp3'
+    bitrate: str = '192k'
+
+class AudioFileCreate(AudioFileBase):
+    chapter_id: str
+
+class AudioFileResponse(AudioFileBase):
+    id: str
+    chapter_id: str
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Merged Audio Schemas
+class MergedAudioResponse(BaseModel):
+    id: str
+    story_id: str
+    file_path: str
+    file_size: Optional[int]
+    duration: Optional[float]
+    format: str
+    total_chapters: Optional[int]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Task Schemas
+class TaskBase(BaseModel):
+    type: str
+    total_items: Optional[int] = None
+
+class TaskCreate(TaskBase):
+    story_id: Optional[str] = None
+
+class TaskResponse(TaskBase):
+    id: str
+    story_id: Optional[str]
+    status: str
+    progress: int
+    completed_items: int
+    failed_items: int
+    error_message: Optional[str]
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Censored Word Schemas
+class CensoredWordBase(BaseModel):
+    word: str
+    line_number: Optional[int]
+    context: Optional[str]
+
+class CensoredWordResponse(CensoredWordBase):
+    id: str
+    chapter_id: str
+    fixed: bool
+    word_type: str = 'censored'  # 'censored' or 'banned'
+    suggested_replacement: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Download Request
+class DownloadRequest(BaseModel):
+    story_id: str
+
+class DownloadResponse(BaseModel):
+    task_id: str
+    status: str
+    message: str
+
+# TTS Request
+class TTSRequest(BaseModel):
+    story_id: str
+    voice: str = "minh_khanh"
+    speed: float = 1.0
+    volume: int = 100
+
+class TTSResponse(BaseModel):
+    task_id: str
+    status: str
+    message: str
+
+# Audio Merge Request
+class AudioMergeRequest(BaseModel):
+    story_id: str
+    output_format: str = "mp3"
+    bitrate: str = "192k"
+    crossfade: int = 0
+
+class AudioMergeResponse(BaseModel):
+    task_id: str
+    status: str
+    message: str
+
+# Settings
+class SettingResponse(BaseModel):
+    id: int
+    setting_key: str
+    setting_value: dict
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Stats Response
+class StoryStatsResponse(BaseModel):
+    total_chapters: int
+    total_characters: int
+    chapters_over_9500: int
+    chapters_under_9500: int
+    total_censored_words: int
+    chapters_with_censored: int
+    estimated_duration: str
+    estimated_cost: str
+
+# Text Check Response
+class TextCheckResponse(BaseModel):
+    total_files: int
+    files_over_9500: int
+    files_under_9500: int
+    files_with_censored: int
+    total_censored_words: int
+
+# Banned Word Schemas
+class BannedWordBase(BaseModel):
+    banned_word: str
+    replacement_word: str
+    description: Optional[str] = None
+    is_active: bool = True
+
+class BannedWordCreate(BannedWordBase):
+    pass
+
+class BannedWordUpdate(BaseModel):
+    banned_word: Optional[str] = None
+    replacement_word: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class BannedWordResponse(BannedWordBase):
+    id: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Pagination Schemas
+class PaginationMeta(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+class PaginatedStoriesResponse(BaseModel):
+    data: List[StoryWithStats]
+    meta: PaginationMeta
+
+class PaginatedBannedWordsResponse(BaseModel):
+    data: List['BannedWordResponse']
+    meta: PaginationMeta
+
+# Prompt Schemas
+class PromptBase(BaseModel):
+    title: str
+    content: str
+    category: Optional[str] = None
+    description: Optional[str] = None
+    is_active: bool = True
+
+class PromptCreate(PromptBase):
+    pass
+
+class PromptUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class PromptResponse(PromptBase):
+    id: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class PaginatedPromptsResponse(BaseModel):
+    data: List['PromptResponse']
+    meta: PaginationMeta
+
+# Video Processing Schemas
+class Sticker(BaseModel):
+    """A single sticker (image or animated GIF/WebP/APNG) overlaid on the video.
+
+    Position is center-based in normalized 0..1 coords (so it lays out the same
+    across resolutions). end_time=None means "show until end of video".
+    """
+    image_path: str
+    x: float = 0.5
+    y: float = 0.5
+    w: int = 200
+    h: int = 200
+    opacity: float = 1.0
+    start_time: float = 0.0
+    end_time: Optional[float] = None
+
+class VideoProcessRequest(BaseModel):
+    story_id: str
+    video_source_folder: str
+    audio_path: Optional[str] = None  # Custom audio path (skip DB lookup if provided)
+    audio_speed: float = 1.07
+    transition_effect: str = "crossfade"
+    transitions_pool: Optional[List[str]] = None  # Multi-select pool; overrides transition_effect if set
+    transition_duration: float = 0.5
+    resolution: str = "1920x1080"
+    banner_image: Optional[str] = None  # Optional banner image as background
+    banner_video_scale: float = 1.0  # Video size relative to banner (0.5 ~ 1.0)
+    overlay_opacity: float = 0.0  # Black overlay on top of composed video (0.0 = none, 0.8 = heavy)
+    watermark_image: Optional[str] = None  # Optional watermark/logo image
+    watermark_x: float = 0.92  # Center x in 0..1 (relative to frame)
+    watermark_y: float = 0.92  # Center y in 0..1
+    watermark_w: int = 200  # Width in px at output resolution
+    watermark_h: int = 200  # Height in px
+    watermark_shape: str = "none"  # none | circle | rounded | star | sun
+    watermark_opacity: float = 0.85  # Watermark alpha (0.1 ~ 1.0)
+    watermark_text: Optional[str] = None  # Optional text watermark
+    watermark_text_font: str = "DejaVu Sans (system default)"
+    watermark_text_size: int = 48  # px at output resolution
+    watermark_text_color: str = "#FFFFFF"
+    watermark_text_angle: float = 0.0  # rotation degrees, -45 ~ 45
+    watermark_text_x: float = 0.92  # Center x in 0..1
+    watermark_text_y: float = 0.92  # Center y in 0..1
+    watermark_text_opacity: float = 0.85
+    # Subtitle (burned-in SRT with style + animation)
+    subtitle_srt_path: Optional[str] = None
+    subtitle_animation: str = "fade"  # none | fade | pop | slide_up | typewriter
+    subtitle_font: str = "Be Vietnam Pro (Vietnamese)"
+    subtitle_font_size: int = 56
+    subtitle_color: str = "#FFFFFF"
+    subtitle_outline_color: str = "#000000"
+    subtitle_outline_width: int = 3
+    subtitle_shadow: int = 0
+    subtitle_bold: bool = True
+    subtitle_italic: bool = False
+    subtitle_align: str = "center"  # left | center | right
+    subtitle_x: float = 0.5
+    subtitle_y: float = 0.85
+    subtitle_opacity: float = 1.0
+    fade_in: float = 0.0  # Fade-in seconds at start (0 = none)
+    fade_out: float = 0.0  # Fade-out seconds at end (0 = none)
+    mute_source_videos: bool = True  # If True, drop audio from background clips (only main audio plays)
+
+    # Stickers (image / GIF / WebP / APNG overlays at fixed positions+time ranges)
+    stickers: List[Sticker] = []
+
+    # Audio visualizer (default OFF) — overlay rendered from audio
+    visualizer_enabled: bool = False
+    # Style: bars | waveform | spectrum | cqt
+    visualizer_style: str = "bars"
+    visualizer_x: float = 0.5                  # Center x in 0..1
+    visualizer_y: float = 0.85                 # Center y in 0..1
+    visualizer_w: int = 800                    # px at output resolution
+    visualizer_h: int = 120                    # px
+    visualizer_color1: str = "#00E5FF"         # Primary color (hex)
+    visualizer_color2: str = "#FF00FF"         # Secondary color (bars gradient)
+    visualizer_opacity: float = 0.85
+    visualizer_bg_mode: str = "transparent"    # "transparent" | "solid"
+    visualizer_bg_color: str = "#000000"
+    visualizer_bg_opacity: float = 0.3
+    visualizer_spectrum_preset: str = "rainbow"  # showspectrum color preset
+    # Sub-modes
+    visualizer_bars_mode: str = "bar"          # bar | line | dot (showfreqs mode)
+    visualizer_waveform_mode: str = "cline"    # cline | line | point | p2p (showwaves mode)
+    visualizer_waveform_mirror: bool = False   # If True, vstack a vertically-flipped copy
+
+    # Anti-detection (all default OFF)
+    ad_flip_random: bool = False        # Mỗi clip 50% xác suất hflip
+    ad_flip_all: bool = False           # Hflip toàn bộ clip (mutex với ad_flip_random)
+    ad_zoom: bool = False
+    ad_zoom_factor: float = 1.08        # 1.00..1.15
+    ad_color: bool = False
+    ad_saturation: float = 1.05         # 0.85..1.15
+    ad_contrast: float = 1.00           # 0.90..1.10
+    ad_gamma: float = 1.00              # 0.90..1.10
+    ad_hue_shift: float = 0.0           # -15..15 deg
+    ad_clip_speed_jitter: bool = False
+    ad_clip_speed_jitter_range: float = 0.03  # ±0..0.05
+    ad_strip_metadata: bool = False
+
+    @model_validator(mode="after")
+    def _ad_flip_mutex(self):
+        if self.ad_flip_random and self.ad_flip_all:
+            raise ValueError("ad_flip_random and ad_flip_all are mutually exclusive")
+        return self
+
+    @model_validator(mode="after")
+    def _visualizer_options(self):
+        valid_styles = {"bars", "waveform", "spectrum", "cqt"}
+        if self.visualizer_style not in valid_styles:
+            raise ValueError(f"visualizer_style must be one of: {sorted(valid_styles)}")
+        if self.visualizer_bg_mode not in {"transparent", "solid"}:
+            raise ValueError("visualizer_bg_mode must be one of: transparent, solid")
+        if self.visualizer_bars_mode not in {"bar", "line", "dot"}:
+            raise ValueError("visualizer_bars_mode must be one of: bar, line, dot")
+        if self.visualizer_waveform_mode not in {"cline", "line", "point", "p2p"}:
+            raise ValueError("visualizer_waveform_mode must be one of: cline, line, point, p2p")
+        return self
+
+class VideoProcessResponse(BaseModel):
+    task_id: str
+    status: str
+    message: str
+
+class VideoFolderValidateRequest(BaseModel):
+    folder_path: str
+
+class VideoFolderValidateResponse(BaseModel):
+    valid: bool
+    video_count: int = 0
+    total_duration: float = 0
+    total_duration_formatted: str = ""
+    error: Optional[str] = None
+
+class BrowseFolderRequest(BaseModel):
+    path: str = ""
+
+class BrowseFolderResponse(BaseModel):
+    current_path: str
+    parent_path: Optional[str] = None
+    folders: List[str] = []
+    video_count: int = 0
+
+class BrowseFilesResponse(BaseModel):
+    current_path: str
+    parent_path: Optional[str] = None
+    folders: List[str] = []
+    files: List[str] = []
+
+class VideoOutputResponse(BaseModel):
+    id: str
+    story_id: str
+    audio_source_path: Optional[str]
+    video_source_folder: Optional[str]
+    output_path: Optional[str]
+    file_size: Optional[int]
+    duration: Optional[float]
+    audio_speed: float
+    transition_effect: str
+    transition_duration: float
+    resolution: str
+    status: str
+    error_message: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# Video Preset Schemas
+class VideoPresetCreate(BaseModel):
+    name: str
+    cfg: Dict[str, Any]
+
+class VideoPresetUpdate(BaseModel):
+    name: Optional[str] = None
+    cfg: Optional[Dict[str, Any]] = None
+
+class VideoPresetResponse(BaseModel):
+    id: str
+    name: str
+    cfg: Dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Trimmer — UI Mockup</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f5f5f0;
+    color: #1a1a1a;
+    padding: 2rem 1rem;
+  }
+  .container { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .app-sub { font-size: 13px; color: #888; margin-bottom: 2rem; }
+
+  .step { margin-bottom: 16px; }
+  .step-label {
+    font-size: 11px; font-weight: 600; letter-spacing: .08em;
+    text-transform: uppercase; color: #888; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .step-num {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: #1a1a1a; color: #fff;
+    font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid #e8e8e4;
+    border-radius: 12px;
+    padding: 16px 20px;
+  }
+  .divider { height: 1px; background: #f0f0ec; margin: 12px 0; }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 1.5px dashed #d0d0ca;
+    border-radius: 10px;
+    padding: 2rem;
+    text-align: center;
+    background: #fafaf8;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .upload-zone:hover { background: #f0f0ec; }
+  .upload-icon {
+    width: 44px; height: 44px; border-radius: 50%;
+    border: 1px solid #d8d8d2;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 10px; font-size: 18px;
+  }
+  .upload-text { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+  .upload-sub { font-size: 12px; color: #999; }
+  .file-info {
+    display: flex; align-items: center; gap: 10px;
+    margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid #f0f0ec;
+  }
+  .file-icon { font-size: 20px; }
+  .file-name { font-size: 13px; font-weight: 500; flex: 1; }
+  .badge {
+    font-size: 11px; padding: 3px 10px; border-radius: 20px; font-weight: 500;
+  }
+  .badge-blue { background: #e8f0fb; color: #1a4d9e; }
+  .badge-gray { background: #f0f0ec; color: #555; }
+
+  /* Video preview */
+  .video-preview {
+    background: #111;
+    border-radius: 10px;
+    height: 140px;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .video-thumb {
+    width: 100%; height: 100%;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .play-btn {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    border: 2px solid rgba(255,255,255,0.6);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .play-tri {
+    width: 0; height: 0;
+    border-top: 9px solid transparent;
+    border-bottom: 9px solid transparent;
+    border-left: 14px solid rgba(255,255,255,0.9);
+    margin-left: 4px;
+  }
+  .time-overlay {
+    position: absolute; bottom: 8px; right: 12px;
+    font-size: 12px; color: rgba(255,255,255,0.8);
+    background: rgba(0,0,0,0.5); padding: 2px 8px; border-radius: 4px;
+    font-family: monospace;
+  }
+
+  /* Timeline */
+  .timeline-wrap { padding: 0 2px; }
+  .timeline-track {
+    height: 10px; background: #ebebeb; border-radius: 5px;
+    position: relative; margin: 8px 0;
+  }
+  .timeline-fill {
+    position: absolute; left: 24%; width: 38%;
+    height: 100%; background: #3b82f6; border-radius: 5px;
+  }
+  .tl-handle {
+    position: absolute; top: -7px;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: #fff; border: 2.5px solid #3b82f6;
+    cursor: ew-resize; box-shadow: 0 1px 4px rgba(0,0,0,.15);
+  }
+  .tl-left { left: calc(24% - 12px); }
+  .tl-right { left: calc(62% - 12px); }
+  .tl-labels {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: #aaa; margin-top: 6px;
+  }
+  .tl-center { color: #3b82f6; font-weight: 600; font-size: 12px; }
+
+  /* Waveform */
+  .waveform {
+    display: flex; align-items: center; gap: 2px;
+    height: 36px; margin: 8px 0 4px; padding: 0 2px;
+  }
+  .wbar { background: #d0d0d0; border-radius: 2px; width: 5px; flex-shrink: 0; }
+  .wbar.active { background: #3b82f6; opacity: .75; }
+
+  /* Time inputs */
+  .time-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .time-group label { font-size: 12px; color: #888; display: block; margin-bottom: 6px; font-weight: 500; }
+  .time-inputs { display: flex; align-items: center; gap: 4px; }
+  .tnum {
+    width: 44px; text-align: center; font-size: 16px; font-weight: 600;
+    padding: 8px 4px; border: 1px solid #e0e0da; border-radius: 8px;
+    background: #fafaf8; font-family: monospace; color: #1a1a1a;
+  }
+  .tsep { font-size: 18px; color: #ccc; font-weight: 300; }
+  .tunit { font-size: 10px; color: #bbb; line-height: 1.2; text-align: center; }
+  .mini-btn {
+    font-size: 11px; padding: 4px 10px; border-radius: 6px;
+    border: 1px solid #e0e0da; background: #fafaf8;
+    color: #666; cursor: pointer; margin-top: 6px; display: inline-block;
+  }
+  .mini-btn:hover { background: #f0f0ec; }
+  .duration-note {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: #888; margin-top: 6px;
+    padding-top: 10px; border-top: 1px solid #f0f0ec;
+  }
+  .dot-green { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; flex-shrink: 0; }
+
+  /* Pill selectors */
+  .pill-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill {
+    font-size: 12px; padding: 5px 14px; border-radius: 20px;
+    border: 1px solid #e0e0da; color: #888; background: transparent;
+    cursor: pointer; transition: all .1s;
+  }
+  .pill.active {
+    border-color: #1a1a1a; color: #1a1a1a;
+    background: #f5f5f0; font-weight: 500;
+  }
+  .pill:hover:not(.active) { background: #fafaf8; }
+
+  /* Options grid */
+  .opt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .opt-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #555; }
+  .checkbox {
+    width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid #d0d0d0;
+    background: #fff; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  }
+  .checkbox.checked { background: #3b82f6; border-color: #3b82f6; }
+  .checkbox.checked::after { content: '✓'; color: #fff; font-size: 10px; font-weight: 700; }
+
+  /* Output filename */
+  .filename-input {
+    width: 100%; padding: 8px 12px; border-radius: 8px;
+    border: 1px solid #e0e0da; background: #fafaf8;
+    font-size: 13px; color: #555; font-family: monospace;
+  }
+
+  .ratio-card {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 5px; padding: 10px 6px; border-radius: 10px;
+    border: 1px solid #e8e8e4; background: #fafaf8;
+    cursor: pointer; transition: all .15s; min-height: 82px;
+  }
+  .ratio-card:hover { border-color: #bbb; background: #f5f5f0; }
+  .ratio-card.active { border-color: #3b82f6; background: #eff6ff; }
+  .ratio-box { border: 2px solid #ccc; border-radius: 3px; background: #e8e8e4; transition: all .15s; }
+  .ratio-card.active .ratio-box { border-color: #3b82f6; background: #bfdbfe; }
+  .ratio-name { font-size: 12px; font-weight: 600; color: #333; }
+  .ratio-sub { font-size: 10px; color: #aaa; text-align: center; }
+
+  /* Export section */
+  .export-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .export-info { }
+  .export-title { font-size: 15px; font-weight: 600; }
+  .export-sub { font-size: 12px; color: #888; margin-top: 2px; }
+  .export-btn {
+    padding: 10px 24px; border-radius: 8px; border: none;
+    background: #1a1a1a; color: #fff; font-size: 14px; font-weight: 500;
+    cursor: pointer; white-space: nowrap; transition: background .15s;
+  }
+  .export-btn:hover { background: #333; }
+  .progress-bar {
+    height: 6px; background: #ebebeb; border-radius: 3px; margin: 10px 0 6px;
+    overflow: hidden;
+  }
+  .progress-fill { width: 0%; height: 100%; background: #22c55e; border-radius: 3px; }
+  .privacy-note { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #aaa; }
+  .dot-amber { width: 7px; height: 7px; border-radius: 50%; background: #f59e0b; flex-shrink: 0; }
+
+  /* Section header */
+  .section-title { font-size: 13px; font-weight: 500; color: #555; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>✂️ Video Trimmer</h1>
+  <p class="app-sub">Cắt video chính xác theo giờ · phút · giây — xử lý ngay trên trình duyệt</p>
+
+  <!-- Step 1 -->
+  <div class="step">
+    <div class="step-label"><div class="step-num">1</div> Tải video lên</div>
+    <div class="card">
+      <div class="upload-zone">
+        <div class="upload-icon">📁</div>
+        <div class="upload-text">Kéo thả hoặc nhấn để chọn file</div>
+        <div class="upload-sub">Hỗ trợ MP4, MOV, MKV, AVI, WebM · Tối đa 2GB</div>
+      </div>
+      <div class="file-info">
+        <span class="file-icon">🎬</span>
+        <span class="file-name">demo_video_final_v2.mp4</span>
+        <span class="badge badge-blue">45:32</span>
+        <span class="badge badge-gray">1.2 GB</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="step">
+    <div class="step-label"><div class="step-num">2</div> Xem trước & chọn đoạn cắt</div>
+    <div class="card">
+      <div class="video-preview">
+        <div class="video-thumb">
+          <div class="play-btn"><div class="play-tri"></div></div>
+        </div>
+        <div class="time-overlay">00:12:44</div>
+      </div>
+
+      <!-- Waveform -->
+      <div class="waveform" id="waveform"></div>
+
+      <!-- Timeline -->
+      <div class="timeline-wrap">
+        <div class="timeline-track">
+          <div class="timeline-fill"></div>
+          <div class="tl-handle tl-left"></div>
+          <div class="tl-handle tl-right"></div>
+        </div>
+        <div class="tl-labels">
+          <span>00:00:00</span>
+          <span class="tl-center">⏱ đoạn chọn: 15 phút 26 giây</span>
+          <span>45:32</span>
+        </div>
+      </div>
+
+      <div style="margin-top:10px;font-size:11px;color:#bbb;text-align:center">
+        Kéo 2 đầu trên thanh timeline · hoặc nhập thời gian chính xác bên dưới
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3 -->
+  <div class="step">
+    <div class="step-label"><div class="step-num">3</div> Nhập thời gian chính xác</div>
+    <div class="card">
+      <div class="time-grid">
+        <div>
+          <label>Bắt đầu từ</label>
+          <div class="time-inputs">
+            <input class="tnum" value="00" readonly>
+            <span class="tsep">:</span>
+            <input class="tnum" value="12" readonly>
+            <span class="tsep">:</span>
+            <input class="tnum" value="44" readonly>
+            <div class="tunit">giờ<br>phút<br>giây</div>
+          </div>
+          <div class="mini-btn">↙ lấy vị trí hiện tại</div>
+        </div>
+        <div>
+          <label>Kết thúc tại</label>
+          <div class="time-inputs">
+            <input class="tnum" value="00" readonly>
+            <span class="tsep">:</span>
+            <input class="tnum" value="28" readonly>
+            <span class="tsep">:</span>
+            <input class="tnum" value="10" readonly>
+            <div class="tunit">giờ<br>phút<br>giây</div>
+          </div>
+          <div class="mini-btn">↙ lấy vị trí hiện tại</div>
+        </div>
+      </div>
+      <div class="duration-note">
+        <div class="dot-green"></div>
+        Thời lượng đoạn cắt: <strong style="color:#1a1a1a;margin-left:4px">15 phút 26 giây</strong>
+        <span style="margin-left:auto">
+          <span class="mini-btn">▶ Xem trước đoạn này</span>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 4 -->
+  <div class="step">
+    <div class="step-label"><div class="step-num">4</div> Cài đặt xuất file</div>
+    <div class="card">
+
+      <div class="section-title">Định dạng đầu ra</div>
+      <div class="pill-row" style="margin-bottom:14px">
+        <div class="pill active">MP4 (H.264)</div>
+        <div class="pill">MP4 (H.265)</div>
+        <div class="pill">MOV</div>
+        <div class="pill">MKV</div>
+        <div class="pill">WebM</div>
+        <div class="pill">GIF</div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="section-title">Chất lượng video</div>
+      <div class="pill-row" style="margin-bottom:14px">
+        <div class="pill">Gốc (không nén)</div>
+        <div class="pill active">Cao · 1080p</div>
+        <div class="pill">Trung bình · 720p</div>
+        <div class="pill">Thấp · 480p</div>
+        <div class="pill">Tuỳ chỉnh</div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="section-title">Tuỳ chọn thêm</div>
+      <div class="opt-grid" style="margin-bottom:14px">
+        <div class="opt-item">
+          <div class="checkbox checked"></div> Giữ nguyên âm thanh
+        </div>
+        <div class="opt-item">
+          <div class="checkbox"></div> Tắt tiếng (mute)
+        </div>
+        <div class="opt-item">
+          <div class="checkbox checked"></div> Cắt chính xác theo frame
+        </div>
+        <div class="opt-item">
+          <div class="checkbox"></div> Thêm fade in / fade out
+        </div>
+        <div class="opt-item">
+          <div class="checkbox"></div> Chèn watermark
+        </div>
+        <div class="opt-item">
+          <div class="checkbox"></div> Cắt nhiều đoạn (multi-clip)
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="section-title">Tỉ lệ khung hình (Aspect Ratio)</div>
+      <div class="ratio-grid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:6px">
+
+        <div class="ratio-card active" onclick="selectRatio(this)">
+          <div class="ratio-box" style="width:48px;height:27px;"></div>
+          <div class="ratio-name">16:9</div>
+          <div class="ratio-sub">Ngang</div>
+        </div>
+
+        <div class="ratio-card" onclick="selectRatio(this)">
+          <div class="ratio-box" style="width:27px;height:48px;"></div>
+          <div class="ratio-name">9:16</div>
+          <div class="ratio-sub">Dọc / Reels</div>
+        </div>
+
+        <div class="ratio-card" onclick="selectRatio(this)">
+          <div class="ratio-box" style="width:40px;height:40px;"></div>
+          <div class="ratio-name">1:1</div>
+          <div class="ratio-sub">Vuông</div>
+        </div>
+
+        <div class="ratio-card" onclick="selectRatio(this)">
+          <div class="ratio-box" style="width:48px;height:36px;"></div>
+          <div class="ratio-name">4:3</div>
+          <div class="ratio-sub">Cổ điển</div>
+        </div>
+
+        <div class="ratio-card" onclick="selectRatio(this)">
+          <div class="ratio-box" style="width:28px;height:48px;"></div>
+          <div class="ratio-name">4:5</div>
+          <div class="ratio-sub">Instagram</div>
+        </div>
+
+        <div class="ratio-card" onclick="selectRatio(this)">
+          <div class="ratio-box" style="width:48px;height:20px;"></div>
+          <div class="ratio-name">21:9</div>
+          <div class="ratio-sub">Cinematic</div>
+        </div>
+
+        <div class="ratio-card" onclick="selectRatio(this)">
+          <div class="ratio-box" style="width:43px;height:27px;"></div>
+          <div class="ratio-name">16:10</div>
+          <div class="ratio-sub">Laptop</div>
+        </div>
+
+        <div class="ratio-card" onclick="selectRatio(this)">
+          <div class="ratio-box" style="width:36px;height:48px;"></div>
+          <div class="ratio-name">3:4</div>
+          <div class="ratio-sub">Portrait</div>
+        </div>
+
+        <div class="ratio-card" onclick="selectRatio(this)" id="ratio-original">
+          <div style="width:48px;height:27px;display:flex;align-items:center;justify-content:center;font-size:16px">↩</div>
+          <div class="ratio-name">Gốc</div>
+          <div class="ratio-sub">Như cũ</div>
+        </div>
+
+        <div class="ratio-card" onclick="selectRatio(this)" id="ratio-custom">
+          <div style="width:48px;height:27px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#aaa">⚙</div>
+          <div class="ratio-name">Tuỳ chỉnh</div>
+          <div class="ratio-sub">Nhập tay</div>
+        </div>
+
+      </div>
+
+      <!-- Custom ratio inputs (ẩn mặc định) -->
+      <div id="custom-ratio-row" style="display:none;align-items:center;gap:8px;margin-bottom:10px;padding:10px 12px;background:#fafaf8;border-radius:8px;border:1px solid #e0e0da">
+        <span style="font-size:12px;color:#888;font-weight:500">Tỉ lệ:</span>
+        <input class="tnum" value="16" style="width:52px"> <span style="color:#ccc;font-size:16px">:</span>
+        <input class="tnum" value="9" style="width:52px">
+        <span style="font-size:12px;color:#bbb;margin-left:4px">— ví dụ: 16:9, 2:1, 5:4...</span>
+      </div>
+
+      <div style="font-size:11px;color:#bbb;margin-bottom:2px">
+        💡 Chọn khác gốc sẽ tự động <strong style="color:#555">crop giữa</strong> hoặc <strong style="color:#555">thêm viền đen</strong> (letterbox) — chọn bên dưới
+      </div>
+
+      <div class="pill-row" style="margin-top:8px;margin-bottom:4px" id="crop-mode">
+        <div class="pill active" onclick="selectPill(this,'crop-mode')">Crop giữa (cắt bỏ)</div>
+        <div class="pill" onclick="selectPill(this,'crop-mode')">Letterbox (viền đen)</div>
+        <div class="pill" onclick="selectPill(this,'crop-mode')">Blur background</div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="section-title">Thư mục & tên file xuất ra</div>
+
+      <!-- Output folder -->
+      <div style="margin-bottom:10px">
+        <div style="font-size:12px;color:#888;margin-bottom:6px">Thư mục lưu</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input class="filename-input" id="out-folder" value="/Users/username/Videos/demo_video_final_v2/" style="flex:1;font-size:12px">
+          <button class="mini-btn" style="white-space:nowrap;padding:8px 14px">📂 Đổi thư mục</button>
+        </div>
+        <div style="font-size:11px;color:#bbb;margin-top:4px">Mặc định: cùng thư mục với file gốc</div>
+      </div>
+
+      <!-- Output filename -->
+      <div>
+        <div style="font-size:12px;color:#888;margin-bottom:6px">Tên file</div>
+        <input class="filename-input" id="out-filename" value="demo_video_v2_cut_001244_002810.mp4">
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <div class="mini-btn" onclick="setName('auto')">⟳ Tự động đặt tên</div>
+          <div class="mini-btn" onclick="setName('date')"># Thêm ngày giờ</div>
+          <div class="mini-btn" onclick="setName('suffix')">+ Thêm hậu tố _cut</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Step 5 -->
+  <div class="step">
+    <div class="step-label"><div class="step-num">5</div> Xuất file</div>
+    <div class="card">
+      <div class="export-row">
+        <div class="export-info">
+          <div class="export-title">Sẵn sàng cắt</div>
+          <div class="export-sub">MP4 · 1080p · ~180 MB ước tính</div>
+        </div>
+        <button class="export-btn">✂️ Bắt đầu cắt video</button>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill"></div>
+      </div>
+      <div class="privacy-note">
+        <div class="dot-amber"></div>
+        Video xử lý hoàn toàn trên trình duyệt — không upload lên server, dữ liệu an toàn
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  function selectRatio(el) {
+    document.querySelectorAll('.ratio-card').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    const isCustom = el.id === 'ratio-custom';
+    document.getElementById('custom-ratio-row').style.display = isCustom ? 'flex' : 'none';
+  }
+  function selectPill(el, groupId) {
+    document.querySelectorAll('#' + groupId + ' .pill').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+  }
+  function setName(mode) {
+    const el = document.getElementById('out-filename');
+    const base = 'demo_video_v2';
+    const now = new Date();
+    const d = now.toISOString().slice(0,10).replace(/-/g,'');
+    if (mode === 'auto') el.value = base + '_cut_001244_002810.mp4';
+    else if (mode === 'date') el.value = base + '_cut_' + d + '_001244.mp4';
+    else if (mode === 'suffix') el.value = base + '_cut.mp4';
+  }
+
+  // Draw waveform
+  const wf = document.getElementById('waveform');
+  const heights = [8,12,20,10,28,34,30,16,26,22,14,28,36,20,12,8,22,32,28,18,10,24,34,20,14,26,22,12,30,18,24,10,20,28,22,14,32,26,18,12,8,22,30,24,20,14,28,34,18,12,10,24,20,26,30,22,14,18,12,8,22,26,32,20,24,18,12,10,30,26,22,20,14,28,32,24,18,12,8,22,28,24,20,18,14,26,32,20,24,18,12,10,30,26,22,20,14,28,30,22,18,12,8,22];
+  const total = heights.length;
+  const activeStart = Math.floor(total * 0.24);
+  const activeEnd = Math.floor(total * 0.62);
+  heights.forEach((h, i) => {
+    const bar = document.createElement('div');
+    bar.className = 'wbar' + (i >= activeStart && i <= activeEnd ? ' active' : '');
+    bar.style.height = h + 'px';
+    wf.appendChild(bar);
+  });
+</script>
+</body>
+</html>

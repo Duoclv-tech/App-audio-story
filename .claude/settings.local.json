@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(curl:*)",
+      "Bash(tasklist:*)",
+      "Bash(iconv:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker ps:*)",
+      "WebSearch",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(while read pid)",
+      "Bash(do taskkill //F //PID $pid)",
+      "Bash(done)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

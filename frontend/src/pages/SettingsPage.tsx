@@ -1,0 +1,209 @@
+import { useState, useEffect } from 'react'
+import axios from 'axios'
+
+interface Settings {
+  VBEE_APP_ID?: string
+  VBEE_BEARER_TOKEN?: string
+  GEMINI_API_KEY?: string
+}
+
+export default function SettingsPage() {
+  const [settings, setSettings] = useState<Settings>({})
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+  const [showTokens, setShowTokens] = useState(false)
+
+  useEffect(() => {
+    loadSettings()
+  }, [])
+
+  const loadSettings = async () => {
+    setLoading(true)
+    try {
+      const response = await axios.get('/api/v1/settings')
+      // Convert array of settings to object
+      const settingsObj: Settings = {}
+      response.data.forEach((setting: any) => {
+        settingsObj[setting.setting_key as keyof Settings] = setting.setting_value
+      })
+      setSettings(settingsObj)
+    } catch (error) {
+      console.error('Error loading settings:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSaveSettings = async () => {
+    setSaving(true)
+    setMessage(null)
+
+    try {
+      await axios.put('/api/v1/settings', settings)
+      setMessage({ type: 'success', text: 'Cài đặt đã được lưu thành công!' })
+
+      // Auto hide success message after 3 seconds
+      setTimeout(() => setMessage(null), 3000)
+    } catch (error: any) {
+      console.error('Error saving settings:', error)
+      setMessage({
+        type: 'error',
+        text: error.response?.data?.detail || 'Lỗi khi lưu cài đặt'
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleInputChange = (key: keyof Settings, value: string) => {
+    setSettings(prev => ({ ...prev, [key]: value }))
+  }
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm p-8">
+        <div className="text-center text-gray-500">Đang tải cài đặt...</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-8">
+      <h2 className="text-2xl font-bold mb-6">Cài Đặt</h2>
+
+      {/* VBEE API Configuration */}
+      <div className="mb-8">
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <span className="text-blue-600">🔑</span>
+          Cấu Hình VBEE API
+        </h3>
+
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+          <div className="text-sm text-blue-800 mb-2 font-medium">
+            Hướng dẫn lấy credentials:
+          </div>
+          <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
+            <li>Đăng nhập <a href="https://vbee.vn" target="_blank" rel="noopener noreferrer" className="underline">https://vbee.vn</a></li>
+            <li>Vào phần <strong>Quản lý ứng dụng</strong></li>
+            <li>Tạo app mới hoặc chọn app có sẵn</li>
+            <li>Copy <strong>ID ứng dụng</strong> (App ID)</li>
+            <li>Click vào app để lấy <strong>Bearer Token</strong></li>
+          </ol>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              App ID
+              <span className="text-red-500 ml-1">*</span>
+            </label>
+            <input
+              type="text"
+              value={settings.VBEE_APP_ID || ''}
+              onChange={(e) => handleInputChange('VBEE_APP_ID', e.target.value)}
+              placeholder="c1c5c478-719d-4ec6-b665-58ed39484375"
+              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              ID ứng dụng từ VBEE Dashboard
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Bearer Token
+              <span className="text-red-500 ml-1">*</span>
+            </label>
+            <div className="relative">
+              <input
+                type={showTokens ? "text" : "password"}
+                value={settings.VBEE_BEARER_TOKEN || ''}
+                onChange={(e) => handleInputChange('VBEE_BEARER_TOKEN', e.target.value)}
+                placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI..."
+                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pr-20 font-mono text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => setShowTokens(!showTokens)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-blue-600 hover:text-blue-800"
+              >
+                {showTokens ? 'Ẩn' : 'Hiện'}
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              JWT token từ VBEE Dashboard (có thời hạn)
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Gemini AI Configuration */}
+      <div className="mb-8">
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <span className="text-purple-600">🤖</span>
+          Cấu Hình Gemini AI (Grammar Check)
+        </h3>
+
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+          <div className="text-sm text-purple-800 mb-2 font-medium">
+            Hướng dẫn lấy API Key (miễn phí):
+          </div>
+          <ol className="text-sm text-purple-700 space-y-1 list-decimal list-inside">
+            <li>Vào <a href="https://ai.google.dev" target="_blank" rel="noopener noreferrer" className="underline">https://ai.google.dev</a></li>
+            <li>Đăng nhập bằng Gmail</li>
+            <li>Click <strong>"Get API Key"</strong> (góc trái)</li>
+            <li>Tạo API Key mới và copy</li>
+          </ol>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            Gemini API Key
+          </label>
+          <div className="relative">
+            <input
+              type={showTokens ? "text" : "password"}
+              value={settings.GEMINI_API_KEY || ''}
+              onChange={(e) => handleInputChange('GEMINI_API_KEY', e.target.value)}
+              placeholder="AIza..."
+              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 pr-20 font-mono text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => setShowTokens(!showTokens)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-purple-600 hover:text-purple-800"
+            >
+              {showTokens ? 'Ẩn' : 'Hiện'}
+            </button>
+          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            Dùng để kiểm tra ngữ pháp bằng AI (Gemini 2.0 Flash - miễn phí)
+          </p>
+        </div>
+      </div>
+
+      {/* Message */}
+      {message && (
+        <div className={`mb-4 p-4 rounded-lg ${
+          message.type === 'success'
+            ? 'bg-green-50 border border-green-200 text-green-800'
+            : 'bg-red-50 border border-red-200 text-red-800'
+        }`}>
+          {message.text}
+        </div>
+      )}
+
+      {/* Save Button */}
+      <div className="flex justify-end">
+        <button
+          onClick={handleSaveSettings}
+          disabled={saving}
+          className="bg-blue-500 text-white px-6 py-2 rounded-md hover:bg-blue-600 transition disabled:bg-gray-400"
+        >
+          {saving ? 'Đang lưu...' : 'Lưu Cài Đặt'}
+        </button>
+      </div>
+    </div>
+  )
+}

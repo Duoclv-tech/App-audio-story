@@ -1,0 +1,5882 @@
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import axios from 'axios'
+import { SubtitlePanel } from '../components/subtitle/SubtitlePanel'
+import { SubtitleOverlay } from '../components/subtitle/SubtitleOverlay'
+import { SubtitleSegment, DEFAULT_SUBTITLE_STYLE } from '../components/subtitle/srt'
+import { StickerPanel } from '../components/sticker/StickerPanel'
+import { StickerOverlay } from '../components/sticker/StickerOverlay'
+import { Sticker, toBackendSticker } from '../components/sticker/sticker'
+
+// Define workflow steps
+const WORKFLOW_STEPS = [
+  { id: 1, name: 'Input', description: 'Enter URL and configuration', hidden: false },
+  { id: 2, name: 'Download', description: 'Download chapters from TruyenFull', hidden: true }, // Hidden - runs automatically
+  { id: 3, name: 'Edit', description: 'Review and edit chapter content', hidden: false },
+  { id: 4, name: 'Grammar', description: 'Check grammar with AI', hidden: false },
+  { id: 5, name: 'TTS Config', description: 'Configure text-to-speech settings', hidden: false },
+  { id: 6, name: 'TTS Process', description: 'Convert text to speech', hidden: false },
+  { id: 7, name: 'Video', description: 'Create video from audio', hidden: false },
+  { id: 8, name: 'Complete', description: 'Download final audio', hidden: false }
+]
+
+// Visible steps for UI (filter out hidden ones)
+const VISIBLE_STEPS = WORKFLOW_STEPS.filter(step => !step.hidden)
+
+interface StoryData {
+  id?: string
+  url: string
+  title: string
+  start_chapter: number
+  end_chapter: number
+  status?: string
+  current_step?: number
+  custom_chapter_urls?: string[]
+}
+
+interface CustomUrlsDialogState {
+  isOpen: boolean
+  urlsText: string
+}
+
+interface Chapter {
+  id: string
+  chapter_number: number
+  title?: string
+  content?: string
+  char_count: number
+  has_censored_words: boolean
+  censored_count: number
+  status: string
+}
+
+interface EditDialogState {
+  isOpen: boolean
+  chapter: Chapter | null
+  content: string
+  title: string
+  censoredWords: CensoredWord[]
+  findText: string
+  replaceText: string
+  matchCount: number
+  quickBannedWord: string
+  quickReplacementWord: string
+}
+
+interface CensoredWord {
+  id: string
+  word: string
+  line_number: number
+  context: string
+  fixed: boolean
+  word_type: 'censored' | 'banned'
+  suggested_replacement?: string
+}
+
+interface ChapterStats {
+  story_id: string
+  total_chapters: number
+  total_characters: number
+  average_characters: number
+  chapters_with_censored_words: number
+  total_censored_words: number
+}
+
+interface DeleteDialogState {
+  isOpen: boolean
+  chapter: Chapter | null
+}
+
+interface ToastState {
+  isVisible: boolean
+  message: string
+  type: 'success' | 'error' | 'info'
+}
+
+interface AudioRecord {
+  chapter_id: string
+  chapter_number: number
+  chapter_title?: string
+  audio_id: string | null
+  status: string
+  request_id: string | null
+  audio_link: string | null
+  file_path: string | null
+  error_message: string | null
+  updated_at: string | null
+}
+
+export default function ProcessorPage() {
+  const { storyId } = useParams<{ storyId: string }>()
+  const navigate = useNavigate()
+  const [currentStep, setCurrentStep] = useState(1)  // Current viewing step (UI state)
+  const [storyData, setStoryData] = useState<StoryData>({
+    url: '',
+    title: '',
+    start_chapter: 1,
+    end_chapter: 10
+  })
+  const [chapters, setChapters] = useState<Chapter[]>([])
+  const [voices, setVoices] = useState<any[]>([])
+  const [chapterStats, setChapterStats] = useState<ChapterStats | null>(null)
+  const [checkingGrammar, setCheckingGrammar] = useState(false)
+  const [editDialog, setEditDialog] = useState<EditDialogState>({
+    isOpen: false,
+    chapter: null,
+    content: '',
+    title: '',
+    censoredWords: [],
+    findText: '',
+    replaceText: '',
+    matchCount: 0,
+    quickBannedWord: '',
+    quickReplacementWord: ''
+  })
+  const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>({
+    isOpen: false,
+    chapter: null
+  })
+  const [ttsConfig, setTtsConfig] = useState({
+    voice_code: 'hn_female_ngochuyen_full_48k-fhg',
+    speed: 1.0,
+    bitrate: 128,
+    audio_type: 'mp3'
+  })
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [duplicateStory, setDuplicateStory] = useState<{
+    id: string
+    title: string
+  } | null>(null)
+  const [audioRecords, setAudioRecords] = useState<AudioRecord[]>([])
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null)
+  const [toast, setToast] = useState<ToastState>({
+    isVisible: false,
+    message: '',
+    type: 'success'
+  })
+  const [customUrlsDialog, setCustomUrlsDialog] = useState<CustomUrlsDialogState>({
+    isOpen: false,
+    urlsText: ''
+  })
+
+  // Merged content state for Step 3
+  const [mergedView, setMergedView] = useState({
+    isOpen: false,
+    content: '',
+    findText: '',
+    replaceText: '',
+    matchCount: 0,
+    isSaving: false,
+    isChecking: false,
+    aiResult: null as any
+  })
+
+  // Merged TTS status for Step 6
+  const [mergedTtsStatus, setMergedTtsStatus] = useState({
+    status: 'idle' as 'idle' | 'running' | 'completed' | 'failed',
+    charCount: 0,
+    audioFile: null as string | null,
+    audioSize: null as number | null,
+    error: null as string | null
+  })
+
+  // Video processing state for Step 7
+  const VIDEO_TRANSITIONS = [
+    'fade','fadeblack','fadewhite','dissolve','pixelize',
+    'wipeleft','wiperight','wipeup','wipedown',
+    'slideleft','slideright','slideup','slidedown',
+    'smoothleft','smoothright','smoothup','smoothdown',
+    'circleopen','circleclose','rectcrop','radial','zoomin',
+    'crossfade','distance','hblur',
+  ]
+
+  type VideoConfig = {
+    folder: string; audioPath: string; bannerImage: string; bannerVideoScale: number;
+    watermarkImage: string;
+    audio_speed: number; transitions_pool: string[]; transition_duration: number;
+    resolution: string; overlay_opacity: number;
+    watermark_x: number; watermark_y: number;
+    watermark_w: number; watermark_h: number; watermark_shape: string;
+    watermark_opacity: number;
+    watermark_text: string; watermark_text_font: string; watermark_text_size: number;
+    watermark_text_color: string; watermark_text_angle: number;
+    watermark_text_x: number; watermark_text_y: number; watermark_text_opacity: number;
+    subtitle_srt_path: string | null;
+    subtitle_animation: 'none'|'fade'|'pop'|'slide_up'|'typewriter';
+    subtitle_font: string; subtitle_font_size: number;
+    subtitle_color: string; subtitle_outline_color: string;
+    subtitle_outline_width: number; subtitle_shadow: number;
+    subtitle_bold: boolean; subtitle_italic: boolean;
+    subtitle_align: 'left'|'center'|'right';
+    subtitle_x: number; subtitle_y: number; subtitle_opacity: number;
+    fade_in: number; fade_out: number;
+    mute_source_videos: boolean;
+    visualizer_enabled: boolean;
+    visualizer_style: 'bars'|'waveform'|'spectrum'|'cqt';
+    visualizer_x: number; visualizer_y: number;
+    visualizer_w: number; visualizer_h: number;
+    visualizer_color1: string; visualizer_color2: string;
+    visualizer_opacity: number;
+    visualizer_bg_mode: 'transparent'|'solid';
+    visualizer_bg_color: string; visualizer_bg_opacity: number;
+    visualizer_spectrum_preset: string;
+    visualizer_bars_mode: 'bar'|'line'|'dot';
+    visualizer_waveform_mode: 'cline'|'line'|'point'|'p2p';
+    visualizer_waveform_mirror: boolean;
+    ad_flip_random: boolean; ad_flip_all: boolean;
+    ad_zoom: boolean; ad_zoom_factor: number;
+    ad_color: boolean;
+    ad_saturation: number; ad_contrast: number; ad_gamma: number; ad_hue_shift: number;
+    ad_clip_speed_jitter: boolean; ad_clip_speed_jitter_range: number;
+    ad_strip_metadata: boolean;
+    // Stickers (image / GIF / WebP overlays). Stored alongside the rest of the
+    // config so a preset can re-apply the same set; absolute paths must still
+    // exist on disk for the backend to find them.
+    stickers: Sticker[];
+  }
+
+  type VideoCfgPreset = Omit<VideoConfig, 'folder'|'audioPath'|'bannerImage'|'bannerVideoScale'|'watermarkImage'>
+
+  const DEFAULT_VIDEO_CFG: VideoCfgPreset = {
+    audio_speed: 1.0,
+    transitions_pool: ['fade', 'crossfade', 'slideleft'],
+    transition_duration: 0.5,
+    resolution: '1920x1080',
+    overlay_opacity: 0.0,
+    watermark_x: 0.92,
+    watermark_y: 0.92,
+    watermark_w: 200,
+    watermark_h: 200,
+    watermark_shape: 'none',
+    watermark_opacity: 0.85,
+    watermark_text: '',
+    watermark_text_font: 'DejaVu Sans (system default)',
+    watermark_text_size: 48,
+    watermark_text_color: '#FFFFFF',
+    watermark_text_angle: 0.0,
+    watermark_text_x: 0.92,
+    watermark_text_y: 0.92,
+    watermark_text_opacity: 0.85,
+    subtitle_srt_path: null,
+    ...DEFAULT_SUBTITLE_STYLE,
+    fade_in: 0.0,
+    fade_out: 0.0,
+    mute_source_videos: true,
+    visualizer_enabled: false,
+    visualizer_style: 'bars',
+    visualizer_x: 0.5,
+    visualizer_y: 0.85,
+    visualizer_w: 800,
+    visualizer_h: 120,
+    visualizer_color1: '#00E5FF',
+    visualizer_color2: '#FF00FF',
+    visualizer_opacity: 0.85,
+    visualizer_bg_mode: 'transparent',
+    visualizer_bg_color: '#000000',
+    visualizer_bg_opacity: 0.3,
+    visualizer_spectrum_preset: 'rainbow',
+    visualizer_bars_mode: 'bar',
+    visualizer_waveform_mode: 'cline',
+    visualizer_waveform_mirror: false,
+    ad_flip_random: false,
+    ad_flip_all: false,
+    ad_zoom: false,
+    ad_zoom_factor: 1.08,
+    ad_color: false,
+    ad_saturation: 1.05,
+    ad_contrast: 1.00,
+    ad_gamma: 1.00,
+    ad_hue_shift: 0.0,
+    ad_clip_speed_jitter: false,
+    ad_clip_speed_jitter_range: 0.03,
+    ad_strip_metadata: false,
+    stickers: [],
+  }
+
+  // Migrate old configs (with *_position string) → x/y center coords
+  const migrateOldCfg = (cfg: any): any => {
+    if (!cfg) return cfg
+    const posToXY = (pos: string) => ({
+      x: pos.endsWith('left') ? 0.08 : pos.endsWith('right') ? 0.92 : 0.5,
+      y: pos.startsWith('top') ? 0.08 : pos.startsWith('bottom') ? 0.92 : 0.5,
+    })
+    if (typeof cfg.watermark_position === 'string' && cfg.watermark_x === undefined) {
+      const xy = posToXY(cfg.watermark_position)
+      cfg.watermark_x = xy.x; cfg.watermark_y = xy.y
+    }
+    if (typeof cfg.watermark_text_position === 'string' && cfg.watermark_text_x === undefined) {
+      const xy = posToXY(cfg.watermark_text_position)
+      cfg.watermark_text_x = xy.x; cfg.watermark_text_y = xy.y
+    }
+    delete cfg.watermark_position; delete cfg.watermark_text_position
+    // Migrate old watermark_size (% of width) → w/h px (assume 1920 base)
+    if (typeof cfg.watermark_size === 'number' && cfg.watermark_w === undefined) {
+      const wpx = Math.max(32, Math.round(cfg.watermark_size * 1920))
+      cfg.watermark_w = wpx
+      cfg.watermark_h = wpx
+    }
+    delete cfg.watermark_size
+    return cfg
+  }
+
+  const [videoConfig, setVideoConfig] = useState<VideoConfig>(() => {
+    const savedFolder = localStorage.getItem('videoConfig_folder') || ''
+    const savedBanner = localStorage.getItem('videoConfig_bannerImage') || ''
+    const savedWatermark = localStorage.getItem('videoConfig_watermarkImage') || ''
+    const savedScale = parseFloat(localStorage.getItem('videoConfig_bannerVideoScale') || '1.0')
+    const savedCfg = (() => { try { return JSON.parse(localStorage.getItem('videoConfig_cfg') || '{}') } catch { return {} } })()
+    return {
+      folder: savedFolder,
+      audioPath: '',
+      bannerImage: savedBanner,
+      bannerVideoScale: isNaN(savedScale) ? 1.0 : savedScale,
+      watermarkImage: savedWatermark,
+      ...DEFAULT_VIDEO_CFG,
+      ...migrateOldCfg(savedCfg),
+    }
+  })
+
+  type VideoPresetRow = { id: string; name: string; cfg: VideoCfgPreset }
+  const [videoPresets, setVideoPresets] = useState<VideoPresetRow[]>([])
+  const [selectedPresetId, setSelectedPresetId] = useState<string>('')
+  const [presetModal, setPresetModal] = useState<{
+    isOpen: boolean
+    mode: 'create' | 'rename'
+    name: string
+    presetId: string | null
+  }>({ isOpen: false, mode: 'create', name: '', presetId: null })
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    confirmText: string
+    variant: 'danger' | 'primary'
+    onConfirm: () => void
+  }>({ isOpen: false, title: '', message: '', confirmText: 'OK', variant: 'primary', onConfirm: () => {} })
+  const [videoStatus, setVideoStatus] = useState({
+    status: 'idle' as 'idle' | 'queued' | 'running' | 'completed' | 'failed',
+    taskId: null as string | null,
+    progress: 0,
+    outputPath: null as string | null,
+    error: null as string | null
+  })
+  const [folderValidation, setFolderValidation] = useState({
+    valid: false,
+    videoCount: 0,
+    totalDuration: '',
+    checked: false
+  })
+  const [videoPollingInterval, setVideoPollingInterval] = useState<NodeJS.Timeout | null>(null)
+  const [folderBrowser, setFolderBrowser] = useState({
+    isOpen: false,
+    currentPath: '',
+    parentPath: null as string | null,
+    folders: [] as string[],
+    videoCount: 0,
+    loading: false
+  })
+  const [audioBrowser, setAudioBrowser] = useState({
+    isOpen: false,
+    currentPath: '',
+    parentPath: null as string | null,
+    folders: [] as string[],
+    files: [] as string[],
+    loading: false
+  })
+  const [imageBrowser, setImageBrowser] = useState({
+    isOpen: false,
+    currentPath: '',
+    parentPath: null as string | null,
+    folders: [] as string[],
+    files: [] as string[],
+    loading: false
+  })
+  const [antiDetectionOpen, setAntiDetectionOpen] = useState(false)
+  const [videoTab, setVideoTab] = useState<'basic' | 'effects' | 'antidetect'>('basic')
+  const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null)
+  type ClipInfo = { path: string; name: string; duration: number }
+  const [clipList, setClipList] = useState<ClipInfo[]>([])
+  const [currentClipIdx, setCurrentClipIdx] = useState<number>(0)
+  const [audioDuration, setAudioDuration] = useState<number>(0)
+  const [previewCurrentTime, setPreviewCurrentTime] = useState<number>(0)
+  const [previewPlaying, setPreviewPlaying] = useState<boolean>(false)
+  const previewVideoRef = useRef<HTMLVideoElement | null>(null)
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null)
+  const previewFrameRef = useRef<HTMLDivElement | null>(null)
+  // Offset to apply to <video> after a clip switch finishes loading
+  const pendingClipOffsetRef = useRef<number>(0)
+  const [previewVolume, setPreviewVolume] = useState<number>(1)
+  const previewMuted = previewVolume === 0
+
+  type ExactPreviewState = {
+    open: boolean
+    hash: string | null
+    status: 'idle' | 'queued' | 'running' | 'done' | 'failed'
+    progress: number
+    error: string | null
+    cached: boolean
+  }
+  const [exactPreview, setExactPreview] = useState<ExactPreviewState>({
+    open: false, hash: null, status: 'idle', progress: 0, error: null, cached: false,
+  })
+  const exactPollRef = useRef<number | null>(null)
+
+  // Apply playback rate without changing pitch — vendor-prefixed for older Safari/Firefox.
+  const applyAudioPitchPreserve = (a: HTMLAudioElement, speed: number) => {
+    a.playbackRate = Math.max(0.1, speed)
+    const aany = a as any
+    aany.preservesPitch = true
+    aany.mozPreservesPitch = true
+    aany.webkitPreservesPitch = true
+  }
+
+  const clipsTotalDur = useMemo(
+    () => clipList.reduce((s, c) => s + (c.duration || 0), 0),
+    [clipList]
+  )
+
+  // Audio plays sped up so its wall-clock duration = audioDur / speed.
+  const videoTotalDuration = useMemo(() => {
+    if (!audioDuration || audioDuration <= 0) return 0
+    return audioDuration / Math.max(0.1, videoConfig.audio_speed)
+  }, [audioDuration, videoConfig.audio_speed])
+
+  const findClipForTime = (vt: number): { idx: number; offset: number } => {
+    if (clipList.length === 0 || clipsTotalDur <= 0) return { idx: 0, offset: 0 }
+    const looped = ((vt % clipsTotalDur) + clipsTotalDur) % clipsTotalDur
+    let acc = 0
+    for (let i = 0; i < clipList.length; i++) {
+      const d = clipList[i].duration || 0
+      if (looped < acc + d) return { idx: i, offset: looped - acc }
+      acc += d
+    }
+    return { idx: clipList.length - 1, offset: 0 }
+  }
+
+  const togglePreviewPlay = () => {
+    const a = previewAudioRef.current
+    const v = previewVideoRef.current
+    if (a) {
+      if (a.paused) a.play().catch(() => {})
+      else a.pause()
+    } else if (v) {
+      if (v.paused) v.play().catch(() => {})
+      else v.pause()
+    }
+  }
+
+  const seekPreview = (t: number) => {
+    if (!isFinite(t) || t < 0) return
+    const a = previewAudioRef.current
+    const speed = Math.max(0.1, videoConfig.audio_speed)
+    if (a && audioDuration > 0) {
+      a.currentTime = Math.max(0, Math.min(audioDuration, t * speed))
+    }
+    const { idx, offset } = findClipForTime(t)
+    if (idx !== currentClipIdx) {
+      pendingClipOffsetRef.current = offset
+      setCurrentClipIdx(idx)
+    } else {
+      const v = previewVideoRef.current
+      if (v) v.currentTime = offset
+    }
+    setPreviewCurrentTime(t)
+  }
+
+  const togglePreviewMute = () => {
+    setPreviewVolume(v => (v > 0 ? 0 : 1))
+  }
+  const setPreviewVol = (vol: number) => {
+    const a = previewAudioRef.current
+    if (a) {
+      a.volume = vol
+      a.muted = vol === 0
+    }
+    setPreviewVolume(vol)
+  }
+  const startExactPreview = async () => {
+    if (!videoConfig.folder.trim() || !videoConfig.audioPath.trim()) {
+      showToast('Cần folder video và audio path để render exact preview', 'error')
+      return
+    }
+    if (exactPollRef.current) { window.clearInterval(exactPollRef.current); exactPollRef.current = null }
+    setExactPreview({ open: true, hash: null, status: 'queued', progress: 0, error: null, cached: false })
+
+    // Mirrors /start's payload shape — backend's /render-preview ignores story_id
+    // (preview is story-agnostic) but VideoProcessRequest requires it.
+    const payload = {
+      story_id: storyData.id || 'preview',
+      video_source_folder: videoConfig.folder,
+      audio_path: videoConfig.audioPath,
+      audio_speed: videoConfig.audio_speed,
+      transitions_pool: videoConfig.transitions_pool,
+      transition_duration: videoConfig.transition_duration,
+      resolution: videoConfig.resolution,
+      banner_image: videoConfig.bannerImage,
+      banner_video_scale: videoConfig.bannerVideoScale,
+      overlay_opacity: videoConfig.overlay_opacity,
+      watermark_image: videoConfig.watermarkImage,
+      watermark_x: videoConfig.watermark_x,
+      watermark_y: videoConfig.watermark_y,
+      watermark_w: videoConfig.watermark_w,
+      watermark_h: videoConfig.watermark_h,
+      watermark_shape: videoConfig.watermark_shape,
+      watermark_opacity: videoConfig.watermark_opacity,
+      watermark_text: videoConfig.watermark_text,
+      watermark_text_font: videoConfig.watermark_text_font,
+      watermark_text_size: videoConfig.watermark_text_size,
+      watermark_text_color: videoConfig.watermark_text_color,
+      watermark_text_angle: videoConfig.watermark_text_angle,
+      watermark_text_x: videoConfig.watermark_text_x,
+      watermark_text_y: videoConfig.watermark_text_y,
+      watermark_text_opacity: videoConfig.watermark_text_opacity,
+      subtitle_srt_path: videoConfig.subtitle_srt_path || undefined,
+      subtitle_animation: videoConfig.subtitle_animation,
+      subtitle_font: videoConfig.subtitle_font,
+      subtitle_font_size: videoConfig.subtitle_font_size,
+      subtitle_color: videoConfig.subtitle_color,
+      subtitle_outline_color: videoConfig.subtitle_outline_color,
+      subtitle_outline_width: videoConfig.subtitle_outline_width,
+      subtitle_shadow: videoConfig.subtitle_shadow,
+      subtitle_bold: videoConfig.subtitle_bold,
+      subtitle_italic: videoConfig.subtitle_italic,
+      subtitle_align: videoConfig.subtitle_align,
+      subtitle_x: videoConfig.subtitle_x,
+      subtitle_y: videoConfig.subtitle_y,
+      subtitle_opacity: videoConfig.subtitle_opacity,
+      fade_in: videoConfig.fade_in,
+      fade_out: videoConfig.fade_out,
+      mute_source_videos: videoConfig.mute_source_videos,
+      ad_flip_random: videoConfig.ad_flip_random,
+      ad_flip_all: videoConfig.ad_flip_all,
+      ad_zoom: videoConfig.ad_zoom,
+      ad_zoom_factor: videoConfig.ad_zoom_factor,
+      ad_color: videoConfig.ad_color,
+      ad_saturation: videoConfig.ad_saturation,
+      ad_contrast: videoConfig.ad_contrast,
+      ad_gamma: videoConfig.ad_gamma,
+      ad_hue_shift: videoConfig.ad_hue_shift,
+      ad_clip_speed_jitter: videoConfig.ad_clip_speed_jitter,
+      ad_clip_speed_jitter_range: videoConfig.ad_clip_speed_jitter_range,
+      ad_strip_metadata: videoConfig.ad_strip_metadata,
+      visualizer_enabled: videoConfig.visualizer_enabled,
+      visualizer_style: videoConfig.visualizer_style,
+      visualizer_x: videoConfig.visualizer_x,
+      visualizer_y: videoConfig.visualizer_y,
+      visualizer_w: videoConfig.visualizer_w,
+      visualizer_h: videoConfig.visualizer_h,
+      visualizer_color1: videoConfig.visualizer_color1,
+      visualizer_color2: videoConfig.visualizer_color2,
+      visualizer_opacity: videoConfig.visualizer_opacity,
+      visualizer_bg_mode: videoConfig.visualizer_bg_mode,
+      visualizer_bg_color: videoConfig.visualizer_bg_color,
+      visualizer_bg_opacity: videoConfig.visualizer_bg_opacity,
+      visualizer_spectrum_preset: videoConfig.visualizer_spectrum_preset,
+      visualizer_bars_mode: videoConfig.visualizer_bars_mode,
+      visualizer_waveform_mode: videoConfig.visualizer_waveform_mode,
+      visualizer_waveform_mirror: videoConfig.visualizer_waveform_mirror,
+      stickers: videoConfig.stickers.map(toBackendSticker),
+    }
+    try {
+      const r = await axios.post('/api/v1/video/render-preview', payload)
+      const hash = r.data?.hash
+      const status = r.data?.status
+      const cached = !!r.data?.cached
+      if (!hash) {
+        setExactPreview(s => ({ ...s, status: 'failed', error: 'No hash returned', open: true }))
+        return
+      }
+      if (status === 'done') {
+        setExactPreview({ open: true, hash, status: 'done', progress: 100, error: null, cached })
+        return
+      }
+      setExactPreview({ open: true, hash, status: 'running', progress: 0, error: null, cached: false })
+      exactPollRef.current = window.setInterval(async () => {
+        try {
+          const sr = await axios.get('/api/v1/video/preview-status', { params: { hash } })
+          const st = sr.data
+          setExactPreview(prev => ({
+            ...prev,
+            status: st.status,
+            progress: typeof st.progress === 'number' ? st.progress : prev.progress,
+            error: st.error || null,
+            cached: !!st.cached,
+          }))
+          if (st.status === 'done' || st.status === 'failed') {
+            if (exactPollRef.current) { window.clearInterval(exactPollRef.current); exactPollRef.current = null }
+          }
+        } catch (e) {
+          if (exactPollRef.current) { window.clearInterval(exactPollRef.current); exactPollRef.current = null }
+          setExactPreview(prev => ({ ...prev, status: 'failed', error: 'Status poll failed' }))
+        }
+      }, 1000)
+    } catch (e: any) {
+      setExactPreview({
+        open: true, hash: null, status: 'failed', progress: 0,
+        error: e?.response?.data?.detail || e?.message || 'Render failed',
+        cached: false,
+      })
+    }
+  }
+
+  const closeExactPreview = () => {
+    if (exactPollRef.current) { window.clearInterval(exactPollRef.current); exactPollRef.current = null }
+    setExactPreview({ open: false, hash: null, status: 'idle', progress: 0, error: null, cached: false })
+  }
+
+  const togglePreviewFullscreen = () => {
+    // Fullscreen the WHOLE preview frame (banner + clip + watermark + controls),
+    // not just the inner video element.
+    const target = previewFrameRef.current
+    if (!target) return
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+    else target.requestFullscreen?.().catch(() => {})
+  }
+  const formatTime = (s: number) => {
+    if (!isFinite(s) || s < 0) s = 0
+    const m = Math.floor(s / 60)
+    const ss = Math.floor(s % 60)
+    return `${m}:${ss.toString().padStart(2, '0')}`
+  }
+
+  // Watermark drag handler factory: drags watermark to any (x, y) in 0..1 within frame.
+  // Preserves grab-offset so cursor stays at the same relative spot on the watermark
+  // (no jarring "snap-to-cursor" on initial click).
+  const startWatermarkDrag = (target: 'image' | 'text' | 'subtitle' | 'viz') => (e: React.PointerEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const frame = previewFrameRef.current
+    if (!frame) return
+    const rect = frame.getBoundingClientRect()
+    const xKey = target === 'image' ? 'watermark_x'
+      : target === 'text' ? 'watermark_text_x'
+      : target === 'viz' ? 'visualizer_x'
+      : 'subtitle_x'
+    const yKey = target === 'image' ? 'watermark_y'
+      : target === 'text' ? 'watermark_text_y'
+      : target === 'viz' ? 'visualizer_y'
+      : 'subtitle_y'
+    const startCenterX = videoConfig[xKey] as number
+    const startCenterY = videoConfig[yKey] as number
+    // Offset (in fraction of frame) between cursor and current overlay center
+    const grabOffsetX = (e.clientX - rect.left) / rect.width - startCenterX
+    const grabOffsetY = (e.clientY - rect.top) / rect.height - startCenterY
+    const update = (clientX: number, clientY: number) => {
+      const r = frame.getBoundingClientRect()
+      const x = Math.max(0, Math.min(1, (clientX - r.left) / r.width - grabOffsetX))
+      const y = Math.max(0, Math.min(1, (clientY - r.top) / r.height - grabOffsetY))
+      setVideoConfig(prev => ({ ...prev, [xKey]: x, [yKey]: y }) as typeof prev)
+    }
+    const onMove = (ev: PointerEvent) => update(ev.clientX, ev.clientY)
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+    }
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+  }
+  const [availableFonts, setAvailableFonts] = useState<string[]>(['DejaVu Sans (system default)'])
+  const [wmCardOpen, setWmCardOpen] = useState<boolean>(() => localStorage.getItem('wmCardOpen') === 'true')
+  useEffect(() => { localStorage.setItem('wmCardOpen', String(wmCardOpen)) }, [wmCardOpen])
+  const [stickersCardOpen, setStickersCardOpen] = useState<boolean>(() => localStorage.getItem('stickersCardOpen') === 'true')
+  useEffect(() => { localStorage.setItem('stickersCardOpen', String(stickersCardOpen)) }, [stickersCardOpen])
+  const [vizCardOpen, setVizCardOpen] = useState<boolean>(() => localStorage.getItem('vizCardOpen') === 'true')
+  useEffect(() => { localStorage.setItem('vizCardOpen', String(vizCardOpen)) }, [vizCardOpen])
+  const [subtitleCardOpen, setSubtitleCardOpen] = useState<boolean>(() => localStorage.getItem('subtitleCardOpen') === 'true')
+  useEffect(() => { localStorage.setItem('subtitleCardOpen', String(subtitleCardOpen)) }, [subtitleCardOpen])
+  // Parsed SRT segments live FE-only — backend stores the raw .srt and re-parses
+  // at render time. We keep a copy here for the live preview overlay.
+  const [subtitleSegments, setSubtitleSegments] = useState<SubtitleSegment[] | null>(null)
+  useEffect(() => {
+    const main = document.querySelector('main') as HTMLElement | null
+    if (!main) return
+    if (currentStep === 7) {
+      main.style.paddingRight = '520px'
+    } else {
+      main.style.paddingRight = ''
+    }
+    return () => { main.style.paddingRight = '' }
+  }, [currentStep])
+
+  // Fetch font list once on mount
+  useEffect(() => {
+    axios.get('/api/v1/video/fonts')
+      .then(resp => { if (Array.isArray(resp.data) && resp.data.length) setAvailableFonts(resp.data) })
+      .catch(() => {})
+  }, [])
+
+  // Inject @font-face for preview when font selection changes
+  useEffect(() => {
+    const id = 'watermark-font-face'
+    document.getElementById(id)?.remove()
+    const key = videoConfig.watermark_text_font
+    if (!key || key.includes('system default')) return
+    const fontCssName = key.split(' (')[0]
+    const style = document.createElement('style')
+    style.id = id
+    style.textContent = `@font-face{font-family:'${fontCssName}';src:url('/api/v1/video/fonts/${encodeURIComponent(key)}/file') format('truetype');font-display:swap;}`
+    document.head.appendChild(style)
+    return () => { document.getElementById(id)?.remove() }
+  }, [videoConfig.watermark_text_font])
+
+  // Fetch audio duration when audioPath changes
+  useEffect(() => {
+    if (!videoConfig.audioPath.trim()) { setAudioDuration(0); return }
+    const t = setTimeout(() => {
+      axios.get('/api/v1/video/audio-duration', { params: { path: videoConfig.audioPath } })
+        .then(resp => setAudioDuration(resp.data.duration || 0))
+        .catch(() => setAudioDuration(0))
+    }, 300)
+    return () => clearTimeout(t)
+  }, [videoConfig.audioPath])
+
+  // When audio duration or speed changes, reset playhead so timeline doesn't show
+  // a stale position past the new total.
+  useEffect(() => {
+    setPreviewCurrentTime(0)
+    setCurrentClipIdx(0)
+    pendingClipOffsetRef.current = 0
+    const a = previewAudioRef.current
+    if (a) a.currentTime = 0
+    const v = previewVideoRef.current
+    if (v) v.currentTime = 0
+  }, [audioDuration, videoConfig.audio_speed])
+
+  useEffect(() => {
+    const a = previewAudioRef.current
+    if (a) applyAudioPitchPreserve(a, videoConfig.audio_speed)
+  }, [videoConfig.audio_speed])
+
+  useEffect(() => {
+    const a = previewAudioRef.current
+    if (!a) return
+    a.volume = previewVolume
+    a.muted = previewVolume === 0
+  }, [previewVolume])
+
+  useEffect(() => () => {
+    if (exactPollRef.current) window.clearInterval(exactPollRef.current)
+  }, [])
+
+  // Per-clip flip state for inline preview. Re-rolls when clip changes or the
+  // flip toggle changes, so "Random flip per-clip" mirrors the ffmpeg behavior
+  // of deciding hflip independently per clip.
+  const inlineClipFlip = useMemo(() => {
+    if (videoConfig.ad_flip_all) return true
+    if (videoConfig.ad_flip_random) return Math.random() < 0.5
+    return false
+  }, [currentClipIdx, videoConfig.ad_flip_all, videoConfig.ad_flip_random])
+
+  // Fetch the full clip schedule (in folder order) when the video folder changes
+  useEffect(() => {
+    if (currentStep !== 7 || !videoConfig.folder.trim()) {
+      setClipList([])
+      setCurrentClipIdx(0)
+      return
+    }
+    axios.get('/api/v1/video/folder-clips', {
+      params: { folder: videoConfig.folder, limit: 200 }
+    })
+      .then(r => {
+        const list: ClipInfo[] = r.data?.clips || []
+        setClipList(list)
+        setCurrentClipIdx(0)
+        pendingClipOffsetRef.current = 0
+      })
+      .catch(() => { setClipList([]); setCurrentClipIdx(0) })
+  }, [currentStep, videoConfig.folder])
+
+  // Show toast notification
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ isVisible: true, message, type })
+    setTimeout(() => {
+      setToast(prev => ({ ...prev, isVisible: false }))
+    }, 3000)
+  }
+
+  // Refs for line numbers and highlight sync
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const lineNumbersRef = useRef<HTMLDivElement>(null)
+  const highlightRef = useRef<HTMLDivElement>(null)
+  const mergedTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const mergedHighlightRef = useRef<HTMLDivElement>(null)
+
+  // Sync scroll between textarea, line numbers, and highlight overlay
+  const handleTextareaScroll = () => {
+    if (textareaRef.current && lineNumbersRef.current) {
+      lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop
+    }
+    if (textareaRef.current && highlightRef.current) {
+      highlightRef.current.scrollTop = textareaRef.current.scrollTop
+      highlightRef.current.scrollLeft = textareaRef.current.scrollLeft
+    }
+  }
+
+  // Calculate line numbers
+  const getLineNumbers = (text: string) => {
+    const lines = text.split('\n')
+    return lines.map((_, index) => index + 1)
+  }
+
+  // Load story data if storyId exists in URL
+  useEffect(() => {
+    if (storyId) {
+      loadStory(storyId)
+    }
+  }, [storyId])
+
+  // Fetch available voices on mount
+  useEffect(() => {
+    fetchVoices()
+  }, [])
+
+  const loadStory = async (id: string) => {
+    try {
+      console.log('Loading story:', id)
+      const response = await axios.get(`/api/v1/stories/${id}`)
+      console.log('Story loaded:', response.data)
+      const story = response.data
+
+      setStoryData({
+        id: story.id,
+        url: story.url || '',
+        title: story.title || 'Untitled Project',
+        start_chapter: story.start_chapter || 1,
+        end_chapter: story.end_chapter || 10,
+        status: story.status,
+        current_step: story.current_step
+      })
+
+      // Load chapters if story has been downloaded
+      if (story.status !== 'draft' && story.status !== 'created') {
+        await fetchChapters(id)
+      }
+
+      // Set current step from database
+      // current_step in DB is the max step reached - we can navigate to any step <= this
+      if (story.current_step) {
+        setCurrentStep(story.current_step)
+
+        // If current step is 3 or higher, load chapter stats
+        if (story.current_step >= 3) {
+          await fetchChapterStats(id)
+        }
+
+        // If current step is 6 (TTS Process), load audio records
+        if (story.current_step === 6) {
+          await fetchAudioRecords(id)
+        }
+
+        // If current step is 7 (Video), load video status + audio path
+        if (story.current_step >= 7) {
+          try {
+            const audioResp = await axios.get(`/api/v1/video/audio-path/${id}`)
+            if (audioResp.data.found && audioResp.data.audio_path) {
+              setVideoConfig(prev => ({ ...prev, audioPath: audioResp.data.audio_path }))
+            }
+          } catch {}
+          try {
+            const videoResp = await axios.get(`/api/v1/video/result/${id}`)
+            if (videoResp.data) {
+              setVideoStatus({
+                status: videoResp.data.status as any,
+                taskId: null,
+                progress: videoResp.data.status === 'completed' ? 100 : 0,
+                outputPath: videoResp.data.output_path,
+                error: videoResp.data.error_message
+              })
+            }
+          } catch {
+            // No video output yet - this is normal
+          }
+        }
+
+        // If current step is 4 (Grammar), auto-load merged content
+        if (story.current_step === 4) {
+          // Will be loaded when component renders
+        }
+      }
+    } catch (error) {
+      console.error('Error loading story:', error)
+    }
+  }
+
+  const fetchVoices = async () => {
+    try {
+      const response = await axios.get('/api/v1/tts/voices')
+      setVoices(response.data.voices || [])
+    } catch (error) {
+      console.error('Error fetching voices:', error)
+    }
+  }
+
+  const fetchChapters = async (storyId?: string) => {
+    const id = storyId || storyData.id
+    if (!id) return
+
+    try {
+      console.log('Fetching chapters for story:', id)
+      const response = await axios.get(`/api/v1/stories/${id}/chapters`)
+      console.log('Chapters response:', response.data)
+      console.log('Number of chapters:', response.data?.length || 0)
+      setChapters(response.data || [])
+    } catch (error) {
+      console.error('Error fetching chapters:', error)
+    }
+  }
+
+  const fetchChapterStats = async (storyId?: string) => {
+    const id = storyId || storyData.id
+    if (!id) return
+
+    try {
+      console.log('Fetching chapter stats for story:', id)
+      const response = await axios.get(`/api/v1/chapters/story/${id}/stats`)
+      console.log('Chapter stats:', response.data)
+      setChapterStats(response.data)
+    } catch (error) {
+      console.error('Error fetching chapter stats:', error)
+    }
+  }
+
+  const checkStoryGrammar = async (storyId?: string) => {
+    const id = storyId || storyData.id
+    if (!id) return
+
+    setCheckingGrammar(true)
+    try {
+      console.log('Checking grammar for story:', id)
+      const response = await axios.post(`/api/v1/chapters/story/${id}/check-grammar`)
+      console.log('Grammar check result:', response.data)
+
+      // Refresh chapters and stats after checking
+      await fetchChapters(id)
+      await fetchChapterStats(id)
+    } catch (error) {
+      console.error('Error checking grammar:', error)
+    } finally {
+      setCheckingGrammar(false)
+    }
+  }
+
+  // Create Chapter 0 for intro content
+  const createChapterZero = async (storyId: string) => {
+    try {
+      console.log('Creating Chapter 0 for story:', storyId)
+      const response = await axios.post(`/api/v1/chapters/story/${storyId}/create-chapter-zero`)
+      console.log('Chapter 0 response:', response.data)
+      return response.data
+    } catch (error) {
+      console.error('Error creating Chapter 0:', error)
+      return null
+    }
+  }
+
+  // Helper function to move to a new step and update DB
+  const moveToStep = async (newStep: number) => {
+    setCurrentStep(newStep)
+
+    // Load stats and check grammar when entering Step 3
+    if (newStep === 3 && storyData.id) {
+      // Auto-create Chapter 0 first
+      await createChapterZero(storyData.id)
+      // Refresh chapters to include Chapter 0
+      await fetchChapters(storyData.id)
+      await fetchChapterStats(storyData.id)
+      await checkStoryGrammar(storyData.id)
+    }
+
+    // Auto-fill audio path when entering Video step
+    if (newStep === 7 && storyData.id) {
+      try {
+        const resp = await axios.get(`/api/v1/video/audio-path/${storyData.id}`)
+        if (resp.data.found && resp.data.audio_path) {
+          setVideoConfig(prev => ({ ...prev, audioPath: resp.data.audio_path }))
+        }
+      } catch {
+        // No merged audio - user will need to input manually
+      }
+    }
+
+    // Update current_step in DB when moving forward
+    if (storyData.id && newStep > (storyData.current_step || 1)) {
+      try {
+        await axios.put(`/api/v1/stories/${storyData.id}`, {
+          current_step: newStep
+        })
+        // Update local state
+        setStoryData(prev => ({ ...prev, current_step: newStep }))
+      } catch (error) {
+        console.error('Error updating step:', error)
+      }
+    }
+  }
+
+  // Video Processing Functions
+  const validateVideoFolder = async () => {
+    if (!videoConfig.folder.trim()) return
+    try {
+      const response = await axios.post('/api/v1/video/validate-folder', {
+        folder_path: videoConfig.folder
+      })
+      const data = response.data
+      setFolderValidation({
+        valid: data.valid,
+        videoCount: data.video_count,
+        totalDuration: data.total_duration_formatted,
+        checked: true
+      })
+      if (!data.valid) {
+        showToast(data.error || 'Invalid folder', 'error')
+      }
+    } catch (err: any) {
+      setFolderValidation({ valid: false, videoCount: 0, totalDuration: '', checked: true })
+      showToast(err.response?.data?.detail || 'Failed to validate folder', 'error')
+    }
+  }
+
+  const startVideoProcessing = async () => {
+    if (!storyData.id || !videoConfig.folder.trim() || !videoConfig.audioPath.trim()) return
+    try {
+      setVideoStatus({ status: 'queued', taskId: null, progress: 0, outputPath: null, error: null })
+      const response = await axios.post('/api/v1/video/start', {
+        story_id: storyData.id,
+        video_source_folder: videoConfig.folder,
+        audio_path: videoConfig.audioPath || undefined,
+        audio_speed: videoConfig.audio_speed,
+        transitions_pool: videoConfig.transitions_pool.length ? videoConfig.transitions_pool : undefined,
+        transition_duration: videoConfig.transition_duration,
+        resolution: videoConfig.resolution,
+        banner_image: videoConfig.bannerImage || undefined,
+        banner_video_scale: videoConfig.bannerImage ? videoConfig.bannerVideoScale : undefined,
+        overlay_opacity: videoConfig.overlay_opacity,
+        watermark_image: videoConfig.watermarkImage || undefined,
+        watermark_x: videoConfig.watermark_x,
+        watermark_y: videoConfig.watermark_y,
+        watermark_w: videoConfig.watermark_w,
+        watermark_h: videoConfig.watermark_h,
+        watermark_shape: videoConfig.watermark_shape,
+        watermark_opacity: videoConfig.watermark_opacity,
+        watermark_text: videoConfig.watermark_text || undefined,
+        watermark_text_font: videoConfig.watermark_text_font,
+        watermark_text_size: videoConfig.watermark_text_size,
+        watermark_text_color: videoConfig.watermark_text_color,
+        watermark_text_angle: videoConfig.watermark_text_angle,
+        watermark_text_x: videoConfig.watermark_text_x,
+        watermark_text_y: videoConfig.watermark_text_y,
+        watermark_text_opacity: videoConfig.watermark_text_opacity,
+        fade_in: videoConfig.fade_in,
+        fade_out: videoConfig.fade_out,
+        mute_source_videos: videoConfig.mute_source_videos,
+        ad_flip_random: videoConfig.ad_flip_random,
+        ad_flip_all: videoConfig.ad_flip_all,
+        ad_zoom: videoConfig.ad_zoom,
+        ad_zoom_factor: videoConfig.ad_zoom_factor,
+        ad_color: videoConfig.ad_color,
+        ad_saturation: videoConfig.ad_saturation,
+        ad_contrast: videoConfig.ad_contrast,
+        ad_gamma: videoConfig.ad_gamma,
+        ad_hue_shift: videoConfig.ad_hue_shift,
+        ad_clip_speed_jitter: videoConfig.ad_clip_speed_jitter,
+        ad_clip_speed_jitter_range: videoConfig.ad_clip_speed_jitter_range,
+        ad_strip_metadata: videoConfig.ad_strip_metadata,
+        visualizer_enabled: videoConfig.visualizer_enabled,
+        visualizer_style: videoConfig.visualizer_style,
+        visualizer_x: videoConfig.visualizer_x,
+        visualizer_y: videoConfig.visualizer_y,
+        visualizer_w: videoConfig.visualizer_w,
+        visualizer_h: videoConfig.visualizer_h,
+        visualizer_color1: videoConfig.visualizer_color1,
+        visualizer_color2: videoConfig.visualizer_color2,
+        visualizer_opacity: videoConfig.visualizer_opacity,
+        visualizer_bg_mode: videoConfig.visualizer_bg_mode,
+        visualizer_bg_color: videoConfig.visualizer_bg_color,
+        visualizer_bg_opacity: videoConfig.visualizer_bg_opacity,
+        visualizer_spectrum_preset: videoConfig.visualizer_spectrum_preset,
+        visualizer_bars_mode: videoConfig.visualizer_bars_mode,
+        visualizer_waveform_mode: videoConfig.visualizer_waveform_mode,
+        visualizer_waveform_mirror: videoConfig.visualizer_waveform_mirror,
+        stickers: videoConfig.stickers.map(toBackendSticker),
+      })
+      setVideoStatus(prev => ({ ...prev, taskId: response.data.task_id, status: 'queued' }))
+      startVideoPolling(response.data.task_id)
+    } catch (err: any) {
+      setVideoStatus(prev => ({
+        ...prev,
+        status: 'failed',
+        error: err.response?.data?.detail || 'Failed to start video processing'
+      }))
+    }
+  }
+
+  const startVideoPolling = (taskId: string) => {
+    if (videoPollingInterval) clearInterval(videoPollingInterval)
+    const interval = setInterval(async () => {
+      try {
+        const response = await axios.get(`/api/v1/video/${taskId}/status`)
+        const task = response.data
+        setVideoStatus(prev => ({
+          ...prev,
+          status: task.status === 'completed' ? 'completed' : task.status === 'failed' ? 'failed' : 'running',
+          progress: task.progress || 0,
+          error: task.error_message
+        }))
+        if (task.status === 'completed' || task.status === 'failed') {
+          clearInterval(interval)
+          setVideoPollingInterval(null)
+          if (task.status === 'completed') {
+            try {
+              const resultResp = await axios.get(`/api/v1/video/result/${storyData.id}`)
+              setVideoStatus(prev => ({ ...prev, outputPath: resultResp.data.output_path }))
+            } catch {}
+            showToast('Video processing completed!', 'success')
+          } else {
+            showToast(task.error_message || 'Video processing failed', 'error')
+          }
+        }
+      } catch (err) {
+        console.error('Error polling video status:', err)
+      }
+    }, 10000)
+    setVideoPollingInterval(interval)
+  }
+
+  const fetchVideoStatus = async () => {
+    if (!storyData.id) return
+    try {
+      const response = await axios.get(`/api/v1/video/result/${storyData.id}`)
+      const data = response.data
+      setVideoStatus({
+        status: data.status as any,
+        taskId: null,
+        progress: data.status === 'completed' ? 100 : 0,
+        outputPath: data.output_path,
+        error: data.error_message
+      })
+    } catch {
+      // No video output yet
+    }
+  }
+
+  const openFolderBrowser = async (startPath?: string) => {
+    setFolderBrowser(prev => ({ ...prev, isOpen: true, loading: true }))
+    try {
+      const response = await axios.post('/api/v1/video/browse', { path: startPath || '' })
+      setFolderBrowser({
+        isOpen: true,
+        currentPath: response.data.current_path,
+        parentPath: response.data.parent_path,
+        folders: response.data.folders,
+        videoCount: response.data.video_count,
+        loading: false
+      })
+    } catch (err: any) {
+      setFolderBrowser(prev => ({ ...prev, loading: false }))
+      showToast(err.response?.data?.detail || 'Failed to browse folder', 'error')
+    }
+  }
+
+  const navigateFolder = async (folderName: string) => {
+    const newPath = folderBrowser.currentPath
+      ? `${folderBrowser.currentPath.replace(/[\\/]$/, '')}${folderBrowser.currentPath.includes('/') ? '/' : '\\'}${folderName}`
+      : folderName
+    await openFolderBrowser(newPath)
+  }
+
+  const selectFolder = () => {
+    if (folderBrowser.currentPath) {
+      setVideoConfig(prev => ({ ...prev, folder: folderBrowser.currentPath }))
+      setFolderValidation({ valid: false, videoCount: 0, totalDuration: '', checked: false })
+      setFolderBrowser(prev => ({ ...prev, isOpen: false }))
+    }
+  }
+
+  // Audio file browser functions
+  const openAudioBrowser = async (startPath?: string, isFilePath: boolean = false) => {
+    setAudioBrowser(prev => ({ ...prev, isOpen: true, loading: true }))
+    try {
+      let dirPath = startPath || ''
+      // If startPath is a file path, extract the directory part
+      if (isFilePath && dirPath && !dirPath.endsWith('\\') && !dirPath.endsWith('/')) {
+        const lastSep = Math.max(dirPath.lastIndexOf('\\'), dirPath.lastIndexOf('/'))
+        if (lastSep > 0) dirPath = dirPath.substring(0, lastSep + 1)
+      }
+      const response = await axios.post('/api/v1/video/browse-files', { path: dirPath })
+      setAudioBrowser({
+        isOpen: true,
+        currentPath: response.data.current_path,
+        parentPath: response.data.parent_path,
+        folders: response.data.folders,
+        files: response.data.files,
+        loading: false
+      })
+    } catch (err: any) {
+      setAudioBrowser(prev => ({ ...prev, loading: false }))
+      showToast(err.response?.data?.detail || 'Failed to browse files', 'error')
+    }
+  }
+
+  const navigateAudioFolder = async (folderName: string) => {
+    const newPath = audioBrowser.currentPath
+      ? `${audioBrowser.currentPath.replace(/[\\/]$/, '')}${audioBrowser.currentPath.includes('/') ? '/' : '\\'}${folderName}`
+      : folderName
+    await openAudioBrowser(newPath)
+  }
+
+  const selectAudioFile = (fileName: string) => {
+    const sep = audioBrowser.currentPath.includes('/') ? '/' : '\\'
+    const fullPath = `${audioBrowser.currentPath.replace(/[\\/]$/, '')}${sep}${fileName}`
+    setVideoConfig(prev => ({ ...prev, audioPath: fullPath }))
+    setAudioBrowser(prev => ({ ...prev, isOpen: false }))
+  }
+
+  // Image file browser functions
+  const [imageBrowserTarget, setImageBrowserTarget] = useState<'banner' | 'watermark'>('banner')
+  // target is optional; only set when explicitly passed (so folder navigation
+  // doesn't reset the target back to 'banner').
+  const openImageBrowser = async (startPath?: string, isFilePath: boolean = false, target?: 'banner' | 'watermark') => {
+    if (target !== undefined) setImageBrowserTarget(target)
+    setImageBrowser(prev => ({ ...prev, isOpen: true, loading: true }))
+    try {
+      let dirPath = startPath || ''
+      if (isFilePath && dirPath && !dirPath.endsWith('\\') && !dirPath.endsWith('/')) {
+        const lastSep = Math.max(dirPath.lastIndexOf('\\'), dirPath.lastIndexOf('/'))
+        if (lastSep > 0) dirPath = dirPath.substring(0, lastSep + 1)
+      }
+      const response = await axios.post('/api/v1/video/browse-images', { path: dirPath })
+      setImageBrowser({
+        isOpen: true,
+        currentPath: response.data.current_path,
+        parentPath: response.data.parent_path,
+        folders: response.data.folders,
+        files: response.data.files,
+        loading: false
+      })
+    } catch (err: any) {
+      setImageBrowser(prev => ({ ...prev, loading: false }))
+      showToast(err.response?.data?.detail || 'Failed to browse images', 'error')
+    }
+  }
+
+  const navigateImageFolder = async (folderName: string) => {
+    const newPath = imageBrowser.currentPath
+      ? `${imageBrowser.currentPath.replace(/[\\/]$/, '')}${imageBrowser.currentPath.includes('/') ? '/' : '\\'}${folderName}`
+      : folderName
+    await openImageBrowser(newPath)
+  }
+
+  const selectImageFile = (fileName: string) => {
+    const sep = imageBrowser.currentPath.includes('/') ? '/' : '\\'
+    const fullPath = `${imageBrowser.currentPath.replace(/[\\/]$/, '')}${sep}${fileName}`
+    if (imageBrowserTarget === 'watermark') {
+      setVideoConfig(prev => ({ ...prev, watermarkImage: fullPath }))
+    } else {
+      setVideoConfig(prev => ({ ...prev, bannerImage: fullPath }))
+    }
+    setImageBrowser(prev => ({ ...prev, isOpen: false }))
+  }
+
+  // Persist video config to localStorage
+  useEffect(() => {
+    localStorage.setItem('videoConfig_folder', videoConfig.folder)
+    localStorage.setItem('videoConfig_bannerImage', videoConfig.bannerImage)
+    localStorage.setItem('videoConfig_bannerVideoScale', String(videoConfig.bannerVideoScale))
+    localStorage.setItem('videoConfig_watermarkImage', videoConfig.watermarkImage)
+    const { folder, audioPath, bannerImage, bannerVideoScale, watermarkImage, ...cfg } = videoConfig
+    localStorage.setItem('videoConfig_cfg', JSON.stringify(cfg))
+  }, [videoConfig])
+
+  // Load presets from server on mount
+  useEffect(() => {
+    axios.get<VideoPresetRow[]>('/api/v1/video-presets/')
+      .then(res => setVideoPresets(res.data))
+      .catch(err => {
+        console.error('Failed to load video presets:', err)
+        showToast('Không tải được danh sách preset', 'error')
+      })
+  }, [])
+
+  const extractCfgFromConfig = () => {
+    const { folder, audioPath, bannerImage, bannerVideoScale, watermarkImage, ...cfg } = videoConfig
+    return cfg
+  }
+
+  const savePreset = () => {
+    setPresetModal({ isOpen: true, mode: 'create', name: '', presetId: null })
+  }
+
+  const renamePreset = () => {
+    const cur = videoPresets.find(p => p.id === selectedPresetId)
+    if (!cur) return
+    setPresetModal({ isOpen: true, mode: 'rename', name: cur.name, presetId: cur.id })
+  }
+
+  const confirmPresetModal = async () => {
+    const name = presetModal.name.trim()
+    if (!name) {
+      showToast('Tên preset không được để trống', 'error')
+      return
+    }
+
+    try {
+      if (presetModal.mode === 'create') {
+        const res = await axios.post<VideoPresetRow>('/api/v1/video-presets/', {
+          name,
+          cfg: extractCfgFromConfig(),
+        })
+        setVideoPresets(prev => [res.data, ...prev])
+        setSelectedPresetId(res.data.id)
+        setPresetModal({ isOpen: false, mode: 'create', name: '', presetId: null })
+        showToast(`Đã lưu preset "${name}"`, 'success')
+      } else if (presetModal.mode === 'rename' && presetModal.presetId) {
+        const res = await axios.put<VideoPresetRow>(
+          `/api/v1/video-presets/${presetModal.presetId}`,
+          { name },
+        )
+        setVideoPresets(prev => prev.map(p => (p.id === res.data.id ? res.data : p)))
+        setPresetModal({ isOpen: false, mode: 'create', name: '', presetId: null })
+        showToast(`Đã đổi tên preset thành "${name}"`, 'success')
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || 'Lỗi không xác định'
+      showToast(msg, 'error')
+    }
+  }
+
+  const loadPreset = (id: string) => {
+    const preset = videoPresets.find(p => p.id === id)
+    if (!preset) return
+    // Clone + migrate so old presets (with *_position string) get x/y applied.
+    const cfg = migrateOldCfg(JSON.parse(JSON.stringify(preset.cfg)))
+    setVideoConfig(prev => ({ ...prev, ...cfg }))
+  }
+
+  const updateSelectedPresetCfg = () => {
+    if (!selectedPresetId) return
+    const cur = videoPresets.find(p => p.id === selectedPresetId)
+    if (!cur) return
+    setConfirmDialog({
+      isOpen: true,
+      title: '🔄 Cập nhật preset',
+      message: `Ghi đè preset "${cur.name}" bằng config hiện tại?`,
+      confirmText: 'Cập nhật',
+      variant: 'primary',
+      onConfirm: async () => {
+        try {
+          const res = await axios.put<VideoPresetRow>(
+            `/api/v1/video-presets/${selectedPresetId}`,
+            { cfg: extractCfgFromConfig() },
+          )
+          setVideoPresets(prev => prev.map(p => (p.id === res.data.id ? res.data : p)))
+          showToast(`Đã cập nhật preset "${cur.name}"`, 'success')
+        } catch (err: any) {
+          const msg = err?.response?.data?.detail || 'Lỗi không xác định'
+          showToast(msg, 'error')
+        }
+      },
+    })
+  }
+
+  const deletePreset = async (id: string) => {
+    const cur = videoPresets.find(p => p.id === id)
+    if (!cur) return
+    try {
+      await axios.delete(`/api/v1/video-presets/${id}`)
+      setVideoPresets(prev => prev.filter(p => p.id !== id))
+      setSelectedPresetId(prev => (prev === id ? '' : prev))
+      showToast(`Đã xoá preset "${cur.name}"`, 'success')
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || 'Lỗi không xác định'
+      showToast(msg, 'error')
+    }
+  }
+
+  const toggleTransition = (t: string) => {
+    setVideoConfig(prev => ({
+      ...prev,
+      transitions_pool: prev.transitions_pool.includes(t)
+        ? prev.transitions_pool.filter(x => x !== t)
+        : [...prev.transitions_pool, t]
+    }))
+  }
+
+  // Cleanup video polling on unmount
+  useEffect(() => {
+    return () => {
+      if (videoPollingInterval) clearInterval(videoPollingInterval)
+    }
+  }, [videoPollingInterval])
+
+  // Step 1: Update story info and start download
+  const handleSubmitURL = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+    setDuplicateStory(null)
+
+    try {
+      let currentStoryId = storyData.id
+
+      // Update or create story
+      if (currentStoryId) {
+        // Update existing story
+        console.log('Updating story:', currentStoryId, storyData)
+        await axios.put(`/api/v1/stories/${currentStoryId}`, {
+          title: storyData.title,
+          url: storyData.url,
+          start_chapter: storyData.start_chapter,
+          end_chapter: storyData.end_chapter,
+          custom_chapter_urls: storyData.custom_chapter_urls || null
+        })
+        console.log('Story updated')
+      } else {
+        // Create new story (fallback)
+        console.log('Creating story:', storyData)
+        const storyResponse = await axios.post('/api/v1/stories', storyData)
+        console.log('Story created:', storyResponse.data)
+        currentStoryId = storyResponse.data.id
+        setStoryData({ ...storyData, id: currentStoryId })
+      }
+
+      // Start download (waits for completion)
+      console.log('Starting download for story:', currentStoryId)
+      const downloadResponse = await axios.post('/api/v1/download/start', {
+        story_id: currentStoryId
+      })
+      console.log('Download response:', downloadResponse.data)
+
+      if (downloadResponse.data.status === 'completed') {
+        console.log('Download completed, fetching chapters...')
+        await fetchChapters(currentStoryId)
+        moveToStep(3)
+      } else {
+        console.warn('Download status is not completed:', downloadResponse.data.status)
+      }
+    } catch (error: any) {
+      console.error('Error during download:', error)
+
+      // Check if this is a duplicate story error (HTTP 409)
+      if (error.response?.status === 409) {
+        const detail = error.response.data?.detail
+        if (typeof detail === 'object' && detail.existing_story_id) {
+          // Handle duplicate story
+          setDuplicateStory({
+            id: detail.existing_story_id,
+            title: detail.existing_story_title
+          })
+          setError(detail.message || 'Story already exists with same URL and chapter range')
+        } else {
+          setError('Story already exists')
+        }
+      } else {
+        // Handle other errors
+        const detail = error.response?.data?.detail
+        setError(typeof detail === 'string' ? detail : 'Failed to download chapters')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Step 3->4: Save chapters, generate & save merged content, then move to Grammar
+  const handleSaveChapters = async () => {
+    if (!storyData.id) return
+
+    setLoading(true)
+    try {
+      // Step 1: Update story status
+      await axios.put(`/api/v1/stories/${storyData.id}`, {
+        status: 'ready_for_tts',
+        current_step: 4
+      })
+
+      // Step 2: Get merged content (generated from chapters)
+      const response = await axios.get(`/api/v1/stories/${storyData.id}/merged-content`)
+      const mergedContent = response.data.merged_content
+
+      // Step 3: Save merged content to DB
+      await axios.put(`/api/v1/stories/${storyData.id}/merged-content`, {
+        merged_content: mergedContent
+      })
+
+      // Step 4: Update local state
+      setMergedView(prev => ({
+        ...prev,
+        content: mergedContent,
+        isOpen: true
+      }))
+
+      showToast('Đã lưu nội dung ghép vào DB', 'success')
+      moveToStep(4)
+    } catch (error) {
+      console.error('Error saving chapters:', error)
+      showToast('Lỗi khi lưu, nhưng vẫn chuyển sang bước tiếp', 'error')
+      moveToStep(4) // Move forward anyway
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Step 5->6: Start TTS processing (merged content)
+  const handleStartTTS = async () => {
+    if (!storyData.id) return
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      // Move to Step 6 first
+      await moveToStep(6)
+
+      // Start merged TTS processing
+      console.log('Starting merged TTS processing...')
+      const response = await axios.post('/api/v1/tts/start-merged', {
+        story_id: storyData.id,
+        ...ttsConfig
+      })
+
+      console.log('TTS started:', response.data)
+      showToast(`Đang xử lý TTS cho ${response.data.char_count?.toLocaleString()} ký tự...`, 'info')
+
+      // Start polling for status
+      startMergedPolling()
+
+    } catch (error: any) {
+      console.error('Error during TTS:', error)
+      setError(error.response?.data?.detail || 'Failed to process TTS')
+      showToast(error.response?.data?.detail || 'Lỗi khi xử lý TTS', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Fetch audio records
+  const fetchAudioRecords = async (storyId?: string) => {
+    const id = storyId || storyData.id
+    if (!id) return
+
+    try {
+      const response = await axios.get(`/api/v1/tts/audio-status/${id}`)
+      setAudioRecords(response.data.audio_records || [])
+    } catch (error) {
+      console.error('Error fetching audio records:', error)
+    }
+  }
+
+  // Start polling for audio status
+  const startPolling = () => {
+    // Clear existing interval
+    if (pollingInterval) {
+      clearInterval(pollingInterval)
+    }
+
+    // Poll every 30 seconds
+    const interval = setInterval(() => {
+      fetchAudioRecords()
+    }, 30000)
+
+    setPollingInterval(interval)
+  }
+
+  // Stop polling
+  const stopPolling = () => {
+    if (pollingInterval) {
+      clearInterval(pollingInterval)
+      setPollingInterval(null)
+    }
+  }
+
+  // Fetch merged TTS status
+  const fetchMergedTtsStatus = async () => {
+    if (!storyData.id) return
+
+    try {
+      const response = await axios.get(`/api/v1/tts/merged-status/${storyData.id}`)
+      const data = response.data
+
+      setMergedTtsStatus({
+        status: data.task_status || 'idle',
+        charCount: data.char_count || 0,
+        audioFile: data.audio_file,
+        audioSize: data.audio_size,
+        error: data.task_error
+      })
+
+      // Stop polling if completed or failed
+      if (data.task_status === 'completed' || data.task_status === 'failed') {
+        stopPolling()
+        if (data.task_status === 'completed') {
+          showToast('TTS hoàn thành!', 'success')
+        } else if (data.task_status === 'failed') {
+          showToast(`TTS thất bại: ${data.task_error}`, 'error')
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching merged TTS status:', error)
+    }
+  }
+
+  // Start polling for merged TTS status
+  const startMergedPolling = () => {
+    // Clear existing interval
+    if (pollingInterval) {
+      clearInterval(pollingInterval)
+    }
+
+    // Poll immediately
+    fetchMergedTtsStatus()
+
+    // Poll every 10 seconds
+    const interval = setInterval(() => {
+      fetchMergedTtsStatus()
+    }, 10000)
+
+    setPollingInterval(interval)
+  }
+
+  // Check if all audio records are completed (success, skipped, or failed)
+  const checkAllCompleted = () => {
+    if (audioRecords.length === 0) return false
+
+    const hasProcessing = audioRecords.some(r => r.status === 'idle' || r.status === 'processing')
+    if (!hasProcessing) {
+      stopPolling()
+      return true
+    }
+    return false
+  }
+
+  // Auto-load merged content when entering step 4 (Grammar)
+  useEffect(() => {
+    if (currentStep === 4 && storyData.id && !mergedView.content) {
+      loadMergedContent()
+    }
+  }, [currentStep, storyData.id])
+
+  // Load merged TTS status and content when entering step 6 (TTS Process)
+  useEffect(() => {
+    if (currentStep === 6 && storyData.id) {
+      // Load merged content if not already loaded
+      if (!mergedView.content) {
+        loadMergedContent()
+      }
+
+      // Fetch merged TTS status
+      fetchMergedTtsStatus()
+    } else if (currentStep !== 6) {
+      // Stop polling when leaving step 6
+      stopPolling()
+    }
+
+    // Cleanup on unmount or step change
+    return () => {
+      if (currentStep !== 6) {
+        stopPolling()
+      }
+    }
+  }, [currentStep])
+
+  // Effect to check completion when audio records change
+  useEffect(() => {
+    if (currentStep === 6 && audioRecords.length > 0) {
+      checkAllCompleted()
+    }
+  }, [audioRecords, currentStep])
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      stopPolling()
+    }
+  }, [])
+
+  // Handle retry failed chapter
+  const handleRetryChapter = async (chapterId: string) => {
+    try {
+      setLoading(true)
+      await axios.post(`/api/v1/tts/retry-chapter/${chapterId}`)
+
+      // Refresh audio records immediately
+      await fetchAudioRecords()
+
+      // Show success message briefly
+      setError(null)
+    } catch (error: any) {
+      console.error('Error retrying chapter:', error)
+      setError(error.response?.data?.detail || 'Failed to retry chapter')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Handle step click - allow navigation to any step up to current_step in DB
+  const handleStepClick = (stepId: number) => {
+    // Can only click on steps that have been reached (up to current_step in DB)
+    const maxAccessibleStep = storyData.current_step || 1
+    if (stepId <= maxAccessibleStep) {
+      setCurrentStep(stepId) // Just change UI view, no need to update DB
+    }
+  }
+
+  // Handle edit chapter
+  const handleEditChapter = async (chapter: Chapter) => {
+    console.log('=== handleEditChapter called ===')
+    console.log('Chapter:', chapter)
+
+    try {
+      // Fetch full chapter content
+      console.log('Fetching chapter content...')
+      const contentResponse = await axios.get(`/api/v1/chapters/${chapter.id}`)
+      console.log('Content response:', contentResponse.data)
+
+      // Fetch censored words
+      console.log('Fetching censored words...')
+      const censoredResponse = await axios.get(`/api/v1/chapters/${chapter.id}/censored-words`)
+      console.log('Censored words response:', censoredResponse.data)
+
+      const newDialogState = {
+        isOpen: true,
+        chapter: chapter,
+        content: contentResponse.data.content || '',
+        title: contentResponse.data.title || `Chapter ${chapter.chapter_number}`,
+        censoredWords: censoredResponse.data.censored_words || [],
+        findText: '',
+        replaceText: '',
+        matchCount: 0,
+        quickBannedWord: '',
+        quickReplacementWord: ''
+      }
+
+      console.log('Setting editDialog state:', newDialogState)
+      setEditDialog(newDialogState)
+      console.log('Dialog should be open now!')
+    } catch (error: any) {
+      console.error('=== Error fetching chapter ===')
+      console.error('Error:', error)
+      console.error('Error response:', error.response?.data)
+      setError(error.response?.data?.detail || 'Failed to load chapter')
+    }
+  }
+
+  // Helper function to escape HTML
+  const escapeHtml = (text: string) => {
+    const div = document.createElement('div')
+    div.textContent = text
+    return div.innerHTML
+  }
+
+  // Helper function to get highlighted HTML
+  const getHighlightedText = (text: string, searchTerm: string) => {
+    if (!searchTerm) return escapeHtml(text)
+
+    try {
+      const escapedSearchTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const regex = new RegExp(`(${escapedSearchTerm})`, 'gi')
+      const parts = text.split(regex)
+
+      return parts.map((part, index) => {
+        const escaped = escapeHtml(part)
+        if (index % 2 === 1) {
+          // This is a match - highlight with yellow background
+          return `<mark style="background-color: #FFEB3B; color: black; font-weight: 600; padding: 0 1px; border-radius: 2px;">${escaped}</mark>`
+        }
+        return escaped
+      }).join('')
+    } catch {
+      return escapeHtml(text)
+    }
+  }
+
+  // Handle find text
+  const handleFindText = () => {
+    if (!editDialog.findText) {
+      setEditDialog({ ...editDialog, matchCount: 0 })
+      return
+    }
+
+    const regex = new RegExp(editDialog.findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
+    const matches = editDialog.content.match(regex)
+    setEditDialog({ ...editDialog, matchCount: matches ? matches.length : 0 })
+  }
+
+  // Handle replace all
+  const handleReplaceAll = () => {
+    if (!editDialog.findText) return
+
+    const regex = new RegExp(editDialog.findText, 'g')
+    const newContent = editDialog.content.replace(regex, editDialog.replaceText)
+
+    setEditDialog({
+      ...editDialog,
+      content: newContent,
+      matchCount: 0,
+      findText: '',
+      replaceText: ''
+    })
+  }
+
+  // Handle replace first occurrence
+  const handleReplaceFirst = () => {
+    if (!editDialog.findText) return
+
+    const index = editDialog.content.indexOf(editDialog.findText)
+    if (index === -1) {
+      setEditDialog({ ...editDialog, matchCount: 0 })
+      return
+    }
+
+    const newContent =
+      editDialog.content.substring(0, index) +
+      editDialog.replaceText +
+      editDialog.content.substring(index + editDialog.findText.length)
+
+    // Recalculate match count
+    const regex = new RegExp(editDialog.findText, 'gi')
+    const matches = newContent.match(regex)
+
+    setEditDialog({
+      ...editDialog,
+      content: newContent,
+      matchCount: matches ? matches.length : 0
+    })
+  }
+
+  // Handle accept replacement for banned word
+  const handleAcceptReplacement = async (censoredWordId: string) => {
+    try {
+      setLoading(true)
+      const response = await axios.post(`/api/v1/chapters/censored-word/${censoredWordId}/accept`)
+
+      // Refresh chapter content
+      if (editDialog.chapter) {
+        const contentResponse = await axios.get(`/api/v1/chapters/${editDialog.chapter.id}`)
+        const censoredResponse = await axios.get(`/api/v1/chapters/${editDialog.chapter.id}/censored-words`)
+
+        setEditDialog({
+          ...editDialog,
+          content: contentResponse.data.content || '',
+          censoredWords: censoredResponse.data.censored_words || []
+        })
+
+        // Update chapters list
+        await fetchChapters()
+      }
+
+      console.log(response.data.message)
+    } catch (error: any) {
+      console.error('Error accepting replacement:', error)
+      setError(error.response?.data?.detail || 'Failed to accept replacement')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Handle quick add banned word
+  const handleQuickAddBannedWord = async () => {
+    if (!editDialog.quickBannedWord || !editDialog.quickReplacementWord) {
+      setError('Vui lòng nhập cả từ bị cấm và từ thay thế')
+      return
+    }
+
+    try {
+      setLoading(true)
+      setError(null)
+
+      // Add to banned words database
+      await axios.post('/api/v1/banned-words/', {
+        banned_word: editDialog.quickBannedWord,
+        replacement_word: editDialog.quickReplacementWord,
+        description: 'Thêm từ dialog edit chapter',
+        is_active: true
+      })
+
+      // Re-check grammar for current chapter to detect newly added banned word
+      if (editDialog.chapter) {
+        await axios.post(`/api/v1/chapters/${editDialog.chapter.id}/check-grammar`)
+
+        // Refresh censored words list
+        const censoredResponse = await axios.get(`/api/v1/chapters/${editDialog.chapter.id}/censored-words`)
+
+        setEditDialog({
+          ...editDialog,
+          censoredWords: censoredResponse.data.censored_words || [],
+          quickBannedWord: '',
+          quickReplacementWord: ''
+        })
+      }
+
+      console.log(`Added banned word: ${editDialog.quickBannedWord} -> ${editDialog.quickReplacementWord}`)
+    } catch (error: any) {
+      console.error('Error adding banned word:', error)
+      setError(error.response?.data?.detail || 'Failed to add banned word')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Handle check grammar without saving
+  const handleCheckGrammar = async () => {
+    if (!editDialog.chapter) return
+
+    try {
+      setLoading(true)
+
+      // Check grammar for the current content
+      console.log('Checking grammar for current content...')
+
+      // Check grammar with the current edited content
+      const grammarResponse = await axios.post(`/api/v1/chapters/${editDialog.chapter.id}/check-grammar`, {
+        content: editDialog.content
+      })
+      console.log('Grammar check result:', grammarResponse.data)
+
+      // Update the dialog state with the grammar check results
+      // Since we're passing custom content, the API returns the issues directly
+      setEditDialog({
+        ...editDialog,
+        censoredWords: grammarResponse.data.all_issues || []
+      })
+
+      // Show a notification about the check results
+      const totalIssues = grammarResponse.data.total_issues || 0
+      if (totalIssues > 0) {
+        console.log(`Found ${totalIssues} grammar issues`)
+      } else {
+        console.log('No grammar issues found')
+      }
+
+    } catch (error: any) {
+      console.error('Error checking grammar:', error)
+      setError(error.response?.data?.detail || 'Failed to check grammar')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Handle save edited chapter
+  const handleSaveEditedChapter = async () => {
+    if (!editDialog.chapter) return
+
+    try {
+      setLoading(true)
+
+      // Step 1: Save the chapter
+      await axios.put(`/api/v1/chapters/${editDialog.chapter.id}`, {
+        title: editDialog.title,
+        content: editDialog.content
+      })
+
+      // Step 2: Re-check grammar for saved content and save to database
+      console.log('Re-checking grammar after save...')
+      const grammarResponse = await axios.post(`/api/v1/chapters/${editDialog.chapter.id}/check-grammar-save`)
+      console.log('Grammar check result:', grammarResponse.data)
+
+      // Step 3: Update local state with new data
+      const updatedChapters = chapters.map(ch =>
+        ch.id === editDialog.chapter!.id
+          ? {
+              ...ch,
+              title: editDialog.title,
+              content: editDialog.content,
+              char_count: editDialog.content.length,
+              censored_count: grammarResponse.data.censored_count || 0,
+              has_censored_words: (grammarResponse.data.censored_count || 0) > 0
+            }
+          : ch
+      )
+      setChapters(updatedChapters)
+
+      // Step 4: Refresh chapter stats to update totals
+      if (storyData.id) {
+        await fetchChapterStats(storyData.id)
+      }
+
+      // Close dialog
+      setEditDialog({
+        isOpen: false,
+        chapter: null,
+        content: '',
+        title: '',
+        censoredWords: [],
+        findText: '',
+        replaceText: '',
+        matchCount: 0,
+        quickBannedWord: '',
+        quickReplacementWord: ''
+      })
+
+      // Show success message
+      console.log(`Chapter saved. Found ${grammarResponse.data.censored_count} grammar errors.`)
+    } catch (error: any) {
+      console.error('Error updating chapter:', error)
+      setError(error.response?.data?.detail || 'Failed to update chapter')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Handle delete chapter
+  const handleDeleteChapter = (chapter: Chapter) => {
+    setDeleteDialog({
+      isOpen: true,
+      chapter: chapter
+    })
+  }
+
+  // Handle confirm delete
+  const handleConfirmDelete = async () => {
+    if (!deleteDialog.chapter) return
+
+    try {
+      setLoading(true)
+      await axios.delete(`/api/v1/chapters/${deleteDialog.chapter.id}`)
+
+      // Update local state
+      const updatedChapters = chapters.filter(ch => ch.id !== deleteDialog.chapter!.id)
+      setChapters(updatedChapters)
+
+      // Close dialog
+      setDeleteDialog({
+        isOpen: false,
+        chapter: null
+      })
+    } catch (error: any) {
+      console.error('Error deleting chapter:', error)
+      setError(error.response?.data?.detail || 'Failed to delete chapter')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Render step indicator
+  const renderStepIndicator = () => {
+    const maxAccessibleStep = storyData.current_step || 1
+
+    return (
+      <div className="mb-8">
+        <div className="flex items-center justify-between">
+          {VISIBLE_STEPS.map((step, index) => {
+            const isCurrentStep = currentStep === step.id
+            const isAccessible = step.id <= maxAccessibleStep
+            const isCompleted = step.id < maxAccessibleStep
+
+            return (
+              <div key={step.id} className="flex items-center">
+                <div
+                  onClick={() => handleStepClick(step.id)}
+                  className={`
+                    flex items-center justify-center w-10 h-10 rounded-full border-2
+                    ${isCurrentStep
+                      ? 'bg-blue-500 text-white border-blue-500 cursor-pointer'
+                      : isCompleted
+                      ? 'bg-green-500 text-white border-green-500 cursor-pointer hover:bg-green-600'
+                      : isAccessible
+                      ? 'bg-gray-100 text-gray-700 border-gray-400 cursor-pointer hover:bg-gray-200'
+                      : 'bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed'}
+                    transition-colors duration-200
+                  `}
+                  title={isAccessible ? `Go to ${step.name}` : `Complete previous steps first`}
+                >
+                  {isCompleted ? '✓' : index + 1}
+                </div>
+                {index < VISIBLE_STEPS.length - 1 && (
+                  <div
+                    className={`w-20 h-1 mx-2 ${
+                      step.id < maxAccessibleStep ? 'bg-green-500' : 'bg-gray-300'
+                    }`}
+                  />
+                )}
+              </div>
+            )
+          })}
+      </div>
+      <div className="flex items-center justify-between mt-2">
+        {VISIBLE_STEPS.map((step, index) => (
+          <div key={step.id} className="flex items-center">
+            <div className="text-xs text-center w-10">
+              {step.name}
+            </div>
+            {index < VISIBLE_STEPS.length - 1 && (
+              <div className="w-20 mx-2" />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+    )
+  }
+
+  // ============== Merged Content Functions ==============
+
+  // Load merged content from API
+  const loadMergedContent = async () => {
+    if (!storyData.id) return
+    try {
+      const response = await axios.get(`/api/v1/stories/${storyData.id}/merged-content`)
+      setMergedView(prev => ({
+        ...prev,
+        content: response.data.merged_content,
+        isOpen: true
+      }))
+    } catch (error) {
+      console.error('Error loading merged content:', error)
+      showToast('Lỗi khi tải nội dung ghép', 'error')
+    }
+  }
+
+  // Save merged content to DB
+  const saveMergedContent = async () => {
+    if (!storyData.id) return
+    setMergedView(prev => ({ ...prev, isSaving: true }))
+    try {
+      await axios.put(`/api/v1/stories/${storyData.id}/merged-content`, {
+        merged_content: mergedView.content
+      })
+      showToast('Đã lưu nội dung thành công!', 'success')
+    } catch (error) {
+      console.error('Error saving merged content:', error)
+      showToast('Lỗi khi lưu nội dung', 'error')
+    } finally {
+      setMergedView(prev => ({ ...prev, isSaving: false }))
+    }
+  }
+
+  // Find & Replace in merged content
+  const handleMergedFindReplace = () => {
+    if (!mergedView.findText) return
+    const regex = new RegExp(mergedView.findText, 'g')
+    const newContent = mergedView.content.replace(regex, mergedView.replaceText)
+    const matchCount = (mergedView.content.match(regex) || []).length
+    setMergedView(prev => ({
+      ...prev,
+      content: newContent,
+      matchCount: 0
+    }))
+    showToast(`Đã thay thế ${matchCount} kết quả`, 'success')
+  }
+
+  // Count matches in merged content and scroll to first match
+  const countMergedMatches = () => {
+    if (!mergedView.findText) {
+      setMergedView(prev => ({ ...prev, matchCount: 0 }))
+      return
+    }
+    try {
+      const regex = new RegExp(mergedView.findText, 'g')
+      const matches = mergedView.content.match(regex) || []
+      setMergedView(prev => ({ ...prev, matchCount: matches.length }))
+
+      // Scroll to first match
+      if (matches.length > 0 && mergedTextareaRef.current) {
+        const firstMatchIndex = mergedView.content.indexOf(mergedView.findText)
+        if (firstMatchIndex !== -1) {
+          const textarea = mergedTextareaRef.current
+          // Calculate approximate line position
+          const textBeforeMatch = mergedView.content.substring(0, firstMatchIndex)
+          const linesBefore = textBeforeMatch.split('\n').length - 1
+          const lineHeight = 24 // approximate line height in pixels
+          const scrollPosition = Math.max(0, linesBefore * lineHeight - 100) // offset 100px from top
+          textarea.scrollTop = scrollPosition
+          // Also scroll highlight overlay
+          if (mergedHighlightRef.current) {
+            mergedHighlightRef.current.scrollTop = scrollPosition
+          }
+        }
+      }
+    } catch (e) {
+      setMergedView(prev => ({ ...prev, matchCount: 0 }))
+    }
+  }
+
+  // AI Grammar check for merged content
+  const checkMergedGrammar = async () => {
+    if (!storyData.id || !mergedView.content) return
+    setMergedView(prev => ({ ...prev, isChecking: true, aiResult: null }))
+    try {
+      // Check first 4000 chars (API limit)
+      const response = await axios.post(`/api/v1/chapters/${chapters[0]?.id || 'temp'}/ai-grammar-check`, {
+        content: mergedView.content.slice(0, 8000)
+      })
+      setMergedView(prev => ({
+        ...prev,
+        aiResult: response.data,
+        isChecking: false
+      }))
+      if (response.data.success) {
+        showToast(`Tìm thấy ${response.data.total_issues || 0} lỗi ngữ pháp`, 'info')
+      }
+    } catch (error: any) {
+      console.error('AI grammar check error:', error)
+      showToast(error.response?.data?.detail || 'Lỗi khi kiểm tra ngữ pháp', 'error')
+      setMergedView(prev => ({ ...prev, isChecking: false }))
+    }
+  }
+
+  // Render current step content
+  const renderStepContent = () => {
+    switch (currentStep) {
+      case 1:
+        return (
+          <div className="space-y-4">
+            <h3 className="text-xl font-semibold mb-4">Step 1: Enter Story Information</h3>
+            <form onSubmit={handleSubmitURL} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">TruyenFull URL</label>
+                <input
+                  type="url"
+                  value={storyData.url}
+                  onChange={(e) => setStoryData({ ...storyData, url: e.target.value })}
+                  placeholder="https://truyenfull.vision/story-name"
+                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                  disabled={loading}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Story Title</label>
+                <input
+                  type="text"
+                  value={storyData.title}
+                  onChange={(e) => setStoryData({ ...storyData, title: e.target.value })}
+                  placeholder="Enter story title"
+                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                  disabled={loading}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Start Chapter</label>
+                  <input
+                    type="number"
+                    value={storyData.start_chapter}
+                    onChange={(e) => setStoryData({ ...storyData, start_chapter: parseInt(e.target.value) })}
+                    min="1"
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                    disabled={loading || (storyData.custom_chapter_urls && storyData.custom_chapter_urls.length > 0)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">End Chapter</label>
+                  <input
+                    type="number"
+                    value={storyData.end_chapter}
+                    onChange={(e) => setStoryData({ ...storyData, end_chapter: parseInt(e.target.value) })}
+                    min="1"
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                    disabled={loading || (storyData.custom_chapter_urls && storyData.custom_chapter_urls.length > 0)}
+                  />
+                </div>
+              </div>
+
+              {/* Custom URLs Section */}
+              <div className="border-t pt-4 mt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Link thủ công (nếu URL không theo quy tắc)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setCustomUrlsDialog({ isOpen: true, urlsText: storyData.custom_chapter_urls?.join('\n') || '' })}
+                    className="text-sm bg-purple-500 text-white px-3 py-1 rounded hover:bg-purple-600 transition"
+                    disabled={loading}
+                  >
+                    {storyData.custom_chapter_urls && storyData.custom_chapter_urls.length > 0
+                      ? `Sửa (${storyData.custom_chapter_urls.length} links)`
+                      : 'Nhập link thủ công'}
+                  </button>
+                </div>
+                {storyData.custom_chapter_urls && storyData.custom_chapter_urls.length > 0 && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-md p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm text-purple-700 font-medium">
+                        ✓ Đã nhập {storyData.custom_chapter_urls.length} link chương
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setStoryData({ ...storyData, custom_chapter_urls: undefined })}
+                        className="text-xs text-red-500 hover:text-red-700"
+                      >
+                        Xóa tất cả
+                      </button>
+                    </div>
+                    <div className="text-xs text-gray-500 max-h-20 overflow-y-auto">
+                      {storyData.custom_chapter_urls.slice(0, 3).map((url, i) => (
+                        <div key={i} className="truncate">Chương {i + 1}: {url}</div>
+                      ))}
+                      {storyData.custom_chapter_urls.length > 3 && (
+                        <div className="text-purple-600">...và {storyData.custom_chapter_urls.length - 3} link khác</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {error && (
+                <div className={`p-4 rounded-md ${duplicateStory ? 'bg-orange-50 border border-orange-200' : 'bg-red-50 border border-red-200'}`}>
+                  <div className={`text-sm font-medium ${duplicateStory ? 'text-orange-800' : 'text-red-800'} mb-2`}>
+                    {duplicateStory ? '⚠️ Truyện đã tồn tại' : '❌ Lỗi'}
+                  </div>
+                  <div className={`text-sm ${duplicateStory ? 'text-orange-700' : 'text-red-700'} mb-3`}>
+                    {error}
+                  </div>
+                  {duplicateStory && (
+                    <div className="space-y-2">
+                      <div className="text-sm text-gray-700 bg-white p-3 rounded border border-orange-100">
+                        <div className="font-medium mb-1">Thông tin truyện đã tồn tại:</div>
+                        <div><strong>ID:</strong> <code className="bg-gray-100 px-2 py-0.5 rounded text-xs">{duplicateStory.id}</code></div>
+                        <div><strong>Tên:</strong> {duplicateStory.title}</div>
+                      </div>
+                      <button
+                        onClick={() => navigate(`/processor/${duplicateStory.id}`)}
+                        className="w-full bg-orange-500 text-white py-2 px-4 rounded-md hover:bg-orange-600 transition text-sm font-medium"
+                      >
+                        Mở truyện đã tồn tại
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition disabled:bg-gray-400"
+              >
+                {loading ? 'Downloading chapters...' : 'Start Download'}
+              </button>
+            </form>
+          </div>
+        )
+
+      case 3:
+        return (
+          <div className="space-y-4">
+            <h3 className="text-xl font-semibold mb-4">Step 3: Review & Edit Chapters</h3>
+
+            {/* Statistics Section */}
+            {checkingGrammar && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                  <span className="text-sm text-blue-800">Đang kiểm tra ngữ pháp...</span>
+                </div>
+              </div>
+            )}
+
+            {chapterStats && !checkingGrammar && (
+              <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-semibold text-gray-800 mb-3">Thống kê</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div className="bg-white rounded-lg p-3 shadow-sm">
+                    <div className="text-xs text-gray-500 mb-1">Tổng số chương</div>
+                    <div className="text-2xl font-bold text-gray-800">{chapterStats.total_chapters}</div>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 shadow-sm">
+                    <div className="text-xs text-gray-500 mb-1">Tổng số ký tự</div>
+                    <div className="text-2xl font-bold text-blue-600">{chapterStats.total_characters.toLocaleString()}</div>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 shadow-sm">
+                    <div className="text-xs text-gray-500 mb-1">Trung bình/chương</div>
+                    <div className="text-2xl font-bold text-green-600">{chapterStats.average_characters.toLocaleString()}</div>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 shadow-sm">
+                    <div className="text-xs text-gray-500 mb-1">Chương có lỗi</div>
+                    <div className={`text-2xl font-bold ${chapterStats.chapters_with_censored_words > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                      {chapterStats.chapters_with_censored_words}
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 shadow-sm">
+                    <div className="text-xs text-gray-500 mb-1">Tổng lỗi ngữ pháp</div>
+                    <div className={`text-2xl font-bold ${chapterStats.total_censored_words > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {chapterStats.total_censored_words}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Chapters List */}
+            <div className="max-h-[500px] overflow-y-auto border rounded-md p-4">
+              {chapters.length > 0 ? (
+                <div className="space-y-2">
+                  {chapters.map((chapter) => (
+                    <div key={chapter.id} className={`p-3 border rounded hover:bg-gray-50 transition-colors ${chapter.chapter_number === 0 ? 'border-purple-300 bg-purple-50' : ''}`}>
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">
+                              {chapter.chapter_number === 0 ? '📢 Giới thiệu (Chapter 0)' : `Chapter ${chapter.chapter_number}`}
+                            </span>
+                            {chapter.chapter_number !== 0 && chapter.title && (
+                              <span className="text-sm text-gray-600">- {chapter.title}</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-4 mt-1">
+                            <span className="text-sm text-gray-500">{chapter.char_count.toLocaleString()} ký tự</span>
+                            {chapter.chapter_number === 0 && chapter.char_count === 0 && (
+                              <span className="text-sm text-purple-600 italic">
+                                💡 Thêm nội dung giới thiệu (hoặc để trống để bỏ qua)
+                              </span>
+                            )}
+                            {(chapter.chapter_number !== 0 || chapter.char_count > 0) && chapter.censored_count > 0 && (
+                              <span className="text-sm text-orange-600 font-medium">
+                                ⚠ {chapter.censored_count} lỗi ngữ pháp
+                              </span>
+                            )}
+                            {(chapter.chapter_number !== 0 || chapter.char_count > 0) && chapter.censored_count === 0 && (
+                              <span className="text-sm text-green-600">
+                                ✓ Không có lỗi
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 ml-4">
+                          <button
+                            onClick={() => handleEditChapter(chapter)}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                            title="Edit chapter"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteChapter(chapter)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                            title="Delete chapter"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500">No chapters found</p>
+              )}
+            </div>
+            {/* Action buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={handleSaveChapters}
+                className="flex-1 bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition"
+              >
+                Continue to Grammar Check
+              </button>
+            </div>
+          </div>
+        )
+
+      case 4:
+        // Grammar Check Step - NEW
+        return (
+          <div className="space-y-4">
+            <h3 className="text-xl font-semibold mb-4">Step 4: Check Grammar</h3>
+
+            {/* Auto load merged content when entering this step */}
+            {!mergedView.content && !mergedView.isOpen && (
+              <div className="text-center py-8">
+                <button
+                  onClick={loadMergedContent}
+                  className="bg-purple-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-purple-600 transition"
+                >
+                  📝 Tải nội dung để kiểm tra
+                </button>
+              </div>
+            )}
+
+            {(mergedView.content || mergedView.isOpen) && (
+              <div className="space-y-4">
+                {/* Find & Replace */}
+                <div className="bg-white border rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-800 mb-3">🔍 Tìm và Thay thế</h4>
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <input
+                      type="text"
+                      placeholder="Tìm kiếm..."
+                      value={mergedView.findText}
+                      onChange={(e) => {
+                        setMergedView(prev => ({ ...prev, findText: e.target.value }))
+                        setTimeout(countMergedMatches, 100)
+                      }}
+                      className="flex-1 min-w-[150px] px-3 py-2 border rounded"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Thay thế bằng..."
+                      value={mergedView.replaceText}
+                      onChange={(e) => setMergedView(prev => ({ ...prev, replaceText: e.target.value }))}
+                      className="flex-1 min-w-[150px] px-3 py-2 border rounded"
+                    />
+                    {mergedView.matchCount > 0 && (
+                      <span className="text-sm text-orange-600 font-medium px-2">
+                        {mergedView.matchCount} kết quả
+                      </span>
+                    )}
+                    <button
+                      onClick={handleMergedFindReplace}
+                      disabled={!mergedView.findText}
+                      className="bg-orange-500 text-white px-4 py-2 rounded font-medium hover:bg-orange-600 disabled:bg-gray-300 transition"
+                    >
+                      Thay thế tất cả
+                    </button>
+                  </div>
+                </div>
+
+                {/* Text Editor */}
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-gray-100 px-4 py-2 flex items-center justify-between border-b">
+                    <span className="text-sm font-medium text-gray-700">
+                      📖 Nội dung truyện ({mergedView.content.length.toLocaleString()} ký tự)
+                    </span>
+                    <button
+                      onClick={checkMergedGrammar}
+                      disabled={mergedView.isChecking || !mergedView.content}
+                      className="bg-purple-500 text-white px-3 py-1 rounded text-sm font-medium hover:bg-purple-600 disabled:bg-gray-400 transition flex items-center gap-1"
+                    >
+                      {mergedView.isChecking ? (
+                        <><div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div> Đang kiểm tra...</>
+                      ) : (
+                        <>🤖 AI Check Grammar</>
+                      )}
+                    </button>
+                  </div>
+                  <div className="relative">
+                    {/* Highlight overlay */}
+                    {mergedView.findText && (
+                      <div
+                        ref={mergedHighlightRef}
+                        className="absolute top-0 left-0 p-4 font-mono text-sm pointer-events-none whitespace-pre-wrap break-words overflow-hidden"
+                        style={{
+                          width: '100%',
+                          height: 'calc(100vh - 350px)',
+                          minHeight: '500px',
+                          overflowY: 'auto',
+                          color: 'transparent',
+                          lineHeight: '1.5'
+                        }}
+                        dangerouslySetInnerHTML={{
+                          __html: getHighlightedText(mergedView.content, mergedView.findText)
+                        }}
+                      />
+                    )}
+                    <textarea
+                      ref={mergedTextareaRef}
+                      value={mergedView.content}
+                      onChange={(e) => setMergedView(prev => ({ ...prev, content: e.target.value }))}
+                      onScroll={() => {
+                        if (mergedTextareaRef.current && mergedHighlightRef.current) {
+                          mergedHighlightRef.current.scrollTop = mergedTextareaRef.current.scrollTop
+                        }
+                      }}
+                      className="w-full p-4 font-mono text-sm resize-none focus:outline-none"
+                      style={{
+                        height: 'calc(100vh - 350px)',
+                        minHeight: '500px',
+                        backgroundColor: mergedView.findText ? 'transparent' : 'white',
+                        caretColor: 'black',
+                        lineHeight: '1.5'
+                      }}
+                      placeholder="Nội dung truyện sẽ hiển thị ở đây..."
+                    />
+                  </div>
+                </div>
+
+                {/* AI Result Popup - Right Side Panel */}
+                {mergedView.aiResult && (
+                  <div className="fixed top-0 right-0 h-full w-[500px] bg-white shadow-2xl border-l z-50 flex flex-col">
+                    {/* Header */}
+                    <div className="bg-purple-600 text-white px-4 py-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">🤖</span>
+                        <span className="font-semibold">Kết quả AI Check</span>
+                      </div>
+                      <button
+                        onClick={() => setMergedView(prev => ({ ...prev, aiResult: null }))}
+                        className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-purple-700 transition"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {/* Response Content - Scrollable */}
+                    <div className="flex-1 overflow-y-auto p-4">
+                      {/* Error */}
+                      {mergedView.aiResult.error && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                          <h4 className="font-semibold text-red-700 mb-2">❌ Lỗi</h4>
+                          <p className="text-red-600 text-sm">{mergedView.aiResult.error}</p>
+                        </div>
+                      )}
+
+                      {/* Summary */}
+                      {mergedView.aiResult.summary && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                          <h4 className="font-semibold text-blue-700 mb-2">📋 Tóm tắt</h4>
+                          <p className="text-gray-700">{mergedView.aiResult.summary}</p>
+                        </div>
+                      )}
+
+                      {/* Stats */}
+                      {mergedView.aiResult.success && (
+                        <div className="flex gap-3 mb-4">
+                          <span className="px-3 py-2 rounded-lg bg-red-100 text-red-700 font-medium">
+                            📝 {mergedView.aiResult.total_issues || 0} lỗi chính tả
+                          </span>
+                          <span className="px-3 py-2 rounded-lg bg-orange-100 text-orange-700 font-medium">
+                            ⚠️ {mergedView.aiResult.total_watermarks || 0} watermark
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Spelling Errors */}
+                      {mergedView.aiResult.spelling_errors && mergedView.aiResult.spelling_errors.length > 0 && (
+                        <div className="mb-4">
+                          <h4 className="font-semibold text-red-700 mb-3 text-lg">📝 Lỗi chính tả</h4>
+                          <div className="space-y-3">
+                            {mergedView.aiResult.spelling_errors.map((error: any, idx: number) => (
+                              <div key={idx} className="bg-gray-50 border rounded-lg p-3">
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-gray-500 text-sm">{idx + 1}.</span>
+                                    <span className="bg-red-100 text-red-700 px-2 py-1 rounded line-through">{error.original}</span>
+                                    <span className="text-gray-400">→</span>
+                                    <span className="bg-green-100 text-green-700 px-2 py-1 rounded font-medium">{error.suggestion}</span>
+                                  </div>
+                                  <button
+                                    onClick={() => {
+                                      const newContent = mergedView.content.replaceAll(error.original, error.suggestion)
+                                      setMergedView(prev => ({ ...prev, content: newContent }))
+                                      showToast(`Đã thay "${error.original}" → "${error.suggestion}"`, 'success')
+                                    }}
+                                    className="bg-green-500 text-white px-3 py-1 rounded text-sm font-medium hover:bg-green-600 transition whitespace-nowrap"
+                                  >
+                                    ✓ Accept
+                                  </button>
+                                </div>
+                                {error.context && (
+                                  <p className="text-gray-500 text-sm italic ml-5">"{error.context}"</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Watermarks */}
+                      {mergedView.aiResult.watermarks && mergedView.aiResult.watermarks.length > 0 && (
+                        <div className="mb-4">
+                          <h4 className="font-semibold text-orange-700 mb-3 text-lg">⚠️ Watermark phát hiện</h4>
+                          <div className="space-y-3">
+                            {mergedView.aiResult.watermarks.map((wm: any, idx: number) => (
+                              <div key={idx} className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-gray-500 text-sm">{idx + 1}.</span>
+                                    <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded font-medium">{wm.text}</span>
+                                  </div>
+                                  <button
+                                    onClick={() => {
+                                      const newContent = mergedView.content.replaceAll(wm.text, '')
+                                      setMergedView(prev => ({ ...prev, content: newContent }))
+                                      showToast(`Đã xóa "${wm.text}"`, 'success')
+                                    }}
+                                    className="bg-red-500 text-white px-3 py-1 rounded text-sm font-medium hover:bg-red-600 transition whitespace-nowrap"
+                                  >
+                                    🗑️ Xóa
+                                  </button>
+                                </div>
+                                {wm.context && (
+                                  <p className="text-gray-500 text-sm italic ml-5">"{wm.context}"</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* No issues */}
+                      {mergedView.aiResult.success &&
+                       (!mergedView.aiResult.spelling_errors || mergedView.aiResult.spelling_errors.length === 0) &&
+                       (!mergedView.aiResult.watermarks || mergedView.aiResult.watermarks.length === 0) && (
+                        <div className="text-center py-8">
+                          <div className="text-6xl mb-4">✅</div>
+                          <p className="text-green-600 font-semibold text-lg">Không tìm thấy lỗi!</p>
+                          <p className="text-gray-500">Văn bản đã sạch chính tả và watermark</p>
+                        </div>
+                      )}
+
+                      {/* Raw response (collapsible) */}
+                      <details className="mt-4">
+                        <summary className="cursor-pointer text-gray-500 text-sm hover:text-gray-700">
+                          📄 Xem JSON gốc
+                        </summary>
+                        <pre className="mt-2 bg-gray-900 text-green-400 text-xs p-3 rounded-lg overflow-x-auto">
+                          {JSON.stringify(mergedView.aiResult, null, 2)}
+                        </pre>
+                      </details>
+                    </div>
+                  </div>
+                )}
+
+                {/* Continue button */}
+                <div className="flex gap-4">
+                  <button
+                    onClick={saveMergedContent}
+                    disabled={mergedView.isSaving}
+                    className="flex-1 bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 transition disabled:bg-gray-400"
+                  >
+                    {mergedView.isSaving ? 'Đang lưu...' : '💾 Lưu thay đổi'}
+                  </button>
+                  <button
+                    onClick={() => moveToStep(5)}
+                    className="flex-1 bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition"
+                  >
+                    Continue to TTS Configuration
+                  </button>
+                  <button
+                    onClick={() => moveToStep(7)}
+                    className="flex-1 bg-purple-500 text-white py-2 px-4 rounded-md hover:bg-purple-600 transition"
+                  >
+                    Skip to Video
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+
+      case 5:
+        return (
+          <div className="space-y-4">
+            <h3 className="text-xl font-semibold mb-4">Step 5: Configure Text-to-Speech</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Voice</label>
+                <select
+                  value={ttsConfig.voice_code}
+                  onChange={(e) => setTtsConfig({ ...ttsConfig, voice_code: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={loading}
+                >
+                  {voices.map((voice) => (
+                    <option key={voice.code} value={voice.code}>
+                      {voice.name} ({voice.gender})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Speed</label>
+                  <input
+                    type="number"
+                    value={ttsConfig.speed}
+                    onChange={(e) => setTtsConfig({ ...ttsConfig, speed: parseFloat(e.target.value) })}
+                    min="0.5"
+                    max="2.0"
+                    step="0.1"
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={loading}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Bitrate</label>
+                  <select
+                    value={ttsConfig.bitrate}
+                    onChange={(e) => setTtsConfig({ ...ttsConfig, bitrate: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={loading}
+                  >
+                    <option value={128}>128 kbps</option>
+                    <option value={192}>192 kbps</option>
+                    <option value={256}>256 kbps</option>
+                  </select>
+                </div>
+              </div>
+              {error && (
+                <div className="text-red-600 text-sm">{error}</div>
+              )}
+              <button
+                onClick={handleStartTTS}
+                disabled={loading}
+                className="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition disabled:bg-gray-400"
+              >
+                {loading ? 'Processing TTS...' : 'Start TTS Processing'}
+              </button>
+            </div>
+          </div>
+        )
+
+      case 6:
+        return (
+          <div className="space-y-4">
+            <h3 className="text-xl font-semibold mb-4">Step 6: TTS Processing</h3>
+
+            {/* TTS Status */}
+            <div className={`border rounded-lg p-4 ${
+              mergedTtsStatus.status === 'completed' ? 'bg-green-50 border-green-200' :
+              mergedTtsStatus.status === 'failed' ? 'bg-red-50 border-red-200' :
+              mergedTtsStatus.status === 'running' ? 'bg-blue-50 border-blue-200' :
+              'bg-gray-50 border-gray-200'
+            }`}>
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-medium">Trạng thái TTS</span>
+                <button
+                  onClick={() => fetchMergedTtsStatus()}
+                  className="text-xs text-blue-600 hover:text-blue-800 underline"
+                >
+                  Refresh
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {/* Status Badge */}
+                <div className="flex items-center gap-3">
+                  {mergedTtsStatus.status === 'idle' && (
+                    <span className="px-3 py-1 rounded-full bg-gray-200 text-gray-700 text-sm font-medium">
+                      ⏳ Chờ xử lý
+                    </span>
+                  )}
+                  {mergedTtsStatus.status === 'running' && (
+                    <span className="px-3 py-1 rounded-full bg-blue-200 text-blue-700 text-sm font-medium flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-700"></div>
+                      Đang xử lý TTS...
+                    </span>
+                  )}
+                  {mergedTtsStatus.status === 'completed' && (
+                    <span className="px-3 py-1 rounded-full bg-green-200 text-green-700 text-sm font-medium">
+                      ✅ Hoàn thành
+                    </span>
+                  )}
+                  {mergedTtsStatus.status === 'failed' && (
+                    <span className="px-3 py-1 rounded-full bg-red-200 text-red-700 text-sm font-medium">
+                      ❌ Thất bại
+                    </span>
+                  )}
+                </div>
+
+                {/* Info */}
+                <div className="text-sm text-gray-600">
+                  📝 Số ký tự: {mergedTtsStatus.charCount?.toLocaleString() || mergedView.content?.length?.toLocaleString() || 0}
+                </div>
+
+                {/* Audio File */}
+                {mergedTtsStatus.audioFile && (
+                  <div className="text-sm text-green-700 bg-green-100 p-2 rounded">
+                    🎵 File: {mergedTtsStatus.audioFile.split('/').pop()}
+                    {mergedTtsStatus.audioSize && (
+                      <span className="ml-2">({(mergedTtsStatus.audioSize / 1024 / 1024).toFixed(2)} MB)</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Error */}
+                {mergedTtsStatus.error && (
+                  <div className="text-sm text-red-700 bg-red-100 p-2 rounded">
+                    ❌ Lỗi: {mergedTtsStatus.error}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Merged Content Preview */}
+            <div className="border rounded-md">
+              <div className="bg-gray-100 px-4 py-2 border-b flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">
+                  📖 Nội dung đã chỉnh sửa ({mergedView.content?.length?.toLocaleString() || 0} ký tự)
+                </span>
+              </div>
+              <textarea
+                value={mergedView.content || ''}
+                readOnly
+                className="w-full p-4 font-mono text-sm bg-gray-50 resize-none focus:outline-none"
+                style={{
+                  height: 'calc(100vh - 550px)',
+                  minHeight: '250px'
+                }}
+                placeholder="Nội dung truyện sẽ hiển thị ở đây..."
+              />
+            </div>
+
+            {/* Info Message */}
+            {mergedTtsStatus.status === 'running' && (
+              <div className="text-sm text-blue-600 bg-blue-50 p-3 rounded-md flex items-center gap-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                Đang xử lý TTS... Trang sẽ tự động cập nhật mỗi 10 giây.
+              </div>
+            )}
+
+            {error && (
+              <div className="text-red-600 text-sm bg-red-50 p-3 rounded-md">{error}</div>
+            )}
+
+            {/* Continue Button - Show when TTS is complete */}
+            {mergedTtsStatus.status === 'completed' && (
+              <button
+                onClick={() => moveToStep(7)}
+                className="w-full bg-green-500 text-white py-3 px-4 rounded-md hover:bg-green-600 transition font-semibold"
+              >
+                ✅ TTS Hoàn thành - Tiếp tục
+              </button>
+            )}
+          </div>
+        )
+
+      case 7: {
+        const [resW, resH] = videoConfig.resolution.split('x').map(Number)
+        const ratio = resW / resH
+        const maxW = 720, maxH = 540
+        const previewW = ratio >= 1 ? maxW : Math.round(maxH * ratio)
+        const previewH = ratio >= 1 ? Math.round(maxW / ratio) : maxH
+        const previewScale = videoConfig.bannerImage ? videoConfig.bannerVideoScale : 1
+        const currentClip = clipList[currentClipIdx] || null
+        const clipUrl = currentClip
+          ? `/api/v1/video/preview-video?path=${encodeURIComponent(currentClip.path)}`
+          : null
+        const audioUrl = videoConfig.audioPath
+          ? `/api/v1/video/preview-audio?path=${encodeURIComponent(videoConfig.audioPath)}`
+          : null
+        // Anti-detection CSS approximations for the inline preview. ffmpeg
+        // applies these per-clip; here we approximate with transform+filter on
+        // the <video> element. Gamma is approximated via brightness() since
+        // CSS has no native gamma. Speed jitter and strip metadata are not
+        // mirrored (no visible effect / not meaningful in HTML preview).
+        const adTransforms: string[] = []
+        if (inlineClipFlip) adTransforms.push('scaleX(-1)')
+        if (videoConfig.ad_zoom && videoConfig.ad_zoom_factor > 1) {
+          adTransforms.push(`scale(${videoConfig.ad_zoom_factor})`)
+        }
+        const adFilters: string[] = []
+        if (videoConfig.ad_color) {
+          if (Math.abs(videoConfig.ad_saturation - 1) > 0.001) adFilters.push(`saturate(${videoConfig.ad_saturation})`)
+          if (Math.abs(videoConfig.ad_contrast - 1) > 0.001) adFilters.push(`contrast(${videoConfig.ad_contrast})`)
+          if (Math.abs(videoConfig.ad_gamma - 1) > 0.001) adFilters.push(`brightness(${videoConfig.ad_gamma})`)
+          if (Math.abs(videoConfig.ad_hue_shift) > 0.1) adFilters.push(`hue-rotate(${videoConfig.ad_hue_shift}deg)`)
+        }
+        const adVideoStyle: React.CSSProperties = {
+          transform: adTransforms.join(' ') || undefined,
+          filter: adFilters.join(' ') || undefined,
+        }
+        const isProcessing = videoStatus.status === 'running' || videoStatus.status === 'queued'
+        // Estimated final video duration (matches backend logic):
+        // = ceil(audio_duration / audio_speed / 60) * 60   (rounded up to next minute)
+        const estimatedFinalDuration = audioDuration > 0
+          ? Math.ceil((audioDuration / videoConfig.audio_speed) / 60) * 60
+          : 0
+        // Real-time playback total = audio_dur / speed (without minute-rounding,
+        // since the preview audio is the source of truth for time)
+        const timelineTotal = videoTotalDuration > 0 ? videoTotalDuration : clipsTotalDur
+
+        return (
+          <div className="space-y-4">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <h3 className="text-xl font-semibold mb-1">Step 7: Video Processing</h3>
+                <p className="text-sm text-gray-500">
+                  Tạo video từ audio + video ngắn làm nền. Bước này là tùy chọn, có thể bỏ qua.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-semibold text-blue-600">📋 Preset:</span>
+                <select
+                  value={selectedPresetId}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setSelectedPresetId(v)
+                    if (v !== '') loadPreset(v)
+                  }}
+                  disabled={isProcessing}
+                  className="px-2 py-1.5 text-sm border rounded bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 min-w-[180px]"
+                >
+                  <option value="">
+                    {videoPresets.length === 0 ? '-- Chưa có preset --' : '-- Chọn preset --'}
+                  </option>
+                  {videoPresets.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+                {selectedPresetId !== '' && (
+                  <>
+                    <button
+                      onClick={updateSelectedPresetCfg}
+                      disabled={isProcessing}
+                      className="text-xs px-2 py-1.5 bg-gray-100 hover:bg-blue-100 text-gray-700 hover:text-blue-700 rounded border disabled:opacity-50"
+                      title="Cập nhật preset đã chọn với config hiện tại"
+                    >
+                      🔄
+                    </button>
+                    <button
+                      onClick={renamePreset}
+                      disabled={isProcessing}
+                      className="text-xs px-2 py-1.5 bg-gray-100 hover:bg-yellow-100 text-gray-700 hover:text-yellow-700 rounded border disabled:opacity-50"
+                      title="Đổi tên preset đã chọn"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      onClick={() => {
+                        const cur = videoPresets.find(p => p.id === selectedPresetId)
+                        if (!cur) return
+                        setConfirmDialog({
+                          isOpen: true,
+                          title: '🗑️ Xoá preset',
+                          message: `Bạn có chắc muốn xoá preset "${cur.name}"? Thao tác này không thể hoàn tác.`,
+                          confirmText: 'Xoá',
+                          variant: 'danger',
+                          onConfirm: () => deletePreset(selectedPresetId),
+                        })
+                      }}
+                      disabled={isProcessing}
+                      className="text-xs px-2 py-1.5 bg-gray-100 hover:bg-red-100 text-gray-600 hover:text-red-600 rounded border disabled:opacity-50"
+                      title="Xoá preset đã chọn"
+                    >
+                      🗑️
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={savePreset}
+                  disabled={isProcessing}
+                  className="text-xs px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+                >
+                  💾 Lưu config hiện tại
+                </button>
+                <button
+                  onClick={() => {
+                    setConfirmDialog({
+                      isOpen: true,
+                      title: '↺ Reset cài đặt video',
+                      message: 'Reset TOÀN BỘ cài đặt video về mặc định (subtitle, watermark, banner config, fade, transitions, anti-detect, visualizer…)?\n\nFolder video, audio, ảnh banner & watermark đã chọn sẽ được giữ lại.',
+                      confirmText: 'Reset',
+                      variant: 'danger',
+                      onConfirm: () => {
+                        // DEFAULT_VIDEO_CFG is typed Omit<…, file-path keys> so the
+                        // spread leaves folder/audioPath/bannerImage/watermarkImage
+                        // intact — those are the painful inputs to re-pick.
+                        setVideoConfig(prev => ({ ...prev, ...DEFAULT_VIDEO_CFG }))
+                        setSubtitleSegments(null)
+                      },
+                    })
+                  }}
+                  disabled={isProcessing}
+                  className="text-xs px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 rounded border border-red-200 disabled:opacity-50"
+                  title="Reset toàn bộ cài đặt video (giữ folder/audio/file đã chọn)"
+                >
+                  ↺ Reset
+                </button>
+              </div>
+            </div>
+
+            {/* Right sidebar: settings tabs (fixed to viewport right) */}
+            <div className="fixed right-0 top-0 h-screen w-[520px] z-30 bg-white border-l border-gray-200 shadow-2xl overflow-y-auto flex flex-col">
+
+            {/* Video settings tabs */}
+            <div className="flex border-b border-gray-200">
+              {([
+                { key: 'basic', label: '📁 Cơ bản' },
+                { key: 'effects', label: '✨ Hiệu ứng' },
+                { key: 'antidetect', label: '🛡️ Bản quyền' },
+              ] as const).map(tab => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setVideoTab(tab.key)}
+                  className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
+                    videoTab === tab.key
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Tab: Cơ bản */}
+            {videoTab === 'basic' && <div className="space-y-3 p-3">
+                {/* Inputs card */}
+                <div className="border rounded-lg p-4 bg-white space-y-3">
+                  <h4 className="font-semibold text-blue-600 text-sm">📁 Nguồn dữ liệu</h4>
+
+                  <div>
+                    <label className="block text-xs font-medium mb-1 text-gray-600">Audio File Path</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={videoConfig.audioPath}
+                        onChange={(e) => setVideoConfig(prev => ({ ...prev, audioPath: e.target.value }))}
+                        placeholder="D:\path\to\audio\file.mp3"
+                        className="flex-1 px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={isProcessing}
+                      />
+                      <button
+                        onClick={() => openAudioBrowser(videoConfig.audioPath || '', true)}
+                        disabled={isProcessing}
+                        className="px-3 py-1.5 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50"
+                      >
+                        Browse
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium mb-1 text-gray-600">Video Source Folder</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={videoConfig.folder}
+                        onChange={(e) => {
+                          setVideoConfig(prev => ({ ...prev, folder: e.target.value }))
+                          setFolderValidation({ valid: false, videoCount: 0, totalDuration: '', checked: false })
+                        }}
+                        placeholder="D:\path\to\video\folder"
+                        className="flex-1 px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={isProcessing}
+                      />
+                      <button
+                        onClick={() => openFolderBrowser(videoConfig.folder || '')}
+                        disabled={isProcessing}
+                        className="px-3 py-1.5 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50"
+                      >
+                        Browse
+                      </button>
+                      <button
+                        onClick={validateVideoFolder}
+                        disabled={!videoConfig.folder.trim() || videoStatus.status === 'running'}
+                        className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+                      >
+                        Validate
+                      </button>
+                    </div>
+                    {folderValidation.checked && (
+                      <div className={`mt-1 text-xs ${folderValidation.valid ? 'text-green-600' : 'text-red-600'}`}>
+                        {folderValidation.valid
+                          ? `✓ ${folderValidation.videoCount} videos (${folderValidation.totalDuration})`
+                          : 'Invalid folder'}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium mb-1 text-gray-600">Banner Background (Optional)</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={videoConfig.bannerImage}
+                        onChange={(e) => setVideoConfig(prev => ({ ...prev, bannerImage: e.target.value }))}
+                        placeholder="D:\path\to\banner.png"
+                        className="flex-1 px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={isProcessing}
+                      />
+                      <button
+                        onClick={() => openImageBrowser(videoConfig.bannerImage || '', true)}
+                        disabled={isProcessing}
+                        className="px-3 py-1.5 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50"
+                      >
+                        Browse
+                      </button>
+                      {videoConfig.bannerImage && (
+                        <button
+                          onClick={() => setVideoConfig(prev => ({ ...prev, bannerImage: '' }))}
+                          disabled={isProcessing}
+                          className="px-2 py-1.5 text-sm bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
+                          title="Clear banner"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                    {videoConfig.bannerImage && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <label className="text-xs text-gray-600 whitespace-nowrap">Video scale: {Math.round(videoConfig.bannerVideoScale * 100)}%</label>
+                        <input
+                          type="range" min="0.5" max="3" step="0.05"
+                          value={videoConfig.bannerVideoScale}
+                          onChange={(e) => setVideoConfig(prev => ({ ...prev, bannerVideoScale: parseFloat(e.target.value) }))}
+                          className="flex-1"
+                          disabled={isProcessing}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Config card */}
+                <div className="border rounded-lg p-4 bg-white space-y-3">
+                  <h4 className="font-semibold text-blue-600 text-sm">⚙️ Cấu hình video</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium mb-1 text-gray-600">Audio Speed</label>
+                      <input
+                        type="number"
+                        value={videoConfig.audio_speed}
+                        onChange={(e) => setVideoConfig(prev => ({ ...prev, audio_speed: parseFloat(e.target.value) || 1.0 }))}
+                        step="0.01" min="0.5" max="2.0"
+                        className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={videoStatus.status === 'running'}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1 text-gray-600">Transition Duration (s)</label>
+                      <input
+                        type="number"
+                        value={videoConfig.transition_duration}
+                        onChange={(e) => setVideoConfig(prev => ({ ...prev, transition_duration: parseFloat(e.target.value) || 0.5 }))}
+                        step="0.1" min="0.1" max="3"
+                        className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={videoStatus.status === 'running'}
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-medium mb-1 text-gray-600">Resolution</label>
+                      <select
+                        value={videoConfig.resolution}
+                        onChange={(e) => setVideoConfig(prev => ({ ...prev, resolution: e.target.value }))}
+                        className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={videoStatus.status === 'running'}
+                      >
+                        <option value="1920x1080">1920x1080 (16:9 — 1080p)</option>
+                        <option value="1280x720">1280x720 (16:9 — 720p)</option>
+                        <option value="1080x1920">1080x1920 (9:16 — Vertical)</option>
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-medium mb-1 text-gray-600">
+                        🌑 Overlay tối: {Math.round(videoConfig.overlay_opacity * 100)}%
+                      </label>
+                      <input
+                        type="range" min="0" max="0.8" step="0.05"
+                        value={videoConfig.overlay_opacity}
+                        onChange={(e) => setVideoConfig(prev => ({ ...prev, overlay_opacity: parseFloat(e.target.value) }))}
+                        className="w-full"
+                        disabled={videoStatus.status === 'running'}
+                      />
+                      <p className="text-[11px] text-gray-400 mt-0.5">Lớp đen mờ đè lên video, giúp tăng tương phản</p>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={videoConfig.mute_source_videos}
+                          onChange={(e) => setVideoConfig(prev => ({ ...prev, mute_source_videos: e.target.checked }))}
+                          disabled={videoStatus.status === 'running'}
+                        />
+                        🔇 Tắt âm video nền (chỉ giữ âm thanh chính)
+                      </label>
+                      <p className="text-[11px] text-gray-400 mt-0.5 ml-5">Bỏ tích nếu muốn trộn cả tiếng từ video nguồn vào</p>
+                    </div>
+                  </div>
+                </div>
+
+            </div>}
+
+            {/* Tab: Hiệu ứng */}
+            {videoTab === 'effects' && <>
+
+            {/* Watermark & Fade card (full width, collapsible) */}
+            <div className="border rounded-lg bg-white">
+              <button
+                type="button"
+                onClick={() => setWmCardOpen(o => !o)}
+                className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-lg"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-blue-600 text-sm">🏷️ Watermark & 🌅 Fade</span>
+                  {(() => {
+                    const active: string[] = []
+                    if (videoConfig.watermarkImage) active.push('logo')
+                    if (videoConfig.watermark_text) active.push('text')
+                    if (videoConfig.fade_in > 0 || videoConfig.fade_out > 0) active.push('fade')
+                    return active.length > 0 ? (
+                      <span className="text-[11px] text-gray-500">({active.join(' · ')})</span>
+                    ) : (
+                      <span className="text-[11px] text-gray-400">(không bật)</span>
+                    )
+                  })()}
+                </div>
+                <span className="text-gray-400 text-xs">{wmCardOpen ? '▲ ẩn' : '▼ hiện'}</span>
+              </button>
+
+              {wmCardOpen && (
+              <div className="px-4 pb-4 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Watermark column */}
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-gray-700">🖼️ Watermark / Logo (image, optional)</div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={videoConfig.watermarkImage}
+                      onChange={(e) => setVideoConfig(prev => ({ ...prev, watermarkImage: e.target.value }))}
+                      placeholder="D:\path\to\logo.png"
+                      className="flex-1 min-w-0 px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      disabled={isProcessing}
+                    />
+                    <button
+                      onClick={() => openImageBrowser(videoConfig.watermarkImage || '', true, 'watermark')}
+                      disabled={isProcessing}
+                      className="px-3 py-1.5 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50"
+                    >
+                      Browse
+                    </button>
+                    {videoConfig.watermarkImage && (
+                      <button
+                        onClick={() => setVideoConfig(prev => ({ ...prev, watermarkImage: '' }))}
+                        disabled={isProcessing}
+                        className="px-2 py-1.5 text-sm bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
+                        title="Clear watermark"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+
+                  {videoConfig.watermarkImage && (
+                    <>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">
+                          Vị trí: X {Math.round(videoConfig.watermark_x * 100)}% · Y {Math.round(videoConfig.watermark_y * 100)}%
+                          <span className="ml-2 text-[10px] text-blue-500">(kéo trên preview để chỉnh)</span>
+                        </label>
+                        <div className="grid grid-cols-5 gap-1">
+                          {([
+                            { lbl: '↖', x: 0.08, y: 0.08 },
+                            { lbl: '↗', x: 0.92, y: 0.08 },
+                            { lbl: '⊙', x: 0.5,  y: 0.5  },
+                            { lbl: '↙', x: 0.08, y: 0.92 },
+                            { lbl: '↘', x: 0.92, y: 0.92 },
+                          ]).map(({ lbl, x, y }) => {
+                            const active = Math.abs(videoConfig.watermark_x - x) < 0.02 && Math.abs(videoConfig.watermark_y - y) < 0.02
+                            return (
+                              <button
+                                key={lbl}
+                                onClick={() => setVideoConfig(prev => ({ ...prev, watermark_x: x, watermark_y: y }))}
+                                disabled={isProcessing}
+                                className={`text-sm px-2 py-1 rounded border ${
+                                  active
+                                    ? 'bg-blue-500 text-white border-blue-500'
+                                    : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                                }`}
+                                title={`${Math.round(x*100)}%, ${Math.round(y*100)}%`}
+                              >
+                                {lbl}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Kích thước (px)</label>
+                        <div className="flex gap-2 items-center">
+                          <div className="flex-1">
+                            <div className="text-[10px] text-gray-500 mb-0.5">W</div>
+                            <input
+                              type="number" min={16} max={4096} step={4}
+                              value={videoConfig.watermark_w}
+                              onChange={(e) => setVideoConfig(prev => ({ ...prev, watermark_w: parseInt(e.target.value) || 200 }))}
+                              className="w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              disabled={isProcessing}
+                            />
+                          </div>
+                          <span className="text-gray-400 mt-3">×</span>
+                          <div className="flex-1">
+                            <div className="text-[10px] text-gray-500 mb-0.5">H</div>
+                            <input
+                              type="number" min={16} max={4096} step={4}
+                              value={videoConfig.watermark_h}
+                              onChange={(e) => setVideoConfig(prev => ({ ...prev, watermark_h: parseInt(e.target.value) || 200 }))}
+                              className="w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              disabled={isProcessing}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setVideoConfig(prev => ({ ...prev, watermark_h: prev.watermark_w }))}
+                            disabled={isProcessing}
+                            className="mt-3 text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                            title="Đồng bộ H = W (vuông)"
+                          >
+                            ⊡
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Cắt theo hình</label>
+                        <div className="grid grid-cols-5 gap-1">
+                          {([
+                            { v: 'none',    lbl: '▭', t: 'Mặc định (giữ nguyên)' },
+                            { v: 'circle',  lbl: '●', t: 'Bo tròn' },
+                            { v: 'rounded', lbl: '▢', t: 'Bo ô vuông' },
+                            { v: 'star',    lbl: '★', t: 'Hình sao' },
+                            { v: 'sun',     lbl: '✸', t: 'Mặt trời' },
+                          ]).map(({ v, lbl, t }) => {
+                            const active = videoConfig.watermark_shape === v
+                            return (
+                              <button
+                                key={v}
+                                onClick={() => setVideoConfig(prev => ({ ...prev, watermark_shape: v }))}
+                                disabled={isProcessing}
+                                title={t}
+                                className={`text-base px-2 py-1 rounded border ${
+                                  active
+                                    ? 'bg-blue-500 text-white border-blue-500'
+                                    : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                                }`}
+                              >
+                                {lbl}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">
+                          Độ mờ: {Math.round(videoConfig.watermark_opacity * 100)}%
+                        </label>
+                        <input
+                          type="range" min="0.1" max="1" step="0.05"
+                          value={videoConfig.watermark_opacity}
+                          onChange={(e) => setVideoConfig(prev => ({ ...prev, watermark_opacity: parseFloat(e.target.value) }))}
+                          className="w-full"
+                          disabled={isProcessing}
+                        />
+                      </div>
+                      <img
+                        src={`/api/v1/video/preview-image?path=${encodeURIComponent(videoConfig.watermarkImage)}`}
+                        alt="watermark preview"
+                        className="max-h-16 rounded border border-gray-300 object-contain bg-gray-50"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                      />
+                    </>
+                  )}
+                </div>
+
+                {/* Text watermark column */}
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-gray-700">✏️ Watermark text (optional)</div>
+                  <input
+                    type="text"
+                    value={videoConfig.watermark_text}
+                    onChange={(e) => setVideoConfig(prev => ({ ...prev, watermark_text: e.target.value }))}
+                    placeholder="Vd: @MyChannel, ©2026..."
+                    className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={isProcessing}
+                  />
+
+                  {videoConfig.watermark_text && (
+                    <>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Font</label>
+                        <select
+                          value={videoConfig.watermark_text_font}
+                          onChange={(e) => setVideoConfig(prev => ({ ...prev, watermark_text_font: e.target.value }))}
+                          className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          disabled={isProcessing}
+                        >
+                          {availableFonts.map(f => <option key={f} value={f}>{f}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Size: {videoConfig.watermark_text_size}px</label>
+                          <input
+                            type="range" min="16" max="200" step="2"
+                            value={videoConfig.watermark_text_size}
+                            onChange={(e) => setVideoConfig(prev => ({ ...prev, watermark_text_size: parseInt(e.target.value) }))}
+                            className="w-full"
+                            disabled={isProcessing}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Màu chữ</label>
+                          <input
+                            type="color"
+                            value={videoConfig.watermark_text_color}
+                            onChange={(e) => setVideoConfig(prev => ({ ...prev, watermark_text_color: e.target.value }))}
+                            className="w-full h-8 rounded border"
+                            disabled={isProcessing}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">
+                          Góc nghiêng: {videoConfig.watermark_text_angle.toFixed(0)}°
+                        </label>
+                        <input
+                          type="range" min="-45" max="45" step="1"
+                          value={videoConfig.watermark_text_angle}
+                          onChange={(e) => setVideoConfig(prev => ({ ...prev, watermark_text_angle: parseFloat(e.target.value) }))}
+                          className="w-full"
+                          disabled={isProcessing}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">
+                          Vị trí: X {Math.round(videoConfig.watermark_text_x * 100)}% · Y {Math.round(videoConfig.watermark_text_y * 100)}%
+                          <span className="ml-2 text-[10px] text-blue-500">(kéo trên preview để chỉnh)</span>
+                        </label>
+                        <div className="grid grid-cols-5 gap-1">
+                          {([
+                            { lbl: '↖', x: 0.08, y: 0.08 },
+                            { lbl: '↗', x: 0.92, y: 0.08 },
+                            { lbl: '⊙', x: 0.5,  y: 0.5  },
+                            { lbl: '↙', x: 0.08, y: 0.92 },
+                            { lbl: '↘', x: 0.92, y: 0.92 },
+                          ]).map(({ lbl, x, y }) => {
+                            const active = Math.abs(videoConfig.watermark_text_x - x) < 0.02 && Math.abs(videoConfig.watermark_text_y - y) < 0.02
+                            return (
+                              <button
+                                key={lbl}
+                                onClick={() => setVideoConfig(prev => ({ ...prev, watermark_text_x: x, watermark_text_y: y }))}
+                                disabled={isProcessing}
+                                className={`text-sm px-2 py-1 rounded border ${
+                                  active
+                                    ? 'bg-blue-500 text-white border-blue-500'
+                                    : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                                }`}
+                                title={`${Math.round(x*100)}%, ${Math.round(y*100)}%`}
+                              >
+                                {lbl}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">
+                          Độ mờ: {Math.round(videoConfig.watermark_text_opacity * 100)}%
+                        </label>
+                        <input
+                          type="range" min="0.1" max="1" step="0.05"
+                          value={videoConfig.watermark_text_opacity}
+                          onChange={(e) => setVideoConfig(prev => ({ ...prev, watermark_text_opacity: parseFloat(e.target.value) }))}
+                          className="w-full"
+                          disabled={isProcessing}
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Fade row (full width below) */}
+              <div className="border-t pt-3 mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">
+                    🌅 Fade in: {videoConfig.fade_in.toFixed(1)}s {videoConfig.fade_in === 0 && '(tắt)'}
+                  </label>
+                  <input
+                    type="range" min="0" max="3" step="0.1"
+                    value={videoConfig.fade_in}
+                    onChange={(e) => setVideoConfig(prev => ({ ...prev, fade_in: parseFloat(e.target.value) }))}
+                    className="w-full"
+                    disabled={isProcessing}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">
+                    🌇 Fade out: {videoConfig.fade_out.toFixed(1)}s {videoConfig.fade_out === 0 && '(tắt)'}
+                  </label>
+                  <input
+                    type="range" min="0" max="3" step="0.1"
+                    value={videoConfig.fade_out}
+                    onChange={(e) => setVideoConfig(prev => ({ ...prev, fade_out: parseFloat(e.target.value) }))}
+                    className="w-full"
+                    disabled={isProcessing}
+                  />
+                </div>
+              </div>
+              </div>
+              )}
+            </div>
+
+            {/* Audio Visualizer card (collapsible) */}
+            <div className="border rounded-lg bg-white">
+              <button
+                type="button"
+                onClick={() => setVizCardOpen(o => !o)}
+                className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-lg"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-blue-600 text-sm">🎵 Audio Visualizer</span>
+                  {videoConfig.visualizer_enabled ? (
+                    <span className="text-[11px] text-gray-500">
+                      ({videoConfig.visualizer_style}
+                      {videoConfig.visualizer_style === 'spectrum' ? ` · ${videoConfig.visualizer_spectrum_preset}` : ''})
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-gray-400">(không bật)</span>
+                  )}
+                </div>
+                <span className="text-gray-400 text-xs">{vizCardOpen ? '▲ ẩn' : '▼ hiện'}</span>
+              </button>
+
+              {vizCardOpen && (
+              <div className="px-4 pb-4 space-y-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={videoConfig.visualizer_enabled}
+                    onChange={(e) => setVideoConfig(prev => ({ ...prev, visualizer_enabled: e.target.checked }))}
+                    disabled={isProcessing}
+                  />
+                  <span className="text-sm font-medium text-gray-700">Bật visualizer (sóng nhạc theo audio)</span>
+                </label>
+
+                {videoConfig.visualizer_enabled && (
+                  <>
+                    {/* Style picker — 4 top-level styles */}
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Kiểu hiển thị</label>
+                      <div className="grid grid-cols-4 gap-1">
+                        {([
+                          { v: 'bars',        lbl: '📊 Bars',     t: 'Cột tần số (showfreqs)' },
+                          { v: 'waveform',    lbl: '〰️ Wave',     t: 'Sóng (showwaves) — Smooth/Linear/Dots/Filled + Symmetrical' },
+                          { v: 'spectrum',    lbl: '🌈 Spectrum', t: 'Phổ tần số scrolling' },
+                          { v: 'cqt',         lbl: '🎼 CQT',      t: 'Music-aware bars (showcqt) — đẹp nhất' },
+                        ] as const).map(({ v, lbl, t }) => {
+                          const active = videoConfig.visualizer_style === v
+                          return (
+                            <button
+                              key={v}
+                              onClick={() => setVideoConfig(prev => ({ ...prev, visualizer_style: v }))}
+                              disabled={isProcessing}
+                              title={t}
+                              className={`text-xs px-2 py-1.5 rounded border ${
+                                active
+                                  ? 'bg-blue-500 text-white border-blue-500'
+                                  : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                              }`}
+                            >
+                              {lbl}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Sub-mode picker for Bars */}
+                    {videoConfig.visualizer_style === 'bars' && (
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Bars mode</label>
+                        <div className="grid grid-cols-3 gap-1">
+                          {([
+                            { v: 'bar',  lbl: 'Bar',  t: 'Cột đặc (mặc định)' },
+                            { v: 'line', lbl: 'Line', t: 'Đường nối đỉnh' },
+                            { v: 'dot',  lbl: 'Dot',  t: 'Chấm đỉnh' },
+                          ] as const).map(({ v, lbl, t }) => {
+                            const active = videoConfig.visualizer_bars_mode === v
+                            return (
+                              <button
+                                key={v}
+                                onClick={() => setVideoConfig(prev => ({ ...prev, visualizer_bars_mode: v }))}
+                                disabled={isProcessing}
+                                title={t}
+                                className={`text-xs px-2 py-1 rounded border ${
+                                  active
+                                    ? 'bg-purple-500 text-white border-purple-500'
+                                    : 'bg-white text-gray-600 border-gray-300 hover:border-purple-400'
+                                }`}
+                              >
+                                {lbl}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sub-mode picker + mirror toggle for Waveform */}
+                    {videoConfig.visualizer_style === 'waveform' && (
+                      <div className="space-y-2">
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Waveform mode</label>
+                          <div className="grid grid-cols-4 gap-1">
+                            {([
+                              { v: 'cline', lbl: 'Smooth', t: 'Đường centered, cong mượt (cline) — mặc định' },
+                              { v: 'line',  lbl: 'Linear', t: 'Đường line nối thẳng các sample' },
+                              { v: 'point', lbl: 'Dots',   t: 'Chỉ chấm điểm sample, không vẽ đường' },
+                              { v: 'p2p',   lbl: 'Filled', t: 'Lấp đầy giữa các sample (peer-to-peer fill)' },
+                            ] as const).map(({ v, lbl, t }) => {
+                              const active = videoConfig.visualizer_waveform_mode === v
+                              return (
+                                <button
+                                  key={v}
+                                  onClick={() => setVideoConfig(prev => ({ ...prev, visualizer_waveform_mode: v }))}
+                                  disabled={isProcessing}
+                                  title={t}
+                                  className={`text-xs px-2 py-1 rounded border ${
+                                    active
+                                      ? 'bg-purple-500 text-white border-purple-500'
+                                      : 'bg-white text-gray-600 border-gray-300 hover:border-purple-400'
+                                  }`}
+                                >
+                                  {lbl}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                        <label className="flex items-center gap-2 text-xs cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={videoConfig.visualizer_waveform_mirror}
+                            onChange={(e) => setVideoConfig(prev => ({ ...prev, visualizer_waveform_mirror: e.target.checked }))}
+                            disabled={isProcessing}
+                          />
+                          Symmetrical (sóng đối xứng trên/dưới — như audio meter)
+                        </label>
+                      </div>
+                    )}
+
+                    {/* Position */}
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">
+                        Vị trí: X {Math.round(videoConfig.visualizer_x * 100)}% · Y {Math.round(videoConfig.visualizer_y * 100)}%
+                        <span className="ml-2 text-[10px] text-blue-500">(kéo trên preview để chỉnh)</span>
+                      </label>
+                      <div className="grid grid-cols-5 gap-1">
+                        {([
+                          { lbl: '↖', x: 0.08, y: 0.08 },
+                          { lbl: '↑', x: 0.5,  y: 0.08 },
+                          { lbl: '⊙', x: 0.5,  y: 0.5  },
+                          { lbl: '↓', x: 0.5,  y: 0.85 },
+                          { lbl: '↘', x: 0.92, y: 0.92 },
+                        ]).map(({ lbl, x, y }) => {
+                          const active = Math.abs(videoConfig.visualizer_x - x) < 0.02 && Math.abs(videoConfig.visualizer_y - y) < 0.02
+                          return (
+                            <button
+                              key={lbl}
+                              onClick={() => setVideoConfig(prev => ({ ...prev, visualizer_x: x, visualizer_y: y }))}
+                              disabled={isProcessing}
+                              className={`text-sm px-2 py-1 rounded border ${
+                                active
+                                  ? 'bg-blue-500 text-white border-blue-500'
+                                  : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                              }`}
+                              title={`${Math.round(x*100)}%, ${Math.round(y*100)}%`}
+                            >
+                              {lbl}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Size W x H */}
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Kích thước (px)</label>
+                      <div className="flex gap-2 items-center">
+                        <div className="flex-1">
+                          <div className="text-[10px] text-gray-500 mb-0.5">W</div>
+                          <input
+                            type="number" min={64} max={4096} step={4}
+                            value={videoConfig.visualizer_w}
+                            onChange={(e) => setVideoConfig(prev => ({ ...prev, visualizer_w: parseInt(e.target.value) || 800 }))}
+                            className="w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            disabled={isProcessing}
+                          />
+                        </div>
+                        <span className="text-gray-400 mt-3">×</span>
+                        <div className="flex-1">
+                          <div className="text-[10px] text-gray-500 mb-0.5">H</div>
+                          <input
+                            type="number" min={32} max={1080} step={4}
+                            value={videoConfig.visualizer_h}
+                            onChange={(e) => setVideoConfig(prev => ({ ...prev, visualizer_h: parseInt(e.target.value) || 120 }))}
+                            className="w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            disabled={isProcessing}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Colors — visibility depends on style */}
+                    {(() => {
+                      const s = videoConfig.visualizer_style
+                      // spectrum has its own preset
+                      if (s === 'spectrum') return null
+                      // Styles that use both color1 + color2 gradient
+                      const usesC2 = s === 'bars' || s === 'cqt'
+                      return (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Màu chính</label>
+                            <input
+                              type="color"
+                              value={videoConfig.visualizer_color1}
+                              onChange={(e) => setVideoConfig(prev => ({ ...prev, visualizer_color1: e.target.value }))}
+                              className="w-full h-8 rounded border"
+                              disabled={isProcessing}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">
+                              Màu phụ {!usesC2 && <span className="text-[10px] text-gray-400">(không dùng)</span>}
+                            </label>
+                            <input
+                              type="color"
+                              value={videoConfig.visualizer_color2}
+                              onChange={(e) => setVideoConfig(prev => ({ ...prev, visualizer_color2: e.target.value }))}
+                              className="w-full h-8 rounded border disabled:opacity-50"
+                              disabled={isProcessing || !usesC2}
+                            />
+                          </div>
+                        </div>
+                      )
+                    })()}
+
+                    {/* Spectrum color preset */}
+                    {videoConfig.visualizer_style === 'spectrum' && (
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Color preset (showspectrum)</label>
+                        <select
+                          value={videoConfig.visualizer_spectrum_preset}
+                          onChange={(e) => setVideoConfig(prev => ({ ...prev, visualizer_spectrum_preset: e.target.value }))}
+                          className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          disabled={isProcessing}
+                        >
+                          {['rainbow','intensity','channel','moreland','nebulae','fire','fiery','fruit','cool','magma','green','viridis','plasma','cividis','terrain'].map(p => (
+                            <option key={p} value={p}>{p}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Opacity */}
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">
+                        Độ mờ: {Math.round(videoConfig.visualizer_opacity * 100)}%
+                      </label>
+                      <input
+                        type="range" min="0.1" max="1" step="0.05"
+                        value={videoConfig.visualizer_opacity}
+                        onChange={(e) => setVideoConfig(prev => ({ ...prev, visualizer_opacity: parseFloat(e.target.value) }))}
+                        className="w-full"
+                        disabled={isProcessing}
+                      />
+                    </div>
+
+                    {/* Background */}
+                    <div className="border-t pt-2">
+                      <div className="text-xs font-medium text-gray-700 mb-1">Background phía sau visualizer</div>
+                      <div className="flex gap-3 mb-2">
+                        {([
+                          { v: 'transparent', lbl: 'Trong suốt' },
+                          { v: 'solid',       lbl: 'Đặc' },
+                        ] as const).map(({ v, lbl }) => (
+                          <label key={v} className="flex items-center gap-1 text-sm cursor-pointer">
+                            <input
+                              type="radio"
+                              checked={videoConfig.visualizer_bg_mode === v}
+                              onChange={() => setVideoConfig(prev => ({ ...prev, visualizer_bg_mode: v }))}
+                              disabled={isProcessing}
+                            />
+                            {lbl}
+                          </label>
+                        ))}
+                      </div>
+                      {videoConfig.visualizer_bg_mode === 'solid' && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Màu nền</label>
+                            <input
+                              type="color"
+                              value={videoConfig.visualizer_bg_color}
+                              onChange={(e) => setVideoConfig(prev => ({ ...prev, visualizer_bg_color: e.target.value }))}
+                              className="w-full h-8 rounded border"
+                              disabled={isProcessing}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">
+                              Mờ nền: {Math.round(videoConfig.visualizer_bg_opacity * 100)}%
+                            </label>
+                            <input
+                              type="range" min="0" max="1" step="0.05"
+                              value={videoConfig.visualizer_bg_opacity}
+                              onChange={(e) => setVideoConfig(prev => ({ ...prev, visualizer_bg_opacity: parseFloat(e.target.value) }))}
+                              className="w-full"
+                              disabled={isProcessing}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+              )}
+            </div>
+
+            {/* Subtitle (SRT) card — burns styled subtitles into the video. */}
+            <div className="border rounded-lg bg-white">
+              <button
+                type="button"
+                onClick={() => setSubtitleCardOpen(o => !o)}
+                className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-lg"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-blue-600 text-sm">💬 Subtitle (SRT)</span>
+                  {videoConfig.subtitle_srt_path ? (
+                    <span className="text-[11px] text-gray-500">({videoConfig.subtitle_animation})</span>
+                  ) : (
+                    <span className="text-[11px] text-gray-400">(không bật)</span>
+                  )}
+                </div>
+                <span className="text-gray-400 text-xs">{subtitleCardOpen ? '▲ ẩn' : '▼ hiện'}</span>
+              </button>
+              {subtitleCardOpen && (
+                <div className="px-4 pb-4">
+                  <SubtitlePanel
+                    storyId={storyData.id || ''}
+                    audioPath={videoConfig.audioPath}
+                    audioDuration={audioDuration}
+                    audioSpeed={videoConfig.audio_speed}
+                    style={{
+                      subtitle_animation: videoConfig.subtitle_animation,
+                      subtitle_font: videoConfig.subtitle_font,
+                      subtitle_font_size: videoConfig.subtitle_font_size,
+                      subtitle_color: videoConfig.subtitle_color,
+                      subtitle_outline_color: videoConfig.subtitle_outline_color,
+                      subtitle_outline_width: videoConfig.subtitle_outline_width,
+                      subtitle_shadow: videoConfig.subtitle_shadow,
+                      subtitle_bold: videoConfig.subtitle_bold,
+                      subtitle_italic: videoConfig.subtitle_italic,
+                      subtitle_align: videoConfig.subtitle_align,
+                      subtitle_x: videoConfig.subtitle_x,
+                      subtitle_y: videoConfig.subtitle_y,
+                      subtitle_opacity: videoConfig.subtitle_opacity,
+                    }}
+                    onChange={(patch) => setVideoConfig(prev => ({ ...prev, ...patch }))}
+                    srtPath={videoConfig.subtitle_srt_path}
+                    onSrtUploaded={(info, segments) => {
+                      setVideoConfig(prev => ({ ...prev, subtitle_srt_path: info?.srt_path ?? null }))
+                      setSubtitleSegments(segments)
+                    }}
+                    availableFonts={availableFonts}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Transitions card (full width) */}
+            <div className="border rounded-lg p-4 bg-white space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold text-blue-600 text-sm">🎞️ Transitions Pool</h4>
+                <span className="text-xs text-gray-400">
+                  {videoConfig.transitions_pool.length} chọn · random mỗi clip
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {VIDEO_TRANSITIONS.map(t => {
+                  const active = videoConfig.transitions_pool.includes(t)
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => toggleTransition(t)}
+                      disabled={videoStatus.status === 'running'}
+                      className={`text-xs px-2 py-1 rounded transition ${
+                        active
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Stickers card (full width, collapsible) */}
+            <div className="border rounded-lg bg-white">
+              <button
+                type="button"
+                onClick={() => setStickersCardOpen(o => !o)}
+                className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-lg"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-blue-600 text-sm">🏷️ Stickers / Nhãn dán</span>
+                  <span className="text-[11px] text-gray-500">
+                    {videoConfig.stickers.length > 0
+                      ? `(${videoConfig.stickers.length} đang dùng)`
+                      : '(chưa có)'}
+                  </span>
+                </div>
+                <span className="text-gray-400 text-xs">{stickersCardOpen ? '▲ ẩn' : '▼ hiện'}</span>
+              </button>
+
+              {stickersCardOpen && (
+                <div className="px-4 pb-4">
+                  <StickerPanel
+                    stickers={videoConfig.stickers}
+                    audioDuration={audioDuration / Math.max(0.1, videoConfig.audio_speed)}
+                    selectedId={selectedStickerId}
+                    onSelect={setSelectedStickerId}
+                    onAdd={(s) => {
+                      setVideoConfig(prev => ({ ...prev, stickers: [...prev.stickers, s] }))
+                      setSelectedStickerId(s.id)
+                    }}
+                    onUpdate={(id, patch) => {
+                      setVideoConfig(prev => ({
+                        ...prev,
+                        stickers: prev.stickers.map(s => s.id === id ? { ...s, ...patch } : s),
+                      }))
+                    }}
+                    onRemove={(id) => {
+                      setVideoConfig(prev => ({
+                        ...prev,
+                        stickers: prev.stickers.filter(s => s.id !== id),
+                      }))
+                      if (selectedStickerId === id) setSelectedStickerId(null)
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+            </>}
+
+            {/* Tab: Bản quyền */}
+            {videoTab === 'antidetect' && <>
+
+            {/* Anti-detection card (full width) */}
+            <div className="border rounded-lg p-4 bg-white space-y-3">
+              <button
+                type="button"
+                className="flex items-center justify-between w-full text-left"
+                onClick={() => setAntiDetectionOpen(v => !v)}
+              >
+                <h4 className="font-semibold text-blue-600 text-sm">🛡️ Chống quét bản quyền</h4>
+                <span className="flex items-center gap-2 text-xs text-gray-400">
+                  {!antiDetectionOpen && <span>tích option để bật</span>}
+                  <span className="text-gray-500">{antiDetectionOpen ? '▲' : '▼'}</span>
+                </span>
+              </button>
+
+              {antiDetectionOpen && <>
+              {/* 1. Random flip per-clip */}
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={videoConfig.ad_flip_random}
+                  onChange={(e) => setVideoConfig(prev => ({
+                    ...prev,
+                    ad_flip_random: e.target.checked,
+                    ad_flip_all: e.target.checked ? false : prev.ad_flip_all,
+                  }))}
+                  disabled={isProcessing}
+                  className="mt-0.5"
+                />
+                <div className="flex-1">
+                  <div className="text-sm font-medium">Random flip per-clip</div>
+                  <div className="text-xs text-gray-500">Mỗi clip 50% xác suất lật ngang. Phá fingerprint mạnh nhất.</div>
+                </div>
+              </label>
+
+              {/* 2. Flip all */}
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={videoConfig.ad_flip_all}
+                  onChange={(e) => setVideoConfig(prev => ({
+                    ...prev,
+                    ad_flip_all: e.target.checked,
+                    ad_flip_random: e.target.checked ? false : prev.ad_flip_random,
+                  }))}
+                  disabled={isProcessing}
+                  className="mt-0.5"
+                />
+                <div className="flex-1">
+                  <div className="text-sm font-medium">Flip toàn bộ</div>
+                  <div className="text-xs text-gray-500">Lật ngang 100% clip. Tránh dùng nếu folder có text/biển hiệu.</div>
+                </div>
+              </label>
+
+              {/* 3. Zoom + crop */}
+              <div className="border-t pt-3">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={videoConfig.ad_zoom}
+                    onChange={(e) => setVideoConfig(prev => ({ ...prev, ad_zoom: e.target.checked }))}
+                    disabled={isProcessing}
+                    className="mt-0.5"
+                  />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium">Zoom + crop center</div>
+                    <div className="text-xs text-gray-500">Phóng to rồi cắt rìa để đổi pixel layout.</div>
+                  </div>
+                </label>
+                {videoConfig.ad_zoom && (
+                  <div className="ml-6 mt-2">
+                    <label className="block text-xs text-gray-600 mb-1">
+                      Zoom factor: {videoConfig.ad_zoom_factor.toFixed(2)}x
+                    </label>
+                    <input
+                      type="range" min="1.00" max="1.15" step="0.01"
+                      value={videoConfig.ad_zoom_factor}
+                      onChange={(e) => setVideoConfig(prev => ({ ...prev, ad_zoom_factor: parseFloat(e.target.value) }))}
+                      disabled={isProcessing}
+                      className="w-full"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* 4. Color grading */}
+              <div className="border-t pt-3">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={videoConfig.ad_color}
+                    onChange={(e) => setVideoConfig(prev => ({ ...prev, ad_color: e.target.checked }))}
+                    disabled={isProcessing}
+                    className="mt-0.5"
+                  />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium">Color grading</div>
+                    <div className="text-xs text-gray-500">Đổi saturation/contrast/gamma/hue nhẹ.</div>
+                  </div>
+                </label>
+                {videoConfig.ad_color && (
+                  <div className="ml-6 mt-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">
+                        Saturation: {videoConfig.ad_saturation.toFixed(2)}
+                      </label>
+                      <input
+                        type="range" min="0.85" max="1.15" step="0.01"
+                        value={videoConfig.ad_saturation}
+                        onChange={(e) => setVideoConfig(prev => ({ ...prev, ad_saturation: parseFloat(e.target.value) }))}
+                        disabled={isProcessing}
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">
+                        Contrast: {videoConfig.ad_contrast.toFixed(2)}
+                      </label>
+                      <input
+                        type="range" min="0.90" max="1.10" step="0.01"
+                        value={videoConfig.ad_contrast}
+                        onChange={(e) => setVideoConfig(prev => ({ ...prev, ad_contrast: parseFloat(e.target.value) }))}
+                        disabled={isProcessing}
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">
+                        Gamma: {videoConfig.ad_gamma.toFixed(2)}
+                      </label>
+                      <input
+                        type="range" min="0.90" max="1.10" step="0.01"
+                        value={videoConfig.ad_gamma}
+                        onChange={(e) => setVideoConfig(prev => ({ ...prev, ad_gamma: parseFloat(e.target.value) }))}
+                        disabled={isProcessing}
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">
+                        Hue shift: {videoConfig.ad_hue_shift.toFixed(0)}°
+                      </label>
+                      <input
+                        type="range" min="-15" max="15" step="1"
+                        value={videoConfig.ad_hue_shift}
+                        onChange={(e) => setVideoConfig(prev => ({ ...prev, ad_hue_shift: parseFloat(e.target.value) }))}
+                        disabled={isProcessing}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 5. Per-clip speed jitter */}
+              <div className="border-t pt-3">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={videoConfig.ad_clip_speed_jitter}
+                    onChange={(e) => setVideoConfig(prev => ({ ...prev, ad_clip_speed_jitter: e.target.checked }))}
+                    disabled={isProcessing}
+                    className="mt-0.5"
+                  />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium">Per-clip speed jitter</div>
+                    <div className="text-xs text-gray-500">Mỗi clip random tốc độ trong ±range. Độc lập với audio_speed.</div>
+                  </div>
+                </label>
+                {videoConfig.ad_clip_speed_jitter && (
+                  <div className="ml-6 mt-2">
+                    <label className="block text-xs text-gray-600 mb-1">
+                      Range: ±{(videoConfig.ad_clip_speed_jitter_range * 100).toFixed(0)}%
+                    </label>
+                    <input
+                      type="range" min="0.01" max="0.05" step="0.005"
+                      value={videoConfig.ad_clip_speed_jitter_range}
+                      onChange={(e) => setVideoConfig(prev => ({ ...prev, ad_clip_speed_jitter_range: parseFloat(e.target.value) }))}
+                      disabled={isProcessing}
+                      className="w-full"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* 6. Strip metadata */}
+              <div className="border-t pt-3">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={videoConfig.ad_strip_metadata}
+                    onChange={(e) => setVideoConfig(prev => ({ ...prev, ad_strip_metadata: e.target.checked }))}
+                    disabled={isProcessing}
+                    className="mt-0.5"
+                  />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium">Strip metadata</div>
+                    <div className="text-xs text-gray-500">Xóa title/comment/encoder của output. An toàn, không đổi nội dung.</div>
+                  </div>
+                </label>
+              </div>
+              </>}
+            </div>
+            </>}
+
+            </div>{/* end right sidebar */}
+
+            {/* Preview */}
+            <div className="border rounded-lg p-4 bg-gradient-to-br from-slate-50 to-slate-100 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold text-blue-600 text-sm">📺 Preview</h4>
+                {clipList.length > 0 && (
+                  <span className="text-[11px] text-gray-400">{clipList.length} clip · cycle theo folder order</span>
+                )}
+              </div>
+              <div className="flex flex-col items-center">
+                <div
+                  ref={previewFrameRef}
+                  className="relative overflow-hidden bg-black shadow-lg"
+                  style={{
+                    width: previewW,
+                    height: previewH,
+                    borderRadius: 10,
+                    outline: '1px dashed rgba(148,163,184,0.5)',
+                    outlineOffset: 4,
+                  }}
+                >
+                  {/* Banner background layer */}
+                  {videoConfig.bannerImage ? (
+                    <img
+                      src={`/api/v1/video/preview-image?path=${encodeURIComponent(videoConfig.bannerImage)}`}
+                      alt="banner bg"
+                      className="absolute inset-0 w-full h-full object-cover"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                    />
+                  ) : (
+                    <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-900" />
+                  )}
+                  {/* Video clip layer */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    {clipUrl ? (
+                      <video
+                        key={clipUrl}
+                        ref={previewVideoRef}
+                        src={clipUrl}
+                        muted playsInline
+                        onLoadedMetadata={() => {
+                          // Apply pending offset (from a seek that crossed a clip boundary)
+                          const v = previewVideoRef.current
+                          if (!v) return
+                          if (pendingClipOffsetRef.current > 0) {
+                            v.currentTime = pendingClipOffsetRef.current
+                            pendingClipOffsetRef.current = 0
+                          }
+                          // Match audio play state
+                          const a = previewAudioRef.current
+                          if (a && !a.paused) v.play().catch(() => {})
+                        }}
+                        onEnded={() => {
+                          // Advance to next clip in folder order; loop back at end
+                          if (clipList.length === 0) return
+                          const next = (currentClipIdx + 1) % clipList.length
+                          pendingClipOffsetRef.current = 0
+                          setCurrentClipIdx(next)
+                        }}
+                        style={{ maxWidth: `${previewScale * 100}%`, maxHeight: `${previewScale * 100}%`, objectFit: 'contain', ...adVideoStyle }}
+                      />
+                    ) : (
+                      <div
+                        className="border-2 border-dashed border-gray-400 flex items-center justify-center text-gray-300 text-xs text-center px-2"
+                        style={{ width: `${previewScale * 100}%`, height: `${previewScale * 100}%` }}
+                      >
+                        {videoConfig.folder.trim() ? 'Đang tải clip mẫu...' : 'Chọn folder để xem clip mẫu'}
+                      </div>
+                    )}
+                  </div>
+                  {/* Hidden master audio element (drives playback time + sync) */}
+                  {audioUrl && (
+                    <audio
+                      ref={previewAudioRef}
+                      src={audioUrl}
+                      preload="metadata"
+                      onLoadedMetadata={(e) => {
+                        const a = e.target as HTMLAudioElement
+                        applyAudioPitchPreserve(a, videoConfig.audio_speed)
+                        a.volume = previewVolume
+                        a.muted = previewVolume === 0
+                      }}
+                      onTimeUpdate={(e) => {
+                        const a = e.target as HTMLAudioElement
+                        const speed = Math.max(0.1, videoConfig.audio_speed)
+                        const vt = a.currentTime / speed  // real-time / video time
+                        setPreviewCurrentTime(vt)
+                        if (clipList.length === 0 || clipsTotalDur <= 0) return
+                        const { idx, offset } = findClipForTime(vt)
+                        if (idx !== currentClipIdx) {
+                          // Crossed a clip boundary while seeking or audio drifted ahead
+                          pendingClipOffsetRef.current = offset
+                          setCurrentClipIdx(idx)
+                        } else {
+                          const v = previewVideoRef.current
+                          if (v && Math.abs(v.currentTime - offset) > 0.5) {
+                            v.currentTime = offset
+                          }
+                        }
+                      }}
+                      onPlay={() => {
+                        setPreviewPlaying(true)
+                        const v = previewVideoRef.current
+                        if (v) v.play().catch(() => {})
+                      }}
+                      onPause={() => {
+                        setPreviewPlaying(false)
+                        const v = previewVideoRef.current
+                        if (v) v.pause()
+                      }}
+                      onEnded={() => {
+                        setPreviewPlaying(false)
+                        const v = previewVideoRef.current
+                        if (v) v.pause()
+                      }}
+                    />
+                  )}
+                  {/* Dark overlay */}
+                  {videoConfig.overlay_opacity > 0 && (
+                    <div
+                      className="absolute inset-0 pointer-events-none"
+                      style={{ background: `rgba(0,0,0,${videoConfig.overlay_opacity})` }}
+                    />
+                  )}
+                  {/* Audio Visualizer mock (draggable; CSS-only — real render uses ffmpeg) */}
+                  {videoConfig.visualizer_enabled && (() => {
+                    const [resWnum] = videoConfig.resolution.split('x').map(Number)
+                    const scalePx = previewW / resWnum
+                    const vw = Math.max(40, videoConfig.visualizer_w * scalePx)
+                    const vh = Math.max(20, videoConfig.visualizer_h * scalePx)
+                    const c1 = videoConfig.visualizer_color1
+                    const c2 = videoConfig.visualizer_color2
+                    const op = videoConfig.visualizer_opacity
+                    const bgStyle: React.CSSProperties = videoConfig.visualizer_bg_mode === 'solid'
+                      ? { backgroundColor: videoConfig.visualizer_bg_color, opacity: 1 }
+                      : {}
+                    const bgOp = videoConfig.visualizer_bg_mode === 'solid' ? videoConfig.visualizer_bg_opacity : 0
+                    const style = videoConfig.visualizer_style
+                    const barsMode = videoConfig.visualizer_bars_mode
+                    const waveformMode = videoConfig.visualizer_waveform_mode
+                    const waveformMirror = videoConfig.visualizer_waveform_mirror
+                    return (
+                      <div
+                        onPointerDown={startWatermarkDrag('viz')}
+                        style={{
+                          position: 'absolute',
+                          left: `${videoConfig.visualizer_x * 100}%`,
+                          top: `${videoConfig.visualizer_y * 100}%`,
+                          transform: 'translate(-50%, -50%)',
+                          width: vw,
+                          height: vh,
+                          cursor: 'move',
+                          touchAction: 'none',
+                          userSelect: 'none',
+                          outline: '1px dashed rgba(255,255,255,0.4)',
+                          overflow: 'hidden',
+                        }}
+                        title="Visualizer (kéo để chỉnh vị trí; render thật khi xuất video)"
+                      >
+                        {/* Solid background layer */}
+                        {videoConfig.visualizer_bg_mode === 'solid' && (
+                          <div
+                            className="absolute inset-0"
+                            style={{ ...bgStyle, opacity: bgOp }}
+                          />
+                        )}
+                        {/* Style-specific mock */}
+                        {style === 'bars' && (
+                          <div
+                            className="absolute inset-0 flex items-end justify-around px-1 pb-1"
+                            style={{ opacity: op }}
+                          >
+                            {Array.from({ length: 32 }).map((_, i) => {
+                              const heightPct = 20 + Math.abs(Math.sin((i + 1) * 0.7)) * 70 + Math.abs(Math.cos(i * 1.3)) * 10
+                              if (barsMode === 'dot') {
+                                return (
+                                  <div
+                                    key={i}
+                                    style={{
+                                      width: 4, height: 4,
+                                      background: c1,
+                                      borderRadius: '50%',
+                                      marginBottom: `${heightPct}%`,
+                                      animation: `vizBarShift 0.${4 + (i % 6)}s ease-in-out infinite alternate`,
+                                      animationDelay: `${(i % 8) * 0.05}s`,
+                                    }}
+                                  />
+                                )
+                              }
+                              if (barsMode === 'line') {
+                                return (
+                                  <div
+                                    key={i}
+                                    style={{
+                                      width: 1.5,
+                                      background: c1,
+                                      height: `${heightPct}%`,
+                                      animation: `vizBar 0.${4 + (i % 6)}s ease-in-out infinite alternate`,
+                                      animationDelay: `${(i % 8) * 0.05}s`,
+                                    }}
+                                  />
+                                )
+                              }
+                              return (
+                                <div
+                                  key={i}
+                                  style={{
+                                    width: `${100 / 36}%`,
+                                    background: `linear-gradient(to top, ${c1}, ${c2})`,
+                                    height: `${heightPct}%`,
+                                    animation: `vizBar 0.${4 + (i % 6)}s ease-in-out infinite alternate`,
+                                    animationDelay: `${(i % 8) * 0.05}s`,
+                                    borderRadius: '1px 1px 0 0',
+                                  }}
+                                />
+                              )
+                            })}
+                          </div>
+                        )}
+                        {style === 'waveform' && (() => {
+                          // mirror = vstack with vflipped copy → render same wave at half-height
+                          const renderWave = (transform?: string) => (
+                            <svg
+                              className="absolute inset-x-0"
+                              style={{
+                                top: waveformMirror ? (transform === 'flip' ? '50%' : '0') : '0',
+                                height: waveformMirror ? '50%' : '100%',
+                                width: '100%',
+                                opacity: op,
+                                transform: transform === 'flip' ? 'scaleY(-1)' : undefined,
+                              }}
+                              viewBox="0 0 200 60"
+                              preserveAspectRatio="none"
+                            >
+                              {waveformMode === 'point' ? (
+                                <g fill={c1}>
+                                  {Array.from({ length: 40 }).map((_, i) => (
+                                    <circle key={i} cx={i * 5} cy={30} r={1.5}>
+                                      <animate
+                                        attributeName="cy"
+                                        values={`30;${30 + 20 * Math.sin(i * 0.7)};30`}
+                                        dur={`${0.8 + (i % 5) * 0.1}s`}
+                                        repeatCount="indefinite"
+                                      />
+                                    </circle>
+                                  ))}
+                                </g>
+                              ) : (
+                                <path
+                                  d="M0,30 Q12,5 25,30 T50,30 T75,30 T100,30 T125,30 T150,30 T175,30 T200,30"
+                                  fill={waveformMode === 'p2p' ? c1 : 'none'}
+                                  fillOpacity={waveformMode === 'p2p' ? 0.5 : 0}
+                                  stroke={c1}
+                                  strokeWidth={waveformMode === 'line' ? 1 : 2}
+                                  strokeLinecap="round"
+                                >
+                                  <animate
+                                    attributeName="d"
+                                    values="M0,30 Q12,5 25,30 T50,30 T75,30 T100,30 T125,30 T150,30 T175,30 T200,30;M0,30 Q12,55 25,30 T50,30 T75,30 T100,30 T125,30 T150,30 T175,30 T200,30;M0,30 Q12,5 25,30 T50,30 T75,30 T100,30 T125,30 T150,30 T175,30 T200,30"
+                                    dur="1.2s"
+                                    repeatCount="indefinite"
+                                  />
+                                </path>
+                              )}
+                            </svg>
+                          )
+                          if (waveformMirror) {
+                            return <>{renderWave()}{renderWave('flip')}</>
+                          }
+                          return renderWave()
+                        })()}
+                        {style === 'spectrum' && (
+                          <div
+                            className="absolute inset-0"
+                            style={{
+                              opacity: op,
+                              background: `linear-gradient(90deg, #110033, #003d66, #00ccaa, #ffee00, #ff3300, #aa00ff)`,
+                              backgroundSize: '200% 100%',
+                              animation: 'vizSpectrum 4s linear infinite',
+                            }}
+                          />
+                        )}
+                        {style === 'cqt' && (
+                          <div
+                            className="absolute inset-0 flex items-end justify-around"
+                            style={{ opacity: op }}
+                          >
+                            {Array.from({ length: 48 }).map((_, i) => (
+                              <div
+                                key={i}
+                                style={{
+                                  width: `${100 / 52}%`,
+                                  background: `linear-gradient(to top, ${c1}, ${c2})`,
+                                  height: `${30 + Math.abs(Math.sin((i + 1) * 0.4)) * 60}%`,
+                                  animation: `vizBar 0.${5 + (i % 5)}s ease-in-out infinite alternate`,
+                                  animationDelay: `${(i % 12) * 0.04}s`,
+                                  borderRadius: '2px 2px 0 0',
+                                  boxShadow: `0 0 4px ${c2}`,
+                                }}
+                              />
+                            ))}
+                          </div>
+                        )}
+                        {/* Hint label */}
+                        <div
+                          className="absolute top-0 left-1 text-[9px] text-white/70 pointer-events-none"
+                          style={{ textShadow: '0 1px 2px rgba(0,0,0,0.7)' }}
+                        >
+                          🎵 viz · {style}
+                          {style === 'bars' && barsMode !== 'bar' ? `:${barsMode}` : ''}
+                          {style === 'waveform' ? `:${waveformMode}${waveformMirror ? '+mirror' : ''}` : ''}
+                        </div>
+                      </div>
+                    )
+                  })()}
+                  {/* Watermark image (draggable, with optional shape mask) */}
+                  {videoConfig.watermarkImage && (() => {
+                    const [resWnum] = videoConfig.resolution.split('x').map(Number)
+                    const previewScalePx = previewW / resWnum
+                    const wPx = Math.max(8, videoConfig.watermark_w * previewScalePx)
+                    const hPx = Math.max(8, videoConfig.watermark_h * previewScalePx)
+                    // CSS shape masks
+                    const shapeStyle: React.CSSProperties = {}
+                    const sh = videoConfig.watermark_shape
+                    if (sh === 'circle') shapeStyle.borderRadius = '50%'
+                    else if (sh === 'rounded') shapeStyle.borderRadius = '16%'
+                    else if (sh === 'star') shapeStyle.clipPath = 'polygon(50% 1%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)'
+                    else if (sh === 'sun') {
+                      // 12-ray sun matching backend
+                      const rays = 12
+                      const outerR = 49
+                      const innerR = outerR * 0.55
+                      const pts: string[] = []
+                      for (let i = 0; i < rays * 2; i++) {
+                        const angle = -Math.PI / 2 + (i * Math.PI) / rays
+                        const r = i % 2 === 0 ? outerR : innerR
+                        const x = 50 + r * Math.cos(angle)
+                        const y = 50 + r * Math.sin(angle)
+                        pts.push(`${x.toFixed(2)}% ${y.toFixed(2)}%`)
+                      }
+                      shapeStyle.clipPath = `polygon(${pts.join(',')})`
+                    }
+                    return (
+                      <img
+                        src={`/api/v1/video/preview-image?path=${encodeURIComponent(videoConfig.watermarkImage)}`}
+                        alt="watermark"
+                        onPointerDown={startWatermarkDrag('image')}
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                        style={{
+                          position: 'absolute',
+                          left: `${videoConfig.watermark_x * 100}%`,
+                          top: `${videoConfig.watermark_y * 100}%`,
+                          transform: 'translate(-50%, -50%)',
+                          width: `${wPx}px`,
+                          height: `${hPx}px`,
+                          objectFit: 'cover',
+                          opacity: videoConfig.watermark_opacity,
+                          cursor: 'move',
+                          userSelect: 'none',
+                          touchAction: 'none',
+                          outline: sh === 'none' ? '1px dashed rgba(255,255,255,0.4)' : 'none',
+                          ...shapeStyle,
+                        }}
+                      />
+                    )
+                  })()}
+                  {/* Watermark text (draggable) */}
+                  {videoConfig.watermark_text && (() => {
+                    const fontKey = videoConfig.watermark_text_font.split(' (')[0]
+                    const scale = previewW / parseInt(videoConfig.resolution.split('x')[0])
+                    const previewFontPx = Math.max(8, Math.round(videoConfig.watermark_text_size * scale))
+                    return (
+                      <span
+                        onPointerDown={startWatermarkDrag('text')}
+                        style={{
+                          position: 'absolute',
+                          left: `${videoConfig.watermark_text_x * 100}%`,
+                          top: `${videoConfig.watermark_text_y * 100}%`,
+                          transform: `translate(-50%, -50%) rotate(${videoConfig.watermark_text_angle}deg)`,
+                          transformOrigin: 'center',
+                          fontFamily: `'${fontKey}', Arial, sans-serif`,
+                          fontSize: previewFontPx,
+                          color: videoConfig.watermark_text_color,
+                          opacity: videoConfig.watermark_text_opacity,
+                          whiteSpace: 'nowrap',
+                          fontWeight: 700,
+                          textShadow: '0 1px 2px rgba(0,0,0,0.4)',
+                          cursor: 'move',
+                          userSelect: 'none',
+                          touchAction: 'none',
+                          padding: '2px 4px',
+                          outline: '1px dashed rgba(255,255,255,0.3)',
+                        }}
+                      >
+                        {videoConfig.watermark_text}
+                      </span>
+                    )
+                  })()}
+                  {/* Subtitle overlay (draggable; live preview from parsed SRT) */}
+                  {videoConfig.subtitle_srt_path && subtitleSegments && (
+                    <div
+                      onPointerDown={startWatermarkDrag('subtitle')}
+                      style={{
+                        position: 'absolute',
+                        left: `${videoConfig.subtitle_x * 100}%`,
+                        top: `${videoConfig.subtitle_y * 100}%`,
+                        transform: 'translate(-50%, -50%)',
+                        cursor: 'move',
+                        touchAction: 'none',
+                        // Invisible 60×30 hit-area centered on the anchor — gives the
+                        // user a stable handle even between subtitle segments.
+                        width: 60, height: 30,
+                        marginLeft: -30, marginTop: -15,
+                        outline: '1px dashed rgba(255,255,255,0.25)',
+                      }}
+                    />
+                  )}
+                  {videoConfig.subtitle_srt_path && subtitleSegments && (
+                    <SubtitleOverlay
+                      segments={subtitleSegments}
+                      style={{
+                        subtitle_animation: videoConfig.subtitle_animation,
+                        subtitle_font: videoConfig.subtitle_font,
+                        subtitle_font_size: videoConfig.subtitle_font_size,
+                        subtitle_color: videoConfig.subtitle_color,
+                        subtitle_outline_color: videoConfig.subtitle_outline_color,
+                        subtitle_outline_width: videoConfig.subtitle_outline_width,
+                        subtitle_shadow: videoConfig.subtitle_shadow,
+                        subtitle_bold: videoConfig.subtitle_bold,
+                        subtitle_italic: videoConfig.subtitle_italic,
+                        subtitle_align: videoConfig.subtitle_align,
+                        subtitle_x: videoConfig.subtitle_x,
+                        subtitle_y: videoConfig.subtitle_y,
+                        subtitle_opacity: videoConfig.subtitle_opacity,
+                      }}
+                      audioRef={previewAudioRef}
+                      currentTime={previewCurrentTime}
+                      previewFrameW={previewW}
+                      outputW={parseInt(videoConfig.resolution.split('x')[0])}
+                    />
+                  )}
+                  {videoConfig.stickers.length > 0 && (
+                    <StickerOverlay
+                      stickers={videoConfig.stickers}
+                      audioRef={previewAudioRef}
+                      currentTime={previewCurrentTime}
+                      previewFrameW={previewW}
+                      previewFrameH={previewH}
+                      outputW={resW}
+                      outputH={resH}
+                      selectedId={selectedStickerId}
+                      onSelect={setSelectedStickerId}
+                      onDrag={(id, x, y) => setVideoConfig(prev => ({
+                        ...prev,
+                        stickers: prev.stickers.map(s => s.id === id ? { ...s, x, y } : s),
+                      }))}
+                      onResize={(id, w, h) => setVideoConfig(prev => ({
+                        ...prev,
+                        stickers: prev.stickers.map(s => s.id === id ? { ...s, w, h } : s),
+                      }))}
+                    />
+                  )}
+                  {/* Fade in/out hint (subtle vignette-like edges) */}
+                  {(videoConfig.fade_in > 0 || videoConfig.fade_out > 0) && (
+                    <div
+                      className="absolute inset-0 pointer-events-none"
+                      style={{
+                        background: 'linear-gradient(90deg, rgba(0,0,0,0.35) 0%, transparent 12%, transparent 88%, rgba(0,0,0,0.35) 100%)',
+                      }}
+                    />
+                  )}
+                  {/* Resolution badge (top-right) */}
+                  <div className="absolute top-1 right-1 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded font-mono">
+                    {videoConfig.resolution}
+                  </div>
+                  {/* Custom video controls bar (bottom of preview frame) */}
+                  <div
+                    className="absolute left-0 right-0 bottom-0 px-4 pt-10 pb-3"
+                    style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.45) 60%, transparent 100%)' }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* Progress bar (visual) + invisible range above for scrub */}
+                    <div className="relative h-1.5 mb-2 group cursor-pointer">
+                      <div className="absolute inset-0 rounded-full bg-white/25" />
+                      <div
+                        className="absolute top-0 left-0 bottom-0 rounded-full bg-blue-500 group-hover:bg-blue-400 transition-colors"
+                        style={{ width: `${timelineTotal ? (previewCurrentTime / timelineTotal) * 100 : 0}%` }}
+                      />
+                      <div
+                        className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-white shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                        style={{ left: `${timelineTotal ? (previewCurrentTime / timelineTotal) * 100 : 0}%` }}
+                      />
+                      <input
+                        type="range"
+                        min={0}
+                        max={timelineTotal || 0}
+                        step={0.5}
+                        value={previewCurrentTime}
+                        onChange={(e) => seekPreview(parseFloat(e.target.value))}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        disabled={!timelineTotal}
+                      />
+                    </div>
+
+                    {/* Bottom row: play, time, spacer, volume, fullscreen */}
+                    <div className="flex items-center gap-3 text-white">
+                      <button
+                        type="button"
+                        onClick={togglePreviewPlay}
+                        className="hover:text-blue-300 transition"
+                        title={previewPlaying ? 'Pause (k)' : 'Play (k)'}
+                      >
+                        {previewPlaying ? (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+                        ) : (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                        )}
+                      </button>
+
+                      <span className="text-[11px] font-mono tabular-nums">
+                        {formatTime(previewCurrentTime)} <span className="text-white/60">/ {formatTime(timelineTotal)}</span>
+                        {estimatedFinalDuration > 0 && (
+                          <span className="ml-2 text-[10px] text-white/50 font-sans">(ước tính output)</span>
+                        )}
+                      </span>
+
+                      <div className="flex-1" />
+
+                      <div className="flex items-center gap-1.5 group">
+                        <button
+                          type="button"
+                          onClick={togglePreviewMute}
+                          className="hover:text-blue-300 transition"
+                          title={previewMuted ? 'Unmute (m)' : 'Mute (m)'}
+                        >
+                          {previewMuted || previewVolume === 0 ? (
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3.63 3.63a1 1 0 0 0 0 1.41L7.29 8.7 7 9H4a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h3l3.29 3.29a1 1 0 0 0 1.71-.71v-4.17l4.18 4.18c-.49.37-1.02.68-1.6.91a1 1 0 0 0 .76 1.85c.86-.35 1.65-.83 2.34-1.42l1.62 1.62a1 1 0 0 0 1.41-1.41L5.05 3.63a1 1 0 0 0-1.42 0zM19 12c0 .82-.15 1.61-.41 2.34l1.53 1.53A8.95 8.95 0 0 0 21 12c0-4.28-3-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM10 12 8.83 10.83 12 7.66v2.51L10 12zm5.5 0c0-1.77-1.02-3.29-2.5-4.03v1.79l2.48 2.48c.01-.08.02-.16.02-.24z"/></svg>
+                          ) : (
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 10v4a1 1 0 0 0 1 1h3l3.29 3.29a1 1 0 0 0 1.71-.71V6.41a1 1 0 0 0-1.71-.71L7 9H4a1 1 0 0 0-1 1zm13.5 2c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4-.91 7-4.49 7-8.77s-3-7.86-7-8.77z"/></svg>
+                          )}
+                        </button>
+                        <input
+                          type="range"
+                          min={0} max={1} step={0.05}
+                          value={previewMuted ? 0 : previewVolume}
+                          onChange={(e) => setPreviewVol(parseFloat(e.target.value))}
+                          className="w-0 group-hover:w-16 transition-all opacity-0 group-hover:opacity-100"
+                          style={{ accentColor: '#fff' }}
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={togglePreviewFullscreen}
+                        className="hover:text-blue-300 transition"
+                        title="Fullscreen (f)"
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-3 text-center max-w-md">
+                  {videoConfig.bannerImage
+                    ? `Banner nền · video canh giữa ${Math.round(previewScale * 100)}%`
+                    : 'Không banner · video full khung'}
+                  {videoConfig.overlay_opacity > 0 && ` · overlay tối ${Math.round(videoConfig.overlay_opacity * 100)}%`}
+                  {videoConfig.watermarkImage && ` · logo @${Math.round(videoConfig.watermark_x*100)},${Math.round(videoConfig.watermark_y*100)}`}
+                  {videoConfig.watermark_text && ` · text "${videoConfig.watermark_text.slice(0, 20)}${videoConfig.watermark_text.length > 20 ? '…' : ''}"`}
+                  {(videoConfig.fade_in > 0 || videoConfig.fade_out > 0) && ` · fade ${videoConfig.fade_in.toFixed(1)}/${videoConfig.fade_out.toFixed(1)}s`}
+                </p>
+                <div className="text-[11px] text-gray-400 mt-1 text-center space-x-2">
+                  <span>🔊 audio×{videoConfig.audio_speed}</span>
+                  <span>·</span>
+                  <span>🎞️ {videoConfig.transitions_pool.length || 1} transition</span>
+                  <span>·</span>
+                  <span>⏱️ {videoConfig.transition_duration}s</span>
+                  {audioDuration > 0 && (
+                    <>
+                      <span>·</span>
+                      <span>🎙️ audio {formatTime(audioDuration)}</span>
+                      <span>→</span>
+                      <span>📹 video ~{formatTime(estimatedFinalDuration)}</span>
+                    </>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={startExactPreview}
+                  disabled={!videoConfig.folder.trim() || !videoConfig.audioPath.trim() || exactPreview.status === 'queued' || exactPreview.status === 'running'}
+                  className="block mx-auto mt-3 text-xs bg-slate-800 text-white px-3 py-1.5 rounded hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  title="Render khoảng 60s preview thực tế bằng ffmpeg, khớp 100% với output cuối"
+                >
+                  {exactPreview.status === 'queued' || exactPreview.status === 'running'
+                    ? `🎬 Đang render… ${exactPreview.progress}%`
+                    : '🎬 Render exact preview (60s)'}
+                </button>
+              </div>
+            </div>
+
+            {/* Start Button */}
+            <button
+              onClick={startVideoProcessing}
+              disabled={!videoConfig.folder.trim() || !videoConfig.audioPath.trim() || isProcessing}
+              className="w-full bg-purple-600 text-white py-3 px-4 rounded-md hover:bg-purple-700 disabled:opacity-50 transition font-semibold"
+            >
+              {isProcessing ? 'Processing...' : '🎬 Start Video Processing'}
+            </button>
+
+            {/* Progress */}
+            {(videoStatus.status === 'running' || videoStatus.status === 'queued') && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-blue-600 flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    Đang xử lý video...
+                  </span>
+                  <span>{videoStatus.progress}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-purple-600 h-2 rounded-full transition-all"
+                    style={{ width: `${videoStatus.progress}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
+
+            {/* Status */}
+            {videoStatus.status === 'completed' && (
+              <div className="bg-green-50 border border-green-200 p-4 rounded-md">
+                <p className="text-green-700 font-semibold">Video processing completed!</p>
+                {videoStatus.outputPath && (
+                  <p className="text-sm text-green-600 mt-1">Output: {videoStatus.outputPath}</p>
+                )}
+              </div>
+            )}
+
+            {videoStatus.status === 'failed' && (
+              <div className="bg-red-50 border border-red-200 p-4 rounded-md">
+                <p className="text-red-700 font-semibold">Video processing failed</p>
+                {videoStatus.error && (
+                  <p className="text-sm text-red-600 mt-1">{videoStatus.error}</p>
+                )}
+              </div>
+            )}
+
+            {error && (
+              <div className="text-red-600 text-sm bg-red-50 p-3 rounded-md">{error}</div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex gap-3">
+              {videoStatus.status === 'completed' && (
+                <button
+                  onClick={() => moveToStep(8)}
+                  className="flex-1 bg-green-500 text-white py-3 px-4 rounded-md hover:bg-green-600 transition font-semibold"
+                >
+                  Continue
+                </button>
+              )}
+              <button
+                onClick={() => moveToStep(8)}
+                className={`${videoStatus.status === 'completed' ? 'flex-1' : 'w-full'} bg-gray-400 text-white py-3 px-4 rounded-md hover:bg-gray-500 transition`}
+                disabled={videoStatus.status === 'running' || videoStatus.status === 'queued'}
+              >
+                Skip Video
+              </button>
+            </div>
+          </div>
+        )
+      }
+
+      case 8:
+        return (
+          <div className="space-y-4 text-center">
+            <div className="text-6xl mb-4">🎉</div>
+            <h3 className="text-2xl font-bold mb-4">Processing Complete!</h3>
+            <p className="text-gray-600 mb-6">
+              Your audiobook has been successfully created and is ready for download.
+            </p>
+            <div className="space-y-3">
+              <button className="w-full bg-green-500 text-white py-3 px-4 rounded-md hover:bg-green-600 transition font-semibold">
+                📥 Download Final Audio
+              </button>
+              <button
+                onClick={() => {
+                  setCurrentStep(1)
+                  setStoryData({ url: '', title: '', start_chapter: 1, end_chapter: 10 })
+                  setError(null)
+                }}
+                className="w-full bg-gray-500 text-white py-2 px-4 rounded-md hover:bg-gray-600 transition"
+              >
+                Process Another Story
+              </button>
+            </div>
+          </div>
+        )
+
+      default:
+        return null
+    }
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="bg-white rounded-lg shadow-sm p-8">
+        <h2 className="text-2xl font-bold mb-6">Story Processor</h2>
+
+        {renderStepIndicator()}
+
+        <div className="mt-8">
+          {renderStepContent()}
+        </div>
+      </div>
+
+      {/* Edit Chapter Dialog */}
+      {editDialog.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-7xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <h3 className="text-xl font-semibold mb-4">
+                Edit Chapter {editDialog.chapter?.chapter_number}
+              </h3>
+
+              {/* Grammar Errors Section */}
+              {editDialog.censoredWords.length > 0 && (
+                <div className="mb-4 bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="w-5 h-5 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <h4 className="font-semibold text-orange-800">
+                      Phát hiện {editDialog.censoredWords.length} lỗi
+                      {editDialog.censoredWords.filter(w => w.word_type === 'banned').length > 0 && (
+                        <span className="ml-2 text-sm font-normal">
+                          ({editDialog.censoredWords.filter(w => w.word_type === 'banned').length} từ bị kiểm duyệt)
+                        </span>
+                      )}
+                    </h4>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto space-y-2">
+                    {editDialog.censoredWords.map((word) => (
+                      <div
+                        key={word.id}
+                        className={`bg-white rounded p-3 text-sm border-l-4 ${
+                          word.word_type === 'banned' ? 'border-red-500' : 'border-orange-500'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className={`font-mono px-2 py-0.5 rounded ${
+                                word.word_type === 'banned'
+                                  ? 'bg-red-100 text-red-800'
+                                  : 'bg-orange-100 text-orange-800'
+                              }`}>
+                                {word.word}
+                              </span>
+                              {word.word_type === 'banned' && (
+                                <span className="text-xs bg-red-600 text-white px-2 py-0.5 rounded">
+                                  Từ kiểm duyệt
+                                </span>
+                              )}
+                              <span className="text-xs text-gray-500">
+                                Dòng {word.line_number}
+                              </span>
+                            </div>
+                            {word.suggested_replacement && (
+                              <div className="mb-2 text-sm">
+                                <span className="text-gray-600">Thay thế: </span>
+                                <span className="font-mono bg-green-100 text-green-800 px-2 py-0.5 rounded">
+                                  {word.suggested_replacement}
+                                </span>
+                              </div>
+                            )}
+                            <div className="text-gray-700 italic text-xs">
+                              {word.context}
+                            </div>
+                          </div>
+                          {word.suggested_replacement && !word.fixed && (
+                            <button
+                              onClick={() => handleAcceptReplacement(word.id)}
+                              disabled={loading}
+                              className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded transition disabled:bg-gray-400"
+                              title="Chấp nhận thay thế"
+                            >
+                              ✓ Accept
+                            </button>
+                          )}
+                          {word.fixed && (
+                            <span className="text-xs text-green-600 font-medium">
+                              ✓ Đã sửa
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {editDialog.censoredWords.length === 0 && (
+                <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-green-800">
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    <span className="text-sm font-medium">Không có lỗi ngữ pháp</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Chapter Title</label>
+                  <input
+                    type="text"
+                    value={editDialog.title}
+                    onChange={(e) => setEditDialog({ ...editDialog, title: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter chapter title"
+                    spellCheck={false}
+                  />
+                </div>
+
+                {/* Find and Replace + Quick Add Banned Word - Side by Side */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Find and Replace Section */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-blue-900 mb-3">Tìm và Thay Thế</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Tìm kiếm</label>
+                        <input
+                          type="text"
+                          value={editDialog.findText}
+                          onChange={(e) => {
+                            setEditDialog({ ...editDialog, findText: e.target.value })
+                            // Auto search when typing
+                            const regex = new RegExp(e.target.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
+                            const matches = e.target.value ? editDialog.content.match(regex) : null
+                            setEditDialog(prev => ({ ...prev, findText: e.target.value, matchCount: matches ? matches.length : 0 }))
+                          }}
+                          onKeyPress={(e) => e.key === 'Enter' && handleFindText()}
+                          className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Nhập từ cần tìm..."
+                          spellCheck={false}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Thay thế bằng</label>
+                        <input
+                          type="text"
+                          value={editDialog.replaceText}
+                          onChange={(e) => setEditDialog({ ...editDialog, replaceText: e.target.value })}
+                          className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Nhập từ thay thế..."
+                          spellCheck={false}
+                        />
+                      </div>
+
+                      {/* Match count display */}
+                      {editDialog.findText && (
+                        <div className={`text-xs px-3 py-1.5 rounded font-medium ${
+                          editDialog.matchCount > 0
+                            ? 'text-green-700 bg-green-50 border border-green-200'
+                            : 'text-gray-600 bg-gray-50 border border-gray-200'
+                        }`}>
+                          {editDialog.matchCount > 0
+                            ? `✅ Tìm thấy ${editDialog.matchCount} kết quả`
+                            : '❌ Không tìm thấy kết quả'}
+                        </div>
+                      )}
+
+                      {/* Action buttons */}
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={handleFindText}
+                          className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition"
+                          disabled={!editDialog.findText}
+                        >
+                          🔍 Tìm
+                        </button>
+                        <button
+                          onClick={handleReplaceFirst}
+                          className="px-3 py-1.5 text-sm bg-orange-500 text-white rounded hover:bg-orange-600 transition disabled:bg-gray-300"
+                          disabled={!editDialog.findText || editDialog.matchCount === 0}
+                        >
+                          Thay thế 1
+                        </button>
+                        <button
+                          onClick={handleReplaceAll}
+                          className="px-3 py-1.5 text-sm bg-red-500 text-white rounded hover:bg-red-600 transition disabled:bg-gray-300"
+                          disabled={!editDialog.findText || editDialog.matchCount === 0}
+                        >
+                          Thay thế tất cả ({editDialog.matchCount})
+                        </button>
+                        {editDialog.findText && (
+                          <button
+                            onClick={() => setEditDialog({
+                              ...editDialog,
+                              findText: '',
+                              replaceText: '',
+                              matchCount: 0
+                            })}
+                            className="px-3 py-1.5 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 transition"
+                          >
+                            🗑️ Xóa
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quick Add Banned Word Section */}
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-purple-900 mb-3">Thêm Từ Kiểm Duyệt Nhanh</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Từ bị cấm</label>
+                        <input
+                          type="text"
+                          value={editDialog.quickBannedWord}
+                          onChange={(e) => setEditDialog({ ...editDialog, quickBannedWord: e.target.value })}
+                          className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          placeholder="Nhập từ bị cấm..."
+                          spellCheck={false}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Từ thay thế</label>
+                        <input
+                          type="text"
+                          value={editDialog.quickReplacementWord}
+                          onChange={(e) => setEditDialog({ ...editDialog, quickReplacementWord: e.target.value })}
+                          className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          placeholder="Nhập từ thay thế..."
+                          spellCheck={false}
+                        />
+                      </div>
+                      <button
+                        onClick={handleQuickAddBannedWord}
+                        className="w-full px-3 py-1.5 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 transition disabled:bg-gray-400"
+                        disabled={loading || !editDialog.quickBannedWord || !editDialog.quickReplacementWord}
+                      >
+                        ➕ Thêm vào danh sách
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Chapter Content</label>
+
+                  {/* Textarea with line numbers and highlight */}
+                  <div className="flex border rounded-md overflow-hidden">
+                    {/* Line numbers */}
+                    <div
+                      ref={lineNumbersRef}
+                      className="bg-gray-100 text-gray-500 text-right px-2 py-2 select-none overflow-hidden font-mono text-sm leading-6"
+                      style={{
+                        minWidth: '50px',
+                        maxHeight: '480px',
+                        overflowY: 'hidden',
+                        borderRight: '1px solid #e5e7eb'
+                      }}
+                    >
+                      {getLineNumbers(editDialog.content).map((lineNum) => (
+                        <div key={lineNum} style={{ lineHeight: '24px' }}>
+                          {lineNum}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Container for highlight overlay and textarea */}
+                    <div className="relative flex-1">
+                      {/* Highlight overlay */}
+                      {editDialog.findText && (
+                        <div
+                          ref={highlightRef}
+                          className="absolute top-0 left-0 px-3 py-2 font-mono text-sm leading-6 pointer-events-none whitespace-pre-wrap break-words overflow-hidden"
+                          style={{
+                            width: '100%',
+                            height: '480px',
+                            lineHeight: '24px',
+                            overflowY: 'auto',
+                            overflowX: 'hidden',
+                            color: 'transparent'
+                          }}
+                          dangerouslySetInnerHTML={{
+                            __html: getHighlightedText(editDialog.content, editDialog.findText)
+                          }}
+                        />
+                      )}
+
+                      {/* Textarea */}
+                      <textarea
+                        ref={textareaRef}
+                        value={editDialog.content}
+                        onChange={(e) => setEditDialog({ ...editDialog, content: e.target.value })}
+                        onScroll={handleTextareaScroll}
+                        className="relative px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm resize-none leading-6"
+                        style={{
+                          width: '100%',
+                          height: '480px',
+                          lineHeight: '24px',
+                          backgroundColor: editDialog.findText ? 'transparent' : 'white',
+                          caretColor: 'black'
+                        }}
+                        placeholder="Enter chapter content"
+                        spellCheck={false}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-1 text-sm text-gray-500">
+                    Character count: {editDialog.content.length.toLocaleString()} | Lines: {getLineNumbers(editDialog.content).length}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => setEditDialog({
+                    isOpen: false,
+                    chapter: null,
+                    content: '',
+                    title: '',
+                    censoredWords: [],
+                    findText: '',
+                    replaceText: '',
+                    matchCount: 0,
+                    quickBannedWord: '',
+                    quickReplacementWord: ''
+                  })}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition"
+                  disabled={loading}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCheckGrammar}
+                  className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600 transition disabled:bg-gray-400"
+                  disabled={loading}
+                >
+                  {loading ? 'Checking...' : '🔍 Check Grammar'}
+                </button>
+                <button
+                  onClick={handleSaveEditedChapter}
+                  className="px-6 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition disabled:bg-gray-400"
+                  disabled={loading}
+                >
+                  {loading ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Folder Browser Dialog */}
+      {folderBrowser.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-lg max-h-[80vh] flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Select Video Folder</h3>
+              <button
+                onClick={() => setFolderBrowser(prev => ({ ...prev, isOpen: false }))}
+                className="text-gray-400 hover:text-gray-600 text-xl"
+              >
+                x
+              </button>
+            </div>
+
+            {/* Current Path */}
+            <div className="px-4 py-2 bg-gray-50 border-b text-sm font-mono text-gray-700 truncate">
+              {folderBrowser.currentPath || 'Drives'}
+              {folderBrowser.videoCount > 0 && (
+                <span className="ml-2 text-green-600 font-sans">
+                  ({folderBrowser.videoCount} videos)
+                </span>
+              )}
+            </div>
+
+            {/* Folder List */}
+            <div className="flex-1 overflow-y-auto p-2" style={{ minHeight: '300px' }}>
+              {folderBrowser.loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                  <span className="ml-2 text-gray-500">Loading...</span>
+                </div>
+              ) : (
+                <>
+                  {/* Go Up */}
+                  {folderBrowser.parentPath !== null && (
+                    <button
+                      onClick={() => openFolderBrowser(folderBrowser.parentPath || '')}
+                      className="w-full text-left px-3 py-2 hover:bg-blue-50 rounded flex items-center gap-2 text-blue-600"
+                    >
+                      <span>&#8593;</span> ..
+                    </button>
+                  )}
+
+                  {/* Folders */}
+                  {folderBrowser.folders.length === 0 && !folderBrowser.loading && (
+                    <div className="text-gray-400 text-sm text-center py-4">No subfolders</div>
+                  )}
+                  {folderBrowser.folders.map((folder) => (
+                    <button
+                      key={folder}
+                      onClick={() => navigateFolder(folder)}
+                      className="w-full text-left px-3 py-2 hover:bg-gray-100 rounded flex items-center gap-2 text-sm truncate"
+                    >
+                      <span className="text-yellow-500 flex-shrink-0">&#128193;</span>
+                      <span className="truncate">{folder}</span>
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="p-4 border-t flex gap-2">
+              <button
+                onClick={selectFolder}
+                disabled={!folderBrowser.currentPath}
+                className="flex-1 bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 disabled:opacity-50 transition font-semibold"
+              >
+                Select This Folder
+                {folderBrowser.videoCount > 0 && ` (${folderBrowser.videoCount} videos)`}
+              </button>
+              <button
+                onClick={() => setFolderBrowser(prev => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Exact Preview Modal */}
+      {exactPreview.open && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4" onClick={closeExactPreview}>
+          <div className="bg-white rounded-lg w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold">
+                🎬 Exact Preview
+                {exactPreview.cached && <span className="ml-2 text-xs text-green-600 font-normal">(cache)</span>}
+              </h3>
+              <button onClick={closeExactPreview} className="text-gray-500 hover:text-gray-800 text-2xl leading-none">×</button>
+            </div>
+            <div className="p-4 flex-1 overflow-auto">
+              {(exactPreview.status === 'queued' || exactPreview.status === 'running') && (
+                <div className="space-y-3 py-8">
+                  <div className="flex items-center justify-center gap-3 text-gray-700">
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"></div>
+                    <span>Đang render preview với ffmpeg... ({exactPreview.progress}%)</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-blue-500 h-full transition-all"
+                      style={{ width: `${exactPreview.progress}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 text-center">
+                    Quá trình này áp dụng đầy đủ pipeline (concat clips, atempo, overlay, watermark, fade…) — có thể mất 20–60s.
+                  </p>
+                </div>
+              )}
+              {exactPreview.status === 'failed' && (
+                <div className="bg-red-50 text-red-700 p-3 rounded text-sm space-y-2">
+                  <div className="font-semibold">❌ Render failed</div>
+                  <div className="font-mono text-xs whitespace-pre-wrap">{exactPreview.error || 'Unknown error'}</div>
+                  <button
+                    onClick={startExactPreview}
+                    className="mt-2 bg-red-600 text-white text-xs px-3 py-1.5 rounded hover:bg-red-700"
+                  >Thử lại</button>
+                </div>
+              )}
+              {exactPreview.status === 'done' && exactPreview.hash && (
+                <div className="space-y-3">
+                  <video
+                    key={exactPreview.hash}
+                    src={`/api/v1/video/preview-file?hash=${exactPreview.hash}`}
+                    controls
+                    autoPlay
+                    className="w-full rounded bg-black"
+                    style={{ maxHeight: '60vh' }}
+                  />
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span>Preview render dùng đúng config hiện tại — khớp 100% với output cuối.</span>
+                    <a
+                      href={`/api/v1/video/preview-file?hash=${exactPreview.hash}`}
+                      download={`preview_${exactPreview.hash}.mp4`}
+                      className="bg-slate-800 text-white px-3 py-1.5 rounded hover:bg-slate-700"
+                    >⬇ Download</a>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Audio File Browser Dialog */}
+      {audioBrowser.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-lg max-h-[80vh] flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Select Audio File</h3>
+              <button
+                onClick={() => setAudioBrowser(prev => ({ ...prev, isOpen: false }))}
+                className="text-gray-400 hover:text-gray-600 text-xl"
+              >
+                x
+              </button>
+            </div>
+
+            {/* Current Path */}
+            <div className="px-4 py-2 bg-gray-50 border-b text-sm font-mono text-gray-700 truncate">
+              {audioBrowser.currentPath || 'Drives'}
+              {audioBrowser.files.length > 0 && (
+                <span className="ml-2 text-green-600 font-sans">
+                  ({audioBrowser.files.length} audio files)
+                </span>
+              )}
+            </div>
+
+            {/* File List */}
+            <div className="flex-1 overflow-y-auto p-2" style={{ minHeight: '300px' }}>
+              {audioBrowser.loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                  <span className="ml-2 text-gray-500">Loading...</span>
+                </div>
+              ) : (
+                <>
+                  {/* Go Up */}
+                  {audioBrowser.parentPath !== null && (
+                    <button
+                      onClick={() => openAudioBrowser(audioBrowser.parentPath || '')}
+                      className="w-full text-left px-3 py-2 hover:bg-blue-50 rounded flex items-center gap-2 text-blue-600"
+                    >
+                      <span>&#8593;</span> ..
+                    </button>
+                  )}
+
+                  {/* Folders */}
+                  {audioBrowser.folders.map((folder) => (
+                    <button
+                      key={folder}
+                      onClick={() => navigateAudioFolder(folder)}
+                      className="w-full text-left px-3 py-2 hover:bg-gray-100 rounded flex items-center gap-2 text-sm truncate"
+                    >
+                      <span className="text-yellow-500 flex-shrink-0">&#128193;</span>
+                      <span className="truncate">{folder}</span>
+                    </button>
+                  ))}
+
+                  {/* Audio Files */}
+                  {audioBrowser.files.map((file) => (
+                    <button
+                      key={file}
+                      onClick={() => selectAudioFile(file)}
+                      className="w-full text-left px-3 py-2 hover:bg-green-50 rounded flex items-center gap-2 text-sm truncate"
+                    >
+                      <span className="text-blue-500 flex-shrink-0">&#127925;</span>
+                      <span className="truncate">{file}</span>
+                    </button>
+                  ))}
+
+                  {audioBrowser.folders.length === 0 && audioBrowser.files.length === 0 && (
+                    <div className="text-gray-400 text-sm text-center py-4">No folders or audio files</div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="p-4 border-t">
+              <button
+                onClick={() => setAudioBrowser(prev => ({ ...prev, isOpen: false }))}
+                className="w-full px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image File Browser Dialog */}
+      {imageBrowser.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-lg max-h-[80vh] flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Select Banner Image</h3>
+              <button
+                onClick={() => setImageBrowser(prev => ({ ...prev, isOpen: false }))}
+                className="text-gray-400 hover:text-gray-600 text-xl"
+              >
+                x
+              </button>
+            </div>
+
+            {/* Current Path */}
+            <div className="px-4 py-2 bg-gray-50 border-b text-sm font-mono text-gray-700 truncate">
+              {imageBrowser.currentPath || 'Drives'}
+              {imageBrowser.files.length > 0 && (
+                <span className="ml-2 text-green-600 font-sans">
+                  ({imageBrowser.files.length} image files)
+                </span>
+              )}
+            </div>
+
+            {/* File List */}
+            <div className="flex-1 overflow-y-auto p-2" style={{ minHeight: '300px' }}>
+              {imageBrowser.loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                  <span className="ml-2 text-gray-500">Loading...</span>
+                </div>
+              ) : (
+                <>
+                  {/* Go Up */}
+                  {imageBrowser.parentPath !== null && (
+                    <button
+                      onClick={() => openImageBrowser(imageBrowser.parentPath || '')}
+                      className="w-full text-left px-3 py-2 hover:bg-blue-50 rounded flex items-center gap-2 text-blue-600"
+                    >
+                      <span>&#8593;</span> ..
+                    </button>
+                  )}
+
+                  {/* Folders */}
+                  {imageBrowser.folders.map((folder) => (
+                    <button
+                      key={folder}
+                      onClick={() => navigateImageFolder(folder)}
+                      className="w-full text-left px-3 py-2 hover:bg-gray-100 rounded flex items-center gap-2 text-sm truncate"
+                    >
+                      <span className="text-yellow-500 flex-shrink-0">&#128193;</span>
+                      <span className="truncate">{folder}</span>
+                    </button>
+                  ))}
+
+                  {/* Image Files */}
+                  {imageBrowser.files.map((file) => (
+                    <button
+                      key={file}
+                      onClick={() => selectImageFile(file)}
+                      className="w-full text-left px-3 py-2 hover:bg-green-50 rounded flex items-center gap-2 text-sm truncate"
+                    >
+                      <span className="text-green-500 flex-shrink-0">&#128444;</span>
+                      <span className="truncate">{file}</span>
+                    </button>
+                  ))}
+
+                  {imageBrowser.folders.length === 0 && imageBrowser.files.length === 0 && (
+                    <div className="text-gray-400 text-sm text-center py-4">No folders or image files</div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="p-4 border-t">
+              <button
+                onClick={() => setImageBrowser(prev => ({ ...prev, isOpen: false }))}
+                className="w-full px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {deleteDialog.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full">
+            <div className="p-6">
+              <h3 className="text-xl font-semibold mb-4">Confirm Delete</h3>
+
+              <p className="text-gray-600 mb-6">
+                Are you sure you want to delete Chapter {deleteDialog.chapter?.chapter_number}?
+                {deleteDialog.chapter?.title && (
+                  <span className="block mt-2 font-medium">"{deleteDialog.chapter.title}"</span>
+                )}
+                <span className="block mt-2 text-sm text-red-600">This action cannot be undone.</span>
+              </p>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setDeleteDialog({
+                    isOpen: false,
+                    chapter: null
+                  })}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition"
+                  disabled={loading}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmDelete}
+                  className="px-6 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition disabled:bg-gray-400"
+                  disabled={loading}
+                >
+                  {loading ? 'Deleting...' : 'Delete Chapter'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom URLs Dialog */}
+      {customUrlsDialog.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="text-xl font-semibold">Nhập link chương thủ công</h3>
+              <button
+                onClick={() => setCustomUrlsDialog({ isOpen: false, urlsText: '' })}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-4 flex-1 overflow-y-auto">
+              <p className="text-sm text-gray-600 mb-3">
+                Nhập mỗi link chương trên một dòng. Thứ tự link = thứ tự chương (dòng 1 = chương 1, dòng 2 = chương 2, ...).
+              </p>
+              <textarea
+                value={customUrlsDialog.urlsText}
+                onChange={(e) => setCustomUrlsDialog(prev => ({ ...prev, urlsText: e.target.value }))}
+                placeholder={`https://example.com/truyen/chuong-1\nhttps://example.com/truyen/chuong-2\nhttps://example.com/truyen/chuong-3`}
+                className="w-full h-80 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono text-sm"
+                spellCheck={false}
+              />
+              <div className="mt-2 text-sm text-gray-500">
+                Số dòng (links): {customUrlsDialog.urlsText.split('\n').filter(line => line.trim()).length}
+              </div>
+            </div>
+            <div className="p-4 border-t flex justify-end gap-3">
+              <button
+                onClick={() => setCustomUrlsDialog({ isOpen: false, urlsText: '' })}
+                className="px-4 py-2 border rounded-md hover:bg-gray-50 transition"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={() => {
+                  const urls = customUrlsDialog.urlsText
+                    .split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0)
+                  if (urls.length > 0) {
+                    setStoryData(prev => ({
+                      ...prev,
+                      custom_chapter_urls: urls,
+                      start_chapter: 1,
+                      end_chapter: urls.length
+                    }))
+                    showToast(`Đã lưu ${urls.length} link chương`, 'success')
+                  }
+                  setCustomUrlsDialog({ isOpen: false, urlsText: '' })
+                }}
+                className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600 transition"
+              >
+                Lưu ({customUrlsDialog.urlsText.split('\n').filter(line => line.trim()).length} links)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preset Modal (create | rename) */}
+      {presetModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-md flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold">
+                {presetModal.mode === 'rename' ? '✏️ Đổi tên preset' : '💾 Lưu config hiện tại'}
+              </h3>
+              <button
+                onClick={() => setPresetModal({ isOpen: false, mode: 'create', name: '', presetId: null })}
+                className="text-gray-400 hover:text-gray-600 text-xl"
+              >
+                x
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              <label className="block text-sm font-medium text-gray-700">Tên preset</label>
+              <input
+                type="text"
+                autoFocus
+                value={presetModal.name}
+                onChange={(e) => setPresetModal(prev => ({ ...prev, name: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    confirmPresetModal()
+                  } else if (e.key === 'Escape') {
+                    setPresetModal({ isOpen: false, mode: 'create', name: '', presetId: null })
+                  }
+                }}
+                placeholder="VD: Preset mặc định, Quảng cáo 60s..."
+                className="w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {presetModal.mode === 'create' && (
+                <p className="text-xs text-gray-500">
+                  Preset sẽ lưu các setting video (transitions, fade, codec, ...) — không lưu folder, audio path, banner/watermark cụ thể.
+                </p>
+              )}
+            </div>
+            <div className="p-4 border-t flex gap-2 justify-end">
+              <button
+                onClick={() => setPresetModal({ isOpen: false, mode: 'create', name: '', presetId: null })}
+                className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 transition text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmPresetModal}
+                disabled={!presetModal.name.trim()}
+                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 transition text-sm font-semibold"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Dialog */}
+      {confirmDialog.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg w-full max-w-md flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold">{confirmDialog.title}</h3>
+              <button
+                onClick={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+                className="text-gray-400 hover:text-gray-600 text-xl"
+              >
+                x
+              </button>
+            </div>
+            <div className="p-4">
+              <p className="text-sm text-gray-700 whitespace-pre-line">{confirmDialog.message}</p>
+            </div>
+            <div className="p-4 border-t flex gap-2 justify-end">
+              <button
+                onClick={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 transition text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const cb = confirmDialog.onConfirm
+                  setConfirmDialog(prev => ({ ...prev, isOpen: false }))
+                  cb()
+                }}
+                className={`px-4 py-2 text-white rounded-md transition text-sm font-semibold ${
+                  confirmDialog.variant === 'danger'
+                    ? 'bg-red-500 hover:bg-red-600'
+                    : 'bg-blue-500 hover:bg-blue-600'
+                }`}
+              >
+                {confirmDialog.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast.isVisible && (
+        <div className="fixed bottom-6 right-6 z-[100] animate-slide-up">
+          <div className={`flex items-center gap-3 px-5 py-4 rounded-lg shadow-lg ${
+            toast.type === 'success' ? 'bg-green-500' :
+            toast.type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+          } text-white`}>
+            {toast.type === 'success' && (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+            {toast.type === 'error' && (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
+            {toast.type === 'info' && (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            )}
+            <span className="font-medium">{toast.message}</span>
+            <button
+              onClick={() => setToast(prev => ({ ...prev, isVisible: false }))}
+              className="ml-2 hover:opacity-80 transition"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

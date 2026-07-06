@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Background -->
+  <rect width="32" height="32" rx="7" fill="#2563eb"/>
+  <!-- Open book - left page -->
+  <path d="M5 23 L5 11 C9 9 13 10 16 12 L16 24 C13 22 9 21 5 23Z" fill="white" opacity="0.88"/>
+  <!-- Open book - right page -->
+  <path d="M27 23 L27 11 C23 9 19 10 16 12 L16 24 C19 22 23 21 27 23Z" fill="white"/>
+  <!-- Spine line -->
+  <line x1="16" y1="12" x2="16" y2="24" stroke="#93c5fd" stroke-width="0.8"/>
+  <!-- Star -->
+  <path d="M26 4 L26.7 6.2H29L27.2 7.5L27.9 9.7L26 8.4L24.1 9.7L24.8 7.5L23 6.2H25.3Z" fill="#fbbf24"/>
+</svg>

@@ -56,7 +56,7 @@ export default function Layout({ children }: LayoutProps) {
           sidebarOpen ? 'w-64' : 'w-[68px]'
         }`}
       >
-        {/* Brand */}
+        {/* Brand + collapse toggle */}
         <div className="flex items-center gap-3 px-4 h-16 border-b border-token">
           <div
             className="w-9 h-9 rounded-[10px] shrink-0 grid place-items-center text-white"
@@ -68,12 +68,30 @@ export default function Layout({ children }: LayoutProps) {
             <Mic size={19} />
           </div>
           {sidebarOpen && (
-            <div className="min-w-0">
-              <div className="font-bold text-[15px] tracking-tight leading-tight">Audio Story</div>
-              <div className="font-mono text-[10px] text-faint tracking-wide">STUDIO · v1.0</div>
-            </div>
+            <>
+              <div className="min-w-0 flex-1">
+                <div className="font-bold text-[15px] tracking-tight leading-tight">Audio Story</div>
+                <div className="font-mono text-[10px] text-faint tracking-wide">STUDIO · v1.0</div>
+              </div>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="p-1.5 rounded-lg text-dim hover:bg-surface hover:text-[var(--text)] transition-colors"
+                title="Thu gọn menu"
+              >
+                <ChevronLeft size={18} />
+              </button>
+            </>
           )}
         </div>
+        {!sidebarOpen && (
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="mx-auto mt-2 p-2 rounded-lg text-dim hover:bg-surface hover:text-[var(--text)] transition-colors"
+            title="Mở menu"
+          >
+            <Menu size={20} />
+          </button>
+        )}
 
         {/* Nav */}
         <nav className="flex-1 px-2.5 py-3 overflow-y-auto">
@@ -126,31 +144,12 @@ export default function Layout({ children }: LayoutProps) {
         )}
       </aside>
 
-      {/* Main column */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
-        <header className="h-16 shrink-0 flex items-center justify-between px-6 border-b border-token bg-surface">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 rounded-lg text-dim hover:bg-surface-2 hover:text-[var(--text)] transition-colors"
-              title={sidebarOpen ? 'Đóng menu' : 'Mở menu'}
-            >
-              {sidebarOpen ? <ChevronLeft size={20} /> : <Menu size={20} />}
-            </button>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="font-mono text-xs text-faint">v1.0.0</span>
-          </div>
-        </header>
-
-        {/* Content */}
-        <main className="flex-1 overflow-auto">
-          <div className="max-w-7xl mx-auto px-6 lg:px-8 py-8">
-            {children}
-          </div>
-        </main>
-      </div>
+      {/* Content — no top header; content runs full-width right under the window bar */}
+      <main className="flex-1 overflow-auto min-w-0">
+        <div className="w-full max-w-[1600px] mx-auto px-6 lg:px-8 py-6">
+          {children}
+        </div>
+      </main>
     </div>
   )
 }

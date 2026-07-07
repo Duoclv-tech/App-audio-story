@@ -82,7 +82,7 @@ function Pill({
       className={`px-3 py-1.5 rounded-full text-sm border transition ${
         active
           ? 'bg-primary-600 text-white border-primary-600'
-          : 'bg-white text-gray-700 border-gray-300 hover:border-primary-400'
+          : 'bg-surface text-dim border-token hover:border-primary-400'
       }`}
     >
       {children}
@@ -106,7 +106,7 @@ export default function ExportSettings(props: Props) {
     <div className="space-y-6">
       {/* Quality */}
       <div>
-        <h3 className="font-medium text-gray-800 mb-2">Chất lượng video</h3>
+        <h3 className="font-medium text-strong mb-2">Chất lượng video</h3>
         <div className="flex flex-wrap gap-2">
           {QUALITY_OPTIONS.map((q) => (
             <Pill key={q.value} active={quality === q.value} onClick={() => setQuality(q.value)}>
@@ -116,7 +116,7 @@ export default function ExportSettings(props: Props) {
         </div>
         {quality === 'custom' && (
           <div className="mt-2 flex items-center gap-2">
-            <label className="text-sm text-gray-600">Bitrate (kbps):</label>
+            <label className="text-sm text-dim">Bitrate (kbps):</label>
             <input
               type="number"
               min={100}
@@ -131,7 +131,7 @@ export default function ExportSettings(props: Props) {
 
       {/* Aspect ratio */}
       <div>
-        <h3 className="font-medium text-gray-800 mb-2">Tỉ lệ khung hình</h3>
+        <h3 className="font-medium text-strong mb-2">Tỉ lệ khung hình</h3>
         <div className="flex flex-wrap gap-2">
           {AR_OPTIONS.map((ar) => (
             <Pill
@@ -156,7 +156,7 @@ export default function ExportSettings(props: Props) {
               }
               className="w-20 px-2 py-1 border rounded"
             />
-            <span className="text-gray-500">:</span>
+            <span className="text-dim">:</span>
             <input
               type="number"
               min={1}
@@ -172,7 +172,7 @@ export default function ExportSettings(props: Props) {
 
         {aspectRatio.mode !== 'original' && (
           <div className="mt-3">
-            <div className="text-sm text-gray-600 mb-1">Chế độ xử lý:</div>
+            <div className="text-sm text-dim mb-1">Chế độ xử lý:</div>
             <div className="flex flex-wrap gap-2">
               {CROP_MODES.map((c) => (
                 <Pill key={c.value} active={cropMode === c.value} onClick={() => setCropMode(c.value)}>
@@ -186,7 +186,7 @@ export default function ExportSettings(props: Props) {
 
       {/* Speed */}
       <div>
-        <h3 className="font-medium text-gray-800 mb-2">Tốc độ phát</h3>
+        <h3 className="font-medium text-strong mb-2">Tốc độ phát</h3>
         <div className="flex flex-wrap gap-2">
           {SPEED_PRESETS.map((p) => (
             <Pill key={p.value} active={speed === p.value} onClick={() => setSpeed(p.value)}>
@@ -199,7 +199,7 @@ export default function ExportSettings(props: Props) {
         </div>
         {!isSpeedPreset && (
           <div className="mt-2 flex items-center gap-2">
-            <label className="text-sm text-gray-600">Tốc độ:</label>
+            <label className="text-sm text-dim">Tốc độ:</label>
             <input
               type="number"
               min={0.25}
@@ -212,17 +212,17 @@ export default function ExportSettings(props: Props) {
               }}
               className="w-20 px-2 py-1 border rounded font-mono"
             />
-            <span className="text-sm text-gray-500">× (0.25 – 4.0)</span>
+            <span className="text-sm text-dim">× (0.25 – 4.0)</span>
           </div>
         )}
       </div>
 
       {/* Volume + options */}
       <div>
-        <h3 className="font-medium text-gray-800 mb-2">Tuỳ chọn thêm</h3>
+        <h3 className="font-medium text-strong mb-2">Tuỳ chọn thêm</h3>
         <div className="space-y-3">
           {/* Mute */}
-          <label className="flex items-center gap-2 text-sm text-gray-700">
+          <label className="flex items-center gap-2 text-sm text-dim">
             <input type="checkbox" checked={mute} onChange={(e) => setMute(e.target.checked)} />
             Tắt tiếng (mute)
           </label>
@@ -230,7 +230,7 @@ export default function ExportSettings(props: Props) {
           {/* Volume slider — only when not muted */}
           {!mute && (
             <div className="flex items-center gap-3 pl-1">
-              <label className="text-sm text-gray-600 w-20 shrink-0">Âm lượng</label>
+              <label className="text-sm text-dim w-20 shrink-0">Âm lượng</label>
               <input
                 type="range"
                 min={0}
@@ -240,13 +240,13 @@ export default function ExportSettings(props: Props) {
                 onChange={(e) => setVolume(parseInt(e.target.value, 10) / 100)}
                 className="flex-1"
               />
-              <span className="font-mono text-sm text-gray-700 w-12 text-right">
+              <span className="font-mono text-sm text-dim w-12 text-right">
                 {Math.round(volume * 100)}%
               </span>
             </div>
           )}
 
-          <label className="flex items-center gap-2 text-sm text-gray-700">
+          <label className="flex items-center gap-2 text-sm text-dim">
             <input
               type="checkbox"
               checked={exactFrame}
@@ -254,11 +254,11 @@ export default function ExportSettings(props: Props) {
             />
             Cắt chính xác theo frame (re-encode)
           </label>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
+          <label className="flex items-center gap-2 text-sm text-dim">
             <input type="checkbox" checked={fade} onChange={(e) => setFade(e.target.checked)} />
             Thêm fade in / fade out
           </label>
-          <label className="flex items-center gap-2 text-sm text-gray-700">
+          <label className="flex items-center gap-2 text-sm text-dim">
             <input
               type="checkbox"
               checked={watermark.enabled}
@@ -278,14 +278,14 @@ export default function ExportSettings(props: Props) {
 
       {/* Filename */}
       <div>
-        <h3 className="font-medium text-gray-800 mb-2">Tên file xuất</h3>
+        <h3 className="font-medium text-strong mb-2">Tên file xuất</h3>
         <input
           type="text"
           value={outputFilename}
           onChange={(e) => setOutputFilename(e.target.value)}
           className="w-full px-3 py-1.5 border rounded font-mono text-sm"
         />
-        <p className="text-xs text-gray-500 mt-1">Luôn xuất ra .mp4</p>
+        <p className="text-xs text-dim mt-1">Luôn xuất ra .mp4</p>
       </div>
     </div>
   )

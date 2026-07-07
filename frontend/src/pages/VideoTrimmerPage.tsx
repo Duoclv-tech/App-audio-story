@@ -456,13 +456,13 @@ export default function VideoTrimmerPage() {
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Scissors size={28} className="text-primary-600" />
-          <h1 className="text-3xl font-bold text-gray-900">Cắt video</h1>
+          <h1 className="text-3xl font-bold text-strong">Cắt video</h1>
         </div>
         <button
           type="button"
           onClick={resetAll}
           disabled={!file && !metadata && !fileUrl && processStatus === 'idle'}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+          className="flex items-center gap-2 px-3 py-1.5 text-sm border border-token rounded hover:bg-surface-2 disabled:opacity-40 disabled:cursor-not-allowed transition"
           title="Xoá video và cài đặt, reset tab"
         >
           <RotateCcw size={16} /> Xoá tất cả
@@ -470,7 +470,7 @@ export default function VideoTrimmerPage() {
       </div>
 
       {/* Step 1: Upload */}
-      <section className="bg-white p-6 rounded-lg shadow">
+      <section className="bg-surface p-6 rounded-lg shadow">
         <h2 className="text-lg font-semibold mb-4">1. Tải video lên</h2>
         <UploadZone
           onFileSelected={handleFileSelected}
@@ -478,7 +478,7 @@ export default function VideoTrimmerPage() {
           uploadProgress={uploadProgress}
         />
         {metadata && (
-          <div className="mt-3 text-sm text-gray-600 space-y-0.5">
+          <div className="mt-3 text-sm text-dim space-y-0.5">
             <div>
               <b>File:</b> {metadata.original_filename}
               {fileSizeBytes !== null && (
@@ -497,7 +497,7 @@ export default function VideoTrimmerPage() {
       {metadata && fileUrl && (
         <>
           {/* Step 2: Preview + selection */}
-          <section className="bg-white p-6 rounded-lg shadow space-y-4">
+          <section className="bg-surface p-6 rounded-lg shadow space-y-4">
             <h2 className="text-lg font-semibold">2. Xem trước & chọn đoạn</h2>
             <VideoPreview ref={videoRef} src={fileUrl} />
             <Waveform
@@ -517,7 +517,7 @@ export default function VideoTrimmerPage() {
           </section>
 
           {/* Step 3: Precise time + segment management */}
-          <section className="bg-white p-6 rounded-lg shadow space-y-4">
+          <section className="bg-surface p-6 rounded-lg shadow space-y-4">
             <h2 className="text-lg font-semibold">3. Thời gian chính xác</h2>
             <div className="flex flex-wrap gap-6">
               <TimeInput
@@ -541,7 +541,7 @@ export default function VideoTrimmerPage() {
                 }}
               />
               <div className="self-end">
-                <div className="text-sm text-gray-600 mb-1">Đoạn hiện tại</div>
+                <div className="text-sm text-dim mb-1">Đoạn hiện tại</div>
                 <div className="text-lg font-mono font-semibold text-primary-700">
                   {(endSec - startSec).toFixed(2)}s
                 </div>
@@ -550,7 +550,7 @@ export default function VideoTrimmerPage() {
                 <button
                   type="button"
                   onClick={previewSelection}
-                  className="flex items-center gap-2 px-3 py-1.5 border rounded hover:bg-gray-50"
+                  className="flex items-center gap-2 px-3 py-1.5 border rounded hover:bg-surface-2"
                 >
                   <Play size={16} /> Xem trước
                 </button>
@@ -569,7 +569,7 @@ export default function VideoTrimmerPage() {
             {/* Segment list */}
             {segments.length > 0 && (
               <div className="space-y-1">
-                <div className="text-sm font-medium text-gray-700">
+                <div className="text-sm font-medium text-dim">
                   Danh sách đoạn ({segments.length}) — sẽ ghép theo thứ tự:
                 </div>
                 {segments.map((seg, idx) => (
@@ -578,10 +578,10 @@ export default function VideoTrimmerPage() {
                     className="flex items-center gap-3 px-3 py-1.5 bg-primary-50 border border-primary-200 rounded text-sm"
                   >
                     <span className="text-primary-400 font-mono text-xs w-4 text-right">{idx + 1}</span>
-                    <span className="font-mono text-gray-800">
+                    <span className="font-mono text-strong">
                       {fmtSec(seg.start)} {fmtSec(seg.end)}
                     </span>
-                    <span className="text-gray-400">({(seg.end - seg.start).toFixed(2)}s)</span>
+                    <span className="text-faint">({(seg.end - seg.start).toFixed(2)}s)</span>
                     <button
                       type="button"
                       onClick={() => removeSegment(seg.id)}
@@ -591,7 +591,7 @@ export default function VideoTrimmerPage() {
                     </button>
                   </div>
                 ))}
-                <div className="text-xs text-gray-500 pt-1">
+                <div className="text-xs text-dim pt-1">
                   Tổng: {totalTrimDuration.toFixed(2)}s
                   {speed !== 1.0 && (
                     <> sau tốc độ {speed}x: <b>{outputDuration.toFixed(2)}s</b></>
@@ -602,7 +602,7 @@ export default function VideoTrimmerPage() {
           </section>
 
           {/* Step 4: Export settings */}
-          <section className="bg-white p-6 rounded-lg shadow">
+          <section className="bg-surface p-6 rounded-lg shadow">
             <h2 className="text-lg font-semibold mb-4">4. Cài đặt xuất file</h2>
             <ExportSettings
               quality={quality} setQuality={setQuality}
@@ -621,7 +621,7 @@ export default function VideoTrimmerPage() {
           </section>
 
           {/* Step 5: Process */}
-          <section className="bg-white p-6 rounded-lg shadow space-y-3">
+          <section className="bg-surface p-6 rounded-lg shadow space-y-3">
             <h2 className="text-lg font-semibold">5. Xuất file</h2>
 
             {showStreamCopyWarning && (
@@ -632,11 +632,11 @@ export default function VideoTrimmerPage() {
             )}
 
             {estimatedBytes !== null && (
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-dim">
                 Ước tính dung lượng:{' '}
-                <span className="font-semibold text-gray-800">~{formatBytes(estimatedBytes)}</span>
+                <span className="font-semibold text-strong">~{formatBytes(estimatedBytes)}</span>
                 {speed !== 1.0 && (
-                  <span className="text-gray-400 ml-2">
+                  <span className="text-faint ml-2">
                     (sau {speed}x tốc độ {outputDuration.toFixed(1)}s)
                   </span>
                 )}
@@ -669,7 +669,7 @@ export default function VideoTrimmerPage() {
                     style={{ width: `${processProgress}%` }}
                   />
                 </div>
-                <p className="text-sm text-gray-600 mt-2">
+                <p className="text-sm text-dim mt-2">
                   {processStatus === 'running' && `Đang xử lý… ${processProgress.toFixed(1)}%`}
                   {processStatus === 'completed' && ' Xong — file đang tải về trình duyệt'}
                   {processStatus === 'failed' && ` Lỗi: ${processError || 'Không xác định'}`}

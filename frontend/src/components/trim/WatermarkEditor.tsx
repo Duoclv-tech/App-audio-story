@@ -25,22 +25,22 @@ export default function WatermarkEditor({ value, onChange, previewAspect = 16 / 
   const isCustom = value.position === 'custom'
 
   return (
-    <div className="space-y-4 border border-gray-200 rounded-lg p-4 bg-gray-50">
+    <div className="space-y-4 border border-token rounded-lg p-4 bg-surface-2">
       <div>
-        <label className="block text-sm text-gray-600 mb-1">Nội dung watermark</label>
+        <label className="block text-sm text-dim mb-1">Nội dung watermark</label>
         <input
           type="text"
           maxLength={100}
           placeholder="© Kênh của bạn"
           value={value.text}
           onChange={(e) => update({ text: e.target.value })}
-          className="w-full px-3 py-1.5 border rounded bg-white"
+          className="w-full px-3 py-1.5 border rounded bg-surface"
         />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm text-gray-600 mb-1">
+          <label className="block text-sm text-dim mb-1">
             Cỡ chữ: <span className="font-mono">{value.font_size}px</span>
           </label>
           <input
@@ -54,7 +54,7 @@ export default function WatermarkEditor({ value, onChange, previewAspect = 16 / 
         </div>
 
         <div>
-          <label className="block text-sm text-gray-600 mb-1">
+          <label className="block text-sm text-dim mb-1">
             Độ mờ: <span className="font-mono">{Math.round(value.opacity * 100)}%</span>
           </label>
           <input
@@ -68,27 +68,27 @@ export default function WatermarkEditor({ value, onChange, previewAspect = 16 / 
         </div>
 
         <div>
-          <label className="block text-sm text-gray-600 mb-1">Màu chữ</label>
+          <label className="block text-sm text-dim mb-1">Màu chữ</label>
           <div className="flex gap-2">
             <input
               type="color"
               value={value.color}
               onChange={(e) => update({ color: e.target.value })}
-              className="h-9 w-12 border rounded cursor-pointer bg-white"
+              className="h-9 w-12 border rounded cursor-pointer bg-surface"
             />
             <input
               type="text"
               value={value.color}
               onChange={(e) => update({ color: e.target.value })}
-              className="flex-1 px-2 py-1 border rounded font-mono text-sm bg-white"
+              className="flex-1 px-2 py-1 border rounded font-mono text-sm bg-surface"
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-sm text-gray-600 mb-1">
+          <label className="block text-sm text-dim mb-1">
             Khoảng cách lề: <span className="font-mono">{value.margin}px</span>
-            {isCustom && <span className="text-gray-400"> (không dùng ở chế độ tự do)</span>}
+            {isCustom && <span className="text-faint"> (không dùng ở chế độ tự do)</span>}
           </label>
           <input
             type="range"
@@ -104,8 +104,8 @@ export default function WatermarkEditor({ value, onChange, previewAspect = 16 / 
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
         <div>
-          <label className="block text-sm text-gray-600 mb-1">Vị trí</label>
-          <div className="grid grid-cols-3 w-36 gap-1 border rounded p-1 bg-white">
+          <label className="block text-sm text-dim mb-1">Vị trí</label>
+          <div className="grid grid-cols-3 w-36 gap-1 border rounded p-1 bg-surface">
             {POSITIONS.map((p) => (
               <button
                 key={p.value}
@@ -115,7 +115,7 @@ export default function WatermarkEditor({ value, onChange, previewAspect = 16 / 
                 className={`aspect-square rounded flex items-center justify-center text-base transition ${
                   value.position === p.value
                     ? 'bg-primary-600 text-white'
-                    : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
+                    : 'bg-surface-3 hover:bg-gray-200 text-dim'
                 }`}
               >
                 {p.label}
@@ -128,21 +128,21 @@ export default function WatermarkEditor({ value, onChange, previewAspect = 16 / 
             className={`mt-2 w-36 text-xs px-2 py-1.5 border rounded transition ${
               isCustom
                 ? 'bg-primary-600 text-white border-primary-600'
-                : 'bg-white hover:bg-gray-100 border-gray-300'
+                : 'bg-surface hover:bg-surface-3 border-token'
             }`}
             title="Kéo watermark trong khung xem trước để đặt vị trí tự do"
           >
              Kéo tự do
           </button>
           {isCustom && (
-            <p className="text-xs text-gray-500 mt-1 font-mono">
+            <p className="text-xs text-dim mt-1 font-mono">
               x: {(value.custom_x * 100).toFixed(1)}% · y: {(value.custom_y * 100).toFixed(1)}%
             </p>
           )}
         </div>
 
         <div>
-          <label className="block text-sm text-gray-600 mb-1">
+          <label className="block text-sm text-dim mb-1">
             Xoay: <span className="font-mono">{value.rotation}°</span>
           </label>
           <input
@@ -160,7 +160,7 @@ export default function WatermarkEditor({ value, onChange, previewAspect = 16 / 
                 type="button"
                 onClick={() => update({ rotation: a })}
                 className={`text-xs px-2 py-0.5 border rounded transition ${
-                  value.rotation === a ? 'bg-primary-100 border-primary-400' : 'hover:bg-gray-100'
+                  value.rotation === a ? 'bg-primary-100 border-primary-400' : 'hover:bg-surface-3'
                 }`}
               >
                 {a}°
@@ -168,7 +168,7 @@ export default function WatermarkEditor({ value, onChange, previewAspect = 16 / 
             ))}
           </div>
           {value.rotation !== 0 && (
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-dim mt-1">
               Lưu ý: khi xoay, watermark quay quanh tâm khung hình nên vị trí có thể bị dịch so với neo đã chọn.
             </p>
           )}
@@ -176,7 +176,7 @@ export default function WatermarkEditor({ value, onChange, previewAspect = 16 / 
       </div>
 
       <div>
-        <label className="flex items-center gap-2 text-sm text-gray-700 mb-2">
+        <label className="flex items-center gap-2 text-sm text-dim mb-2">
           <input
             type="checkbox"
             checked={value.border_enabled}
@@ -187,24 +187,24 @@ export default function WatermarkEditor({ value, onChange, previewAspect = 16 / 
         {value.border_enabled && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-6">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Màu viền</label>
+              <label className="block text-xs text-dim mb-1">Màu viền</label>
               <div className="flex gap-2">
                 <input
                   type="color"
                   value={value.border_color}
                   onChange={(e) => update({ border_color: e.target.value })}
-                  className="h-8 w-10 border rounded cursor-pointer bg-white"
+                  className="h-8 w-10 border rounded cursor-pointer bg-surface"
                 />
                 <input
                   type="text"
                   value={value.border_color}
                   onChange={(e) => update({ border_color: e.target.value })}
-                  className="flex-1 px-2 py-1 border rounded font-mono text-xs bg-white"
+                  className="flex-1 px-2 py-1 border rounded font-mono text-xs bg-surface"
                 />
               </div>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">
+              <label className="block text-xs text-dim mb-1">
                 Độ dày: <span className="font-mono">{value.border_width}px</span>
               </label>
               <input
@@ -221,7 +221,7 @@ export default function WatermarkEditor({ value, onChange, previewAspect = 16 / 
       </div>
 
       <div>
-        <div className="text-xs text-gray-500 mb-1">
+        <div className="text-xs text-dim mb-1">
           Xem trước (xấp xỉ)
           {isCustom && (
             <span className="ml-2 text-primary-600">— kéo chữ để đặt vị trí</span>

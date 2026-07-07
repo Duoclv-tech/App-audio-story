@@ -92,7 +92,7 @@ export default function Timeline({ duration, startSec, endSec, onChange }: Props
           title="Điểm kết thúc"
         />
       </div>
-      <div className="flex justify-between text-xs text-gray-500 mt-1 font-mono">
+      <div className="flex justify-between text-xs text-dim mt-1 font-mono">
         <span>00:00:00</span>
         <span>
           {Math.floor(duration / 3600)

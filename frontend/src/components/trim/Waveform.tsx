@@ -42,7 +42,7 @@ export default function Waveform({ peaks, duration, segments }: Props) {
       ref={canvasRef}
       width={1200}
       height={80}
-      className="w-full h-20 bg-gray-50 rounded border"
+      className="w-full h-20 bg-surface-2 rounded border"
     />
   )
 }

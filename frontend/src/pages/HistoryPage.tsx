@@ -132,7 +132,7 @@ export default function HistoryPage() {
 
   const getStatusBadge = (status: string) => {
     const statusColors: Record<string, string> = {
-      'draft': 'bg-gray-100 text-gray-800',
+      'draft': 'bg-surface-3 text-strong',
       'created': 'bg-primary-100 text-primary-800',
       'downloading': 'bg-yellow-100 text-yellow-800',
       'downloaded': 'bg-green-100 text-green-800',
@@ -154,7 +154,7 @@ export default function HistoryPage() {
     }
 
     return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColors[status] || 'bg-gray-100 text-gray-800'}`}>
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColors[status] || 'bg-surface-3 text-strong'}`}>
         {statusLabels[status] || status}
       </span>
     )
@@ -181,15 +181,15 @@ export default function HistoryPage() {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow-sm p-8">
-        <div className="text-center text-gray-500">Đang tải lịch sử...</div>
+      <div className="bg-surface rounded-lg shadow-sm p-8">
+        <div className="text-center text-dim">Đang tải lịch sử...</div>
       </div>
     )
   }
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow-sm p-8">
+      <div className="bg-surface rounded-lg shadow-sm p-8">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold">Lịch Sử</h2>
           <button
@@ -216,9 +216,9 @@ export default function HistoryPage() {
                 type="checkbox"
                 checked={favoriteOnly}
                 onChange={(e) => handleFavoriteFilterChange(e.target.checked)}
-                className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                className="w-4 h-4 text-primary-600 border-token rounded focus:ring-primary-500"
               />
-              <span className="flex items-center gap-1 text-sm text-gray-700">
+              <span className="flex items-center gap-1 text-sm text-dim">
                 <svg
                   className="w-4 h-4 text-yellow-500 fill-current"
                   viewBox="0 0 24 24"
@@ -230,7 +230,7 @@ export default function HistoryPage() {
               </span>
             </label>
             {favoriteOnly && (
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-dim">
                 ({paginationMeta.total} truyện)
               </span>
             )}
@@ -241,31 +241,31 @@ export default function HistoryPage() {
         <div className="grid grid-cols-4 gap-4 mb-6">
           <div className="bg-primary-50 p-4 rounded-lg">
             <div className="text-2xl font-bold text-primary-600">{paginationMeta.total}</div>
-            <div className="text-sm text-gray-600">Tổng số truyện</div>
+            <div className="text-sm text-dim">Tổng số truyện</div>
           </div>
           <div className="bg-green-50 p-4 rounded-lg">
             <div className="text-2xl font-bold text-green-600">
               {stories.filter(s => s.status === 'completed').length}
             </div>
-            <div className="text-sm text-gray-600">Đã hoàn thành (trang này)</div>
+            <div className="text-sm text-dim">Đã hoàn thành (trang này)</div>
           </div>
           <div className="bg-orange-50 p-4 rounded-lg">
             <div className="text-2xl font-bold text-orange-600">
               {stories.filter(s => s.status === 'tts_processing' || s.status === 'downloading').length}
             </div>
-            <div className="text-sm text-gray-600">Đang xử lý (trang này)</div>
+            <div className="text-sm text-dim">Đang xử lý (trang này)</div>
           </div>
           <div className="bg-purple-50 p-4 rounded-lg">
             <div className="text-2xl font-bold text-purple-600">
               {stories.filter(s => s.has_merged_audio).length}
             </div>
-            <div className="text-sm text-gray-600">Có file merge (trang này)</div>
+            <div className="text-sm text-dim">Có file merge (trang này)</div>
           </div>
         </div>
 
         {/* Story List */}
         {filteredStories.length === 0 ? (
-          <div className="text-center text-gray-500 py-12">
+          <div className="text-center text-dim py-12">
             {searchTerm ? 'Không tìm thấy truyện nào' : 'Chưa có truyện nào'}
           </div>
         ) : (
@@ -273,7 +273,7 @@ export default function HistoryPage() {
             {filteredStories.map((story) => (
               <div
                 key={story.id}
-                className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
+                className="border rounded-lg p-4 hover:bg-surface-2 transition-colors"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -293,7 +293,7 @@ export default function HistoryPage() {
                           </svg>
                         ) : (
                           <svg
-                            className="w-6 h-6 text-gray-400 hover:text-yellow-500 transition-colors"
+                            className="w-6 h-6 text-faint hover:text-yellow-500 transition-colors"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -312,7 +312,7 @@ export default function HistoryPage() {
                       {getStatusBadge(story.status)}
                     </div>
 
-                    <div className="space-y-1 text-sm text-gray-600 mb-3">
+                    <div className="space-y-1 text-sm text-dim mb-3">
                       {story.url && (
                         <div className="flex items-center gap-2">
                           <span className="font-medium">URL:</span>
@@ -348,7 +348,7 @@ export default function HistoryPage() {
                         <svg className="w-4 h-4 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                         </svg>
-                        <span className="text-gray-600">
+                        <span className="text-dim">
                           {story.total_downloaded} chương
                         </span>
                       </div>
@@ -357,7 +357,7 @@ export default function HistoryPage() {
                         <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
                         </svg>
-                        <span className="text-gray-600">
+                        <span className="text-dim">
                           {story.total_audio_generated} audio
                         </span>
                       </div>
@@ -367,7 +367,7 @@ export default function HistoryPage() {
                           <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                           </svg>
-                          <span className="text-gray-600">
+                          <span className="text-dim">
                             File merge sẵn sàng
                           </span>
                         </div>
@@ -375,7 +375,7 @@ export default function HistoryPage() {
                     </div>
 
                     {/* Timestamps */}
-                    <div className="mt-3 text-xs text-gray-500">
+                    <div className="mt-3 text-xs text-dim">
                       Tạo: {new Date(story.created_at).toLocaleString('vi-VN')} |
                       Cập nhật: {new Date(story.updated_at).toLocaleString('vi-VN')}
                     </div>
@@ -426,7 +426,7 @@ export default function HistoryPage() {
         {/* Pagination */}
         {paginationMeta.total_pages > 1 && (
           <div className="mt-6 flex items-center justify-between border-t pt-6">
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-dim">
               Hiển thị {(currentPage - 1) * paginationMeta.page_size + 1} - {Math.min(currentPage * paginationMeta.page_size, paginationMeta.total)} trong tổng {paginationMeta.total} truyện
             </div>
 
@@ -435,7 +435,7 @@ export default function HistoryPage() {
               <button
                 onClick={() => handlePageChange(1)}
                 disabled={currentPage === 1}
-                className="px-3 py-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                className="px-3 py-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-2"
               >
                 ««
               </button>
@@ -444,7 +444,7 @@ export default function HistoryPage() {
               <button
                 onClick={() => handlePageChange(currentPage - 1)}
                 disabled={currentPage === 1}
-                className="px-3 py-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                className="px-3 py-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-2"
               >
                 «
               </button>
@@ -471,7 +471,7 @@ export default function HistoryPage() {
                       className={`px-4 py-2 rounded-md border ${
                         currentPage === pageNum
                           ? 'bg-primary-500 text-white border-primary-500'
-                          : 'hover:bg-gray-50'
+                          : 'hover:bg-surface-2'
                       }`}
                     >
                       {pageNum}
@@ -484,7 +484,7 @@ export default function HistoryPage() {
               <button
                 onClick={() => handlePageChange(currentPage + 1)}
                 disabled={currentPage === paginationMeta.total_pages}
-                className="px-3 py-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                className="px-3 py-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-2"
               >
                 »
               </button>
@@ -493,7 +493,7 @@ export default function HistoryPage() {
               <button
                 onClick={() => handlePageChange(paginationMeta.total_pages)}
                 disabled={currentPage === paginationMeta.total_pages}
-                className="px-3 py-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                className="px-3 py-2 rounded-md border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-2"
               >
                 »»
               </button>
@@ -505,12 +505,12 @@ export default function HistoryPage() {
       {/* Delete Confirmation Dialog */}
       {deleteDialog.isOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
+          <div className="bg-surface rounded-lg max-w-md w-full p-6">
             <h3 className="text-xl font-semibold mb-4">Xác nhận xóa</h3>
 
-            <p className="text-gray-600 mb-4">
+            <p className="text-dim mb-4">
               Bạn có chắc chắn muốn xóa truyện:
-              <span className="block mt-2 font-medium text-gray-900">
+              <span className="block mt-2 font-medium text-strong">
                 "{deleteDialog.story?.title}"
               </span>
             </p>
@@ -523,7 +523,7 @@ export default function HistoryPage() {
               <button
                 onClick={() => setDeleteDialog({ isOpen: false, story: null })}
                 disabled={deleting}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800 transition"
+                className="px-4 py-2 text-dim hover:text-strong transition"
               >
                 Hủy
               </button>

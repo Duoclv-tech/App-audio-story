@@ -144,7 +144,7 @@ export function SubtitlePanel({
 
   return (
     <div className="space-y-3">
-      <div className="text-xs text-gray-600 leading-relaxed">
+      <div className="text-xs text-dim leading-relaxed">
         Upload .SRT để in phụ đề trực tiếp lên video. Style + animation áp dụng cho toàn bộ file.
       </div>
 
@@ -152,13 +152,13 @@ export function SubtitlePanel({
       <div
         onDragOver={(e) => e.preventDefault()}
         onDrop={onDrop}
-        className="border-2 border-dashed border-gray-300 rounded-md p-3 text-center bg-gray-50"
+        className="border-2 border-dashed border-token rounded-md p-3 text-center bg-surface-2"
       >
         {srtPath ? (
           <div className="text-xs">
             <div className="font-mono break-all mb-1 text-green-700">{filename ?? srtPath.split(/[\\/]/).pop()}</div>
             {uploadInfo && (
-              <div className="text-gray-500">
+              <div className="text-dim">
                 {uploadInfo.segment_count} dòng · {uploadInfo.first_start.toFixed(1)}s {uploadInfo.last_end.toFixed(1)}s
               </div>
             )}
@@ -176,7 +176,7 @@ export function SubtitlePanel({
               disabled={uploading}
               className="px-3 py-1.5 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded text-xs text-white"
             >{uploading ? 'Đang upload…' : 'Chọn file SRT'}</button>
-            <div className="text-[11px] text-gray-500 mt-1">hoặc kéo thả vào đây</div>
+            <div className="text-[11px] text-dim mt-1">hoặc kéo thả vào đây</div>
           </>
         )}
         <input
@@ -275,7 +275,7 @@ export function SubtitlePanel({
         </Field>
       </div>
 
-      <div className="flex items-center gap-3 text-xs text-gray-700">
+      <div className="flex items-center gap-3 text-xs text-dim">
         <label className="flex items-center gap-1.5 cursor-pointer">
           <input
             type="checkbox" checked={style.subtitle_bold}
@@ -291,20 +291,20 @@ export function SubtitlePanel({
           <i>Italic</i>
         </label>
         <div className="flex-1" />
-        <div className="flex border border-gray-300 rounded overflow-hidden">
+        <div className="flex border border-token rounded overflow-hidden">
           {(['left', 'center', 'right'] as const).map(a => (
             <button
               key={a}
               type="button"
               onClick={() => onChange({ subtitle_align: a })}
-              className={`px-2 py-0.5 ${style.subtitle_align === a ? 'bg-primary-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
+              className={`px-2 py-0.5 ${style.subtitle_align === a ? 'bg-primary-500 text-white' : 'bg-surface text-dim hover:bg-surface-3'}`}
               title={`Căn ${a}`}
             >{a === 'left' ? '' : a === 'right' ? '' : ''}</button>
           ))}
         </div>
       </div>
 
-      <div className="text-[11px] text-gray-500">
+      <div className="text-[11px] text-dim">
         Vị trí: X {Math.round(style.subtitle_x * 100)}% · Y {Math.round(style.subtitle_y * 100)}%
         <span className="ml-1 text-primary-500">(kéo phụ đề trên preview để chỉnh)</span>
       </div>
@@ -315,7 +315,7 @@ export function SubtitlePanel({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs text-gray-600 mb-1">{label}</label>
+      <label className="block text-xs text-dim mb-1">{label}</label>
       {children}
     </div>
   )

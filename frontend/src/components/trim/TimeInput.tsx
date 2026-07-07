@@ -48,7 +48,7 @@ export default function TimeInput({ label, valueSec, maxSec, onChange, onSetFrom
 
   return (
     <div>
-      <div className="text-sm font-medium text-gray-700 mb-1">{label}</div>
+      <div className="text-sm font-medium text-dim mb-1">{label}</div>
       <div className="flex items-center gap-1">
         <input
           type="number"
@@ -57,7 +57,7 @@ export default function TimeInput({ label, valueSec, maxSec, onChange, onSetFrom
           onChange={(e) => setH(Math.max(0, parseInt(e.target.value || '0', 10)))}
           className={inputCls}
         />
-        <span className="text-gray-500">:</span>
+        <span className="text-dim">:</span>
         <input
           type="number"
           min={0}
@@ -66,7 +66,7 @@ export default function TimeInput({ label, valueSec, maxSec, onChange, onSetFrom
           onChange={(e) => setM(Math.max(0, Math.min(59, parseInt(e.target.value || '0', 10))))}
           className={inputCls}
         />
-        <span className="text-gray-500">:</span>
+        <span className="text-dim">:</span>
         <input
           type="number"
           min={0}
@@ -79,7 +79,7 @@ export default function TimeInput({ label, valueSec, maxSec, onChange, onSetFrom
           <button
             type="button"
             onClick={onSetFromPlayer}
-            className="ml-2 text-xs px-2 py-1 border rounded hover:bg-gray-50"
+            className="ml-2 text-xs px-2 py-1 border rounded hover:bg-surface-2"
             title="Lấy từ vị trí video đang xem"
           >
              lấy vị trí hiện tại

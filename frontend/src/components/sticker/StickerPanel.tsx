@@ -86,9 +86,9 @@ export function StickerPanel({
   return (
     <div className="space-y-3">
       {/* Library picker */}
-      <div className="border rounded p-3 bg-white space-y-2">
+      <div className="border rounded p-3 bg-surface space-y-2">
         <div className="flex items-center justify-between">
-          <div className="text-xs font-medium text-gray-700"> Thư viện sticker</div>
+          <div className="text-xs font-medium text-dim"> Thư viện sticker</div>
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -123,7 +123,7 @@ export function StickerPanel({
                 className={`text-[11px] px-2 py-0.5 rounded ${
                   activeCategory === cat
                     ? 'bg-primary-500 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    : 'bg-surface-3 text-dim hover:bg-gray-200'
                 }`}
               >
                 {cat === 'all' ? 'Tất cả' : (library.find(c => c.name === cat)?.label || cat)}
@@ -134,9 +134,9 @@ export function StickerPanel({
 
         {/* Grid */}
         {loading ? (
-          <div className="text-[11px] text-gray-500 py-3 text-center">Đang tải thư viện...</div>
+          <div className="text-[11px] text-dim py-3 text-center">Đang tải thư viện...</div>
         ) : visibleItems.length === 0 ? (
-          <div className="text-[11px] text-gray-500 py-3 text-center bg-gray-50 rounded">
+          <div className="text-[11px] text-dim py-3 text-center bg-surface-2 rounded">
             Chưa có sticker nào trong thư viện.<br />
             Thả file PNG/GIF/WebP vào <code>web_app/backend/stickers/&lt;category&gt;/</code> hoặc bấm "Upload custom".
           </div>
@@ -148,7 +148,7 @@ export function StickerPanel({
                 type="button"
                 onClick={() => handlePick(item)}
                 title={`${item._category} / ${item.name}${item.animated ? ' (animated)' : ''}`}
-                className="relative aspect-square bg-gray-50 rounded border border-gray-200 hover:border-primary-400 hover:bg-white p-1 transition"
+                className="relative aspect-square bg-surface-2 rounded border border-token hover:border-primary-400 hover:bg-surface p-1 transition"
               >
                 <img
                   src={stickerFileUrl(item.path)}
@@ -165,9 +165,9 @@ export function StickerPanel({
       </div>
 
       {/* Active stickers list */}
-      <div className="border rounded p-3 bg-white space-y-2">
+      <div className="border rounded p-3 bg-surface space-y-2">
         <div className="flex items-center justify-between">
-          <div className="text-xs font-medium text-gray-700">
+          <div className="text-xs font-medium text-dim">
              Sticker đang dùng ({stickers.length})
           </div>
           {stickers.length > 5 && (
@@ -178,7 +178,7 @@ export function StickerPanel({
         </div>
 
         {stickers.length === 0 ? (
-          <div className="text-[11px] text-gray-400 py-2">
+          <div className="text-[11px] text-faint py-2">
             Chưa có. Bấm vào sticker trong thư viện ở trên để thêm.
           </div>
         ) : (
@@ -190,19 +190,19 @@ export function StickerPanel({
                 className={`flex items-center gap-2 p-1.5 rounded border cursor-pointer ${
                   selectedId === s.id
                     ? 'border-primary-400 bg-primary-50'
-                    : 'border-gray-200 hover:border-gray-300'
+                    : 'border-token hover:border-token'
                 }`}
               >
                 <img
                   src={stickerFileUrl(s.image_path)}
                   alt=""
-                  className="w-8 h-8 object-contain bg-white rounded"
+                  className="w-8 h-8 object-contain bg-surface rounded"
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[11px] font-medium text-gray-700 truncate">
+                  <div className="text-[11px] font-medium text-dim truncate">
                     {s.source_label || s.image_path.split(/[\\/]/).pop()}
                   </div>
-                  <div className="text-[10px] text-gray-500">
+                  <div className="text-[10px] text-dim">
                     {fmtTime(s.start_time)} {s.end_time == null ? 'hết' : fmtTime(s.end_time)}
                     {' · '}{s.w}×{s.h}px
                   </div>
@@ -223,12 +223,12 @@ export function StickerPanel({
 
       {/* Selected sticker editor */}
       {selected && (
-        <div className="border rounded p-3 bg-white space-y-2">
-          <div className="text-xs font-medium text-gray-700"> Tinh chỉnh sticker đang chọn</div>
+        <div className="border rounded p-3 bg-surface space-y-2">
+          <div className="text-xs font-medium text-dim"> Tinh chỉnh sticker đang chọn</div>
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-[10px] text-gray-500">Width (px)</label>
+              <label className="block text-[10px] text-dim">Width (px)</label>
               <input
                 type="number" min={16} max={4096} step={4}
                 value={selected.w}
@@ -237,7 +237,7 @@ export function StickerPanel({
               />
             </div>
             <div>
-              <label className="block text-[10px] text-gray-500">Height (px)</label>
+              <label className="block text-[10px] text-dim">Height (px)</label>
               <input
                 type="number" min={16} max={4096} step={4}
                 value={selected.h}
@@ -248,7 +248,7 @@ export function StickerPanel({
           </div>
 
           <div>
-            <label className="block text-[10px] text-gray-500">
+            <label className="block text-[10px] text-dim">
               Opacity: {Math.round(selected.opacity * 100)}%
             </label>
             <input
@@ -261,7 +261,7 @@ export function StickerPanel({
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-[10px] text-gray-500">
+              <label className="block text-[10px] text-dim">
                 Bắt đầu (s): {selected.start_time.toFixed(1)}
               </label>
               <input
@@ -282,7 +282,7 @@ export function StickerPanel({
               />
             </div>
             <div>
-              <label className="block text-[10px] text-gray-500">
+              <label className="block text-[10px] text-dim">
                 Kết thúc (s): {selected.end_time == null ? 'hết video' : selected.end_time.toFixed(1)}
               </label>
               <input
@@ -311,7 +311,7 @@ export function StickerPanel({
             <button
               type="button"
               onClick={() => onUpdate(selected.id, { x: 0.5, y: 0.5 })}
-              className="text-[11px] px-2 py-0.5 bg-gray-100 rounded hover:bg-gray-200"
+              className="text-[11px] px-2 py-0.5 bg-surface-3 rounded hover:bg-gray-200"
             >
               ⊙ Center
             </button>

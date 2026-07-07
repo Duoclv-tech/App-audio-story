@@ -62,14 +62,14 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow-sm p-8">
-        <div className="text-center text-gray-500">Đang tải cài đặt...</div>
+      <div className="bg-surface rounded-lg shadow-sm p-8">
+        <div className="text-center text-dim">Đang tải cài đặt...</div>
       </div>
     )
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-8">
+    <div className="bg-surface rounded-lg shadow-sm p-8">
       <h2 className="text-2xl font-bold mb-6">Cài Đặt</h2>
 
       {/* VBEE API Configuration */}
@@ -105,7 +105,7 @@ export default function SettingsPage() {
               placeholder="c1c5c478-719d-4ec6-b665-58ed39484375"
               className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
             />
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-dim mt-1">
               ID ứng dụng từ VBEE Dashboard
             </p>
           </div>
@@ -131,7 +131,7 @@ export default function SettingsPage() {
                 {showTokens ? 'Ẩn' : 'Hiện'}
               </button>
             </div>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-dim mt-1">
               JWT token từ VBEE Dashboard (có thời hạn)
             </p>
           </div>
@@ -177,7 +177,7 @@ export default function SettingsPage() {
               {showTokens ? 'Ẩn' : 'Hiện'}
             </button>
           </div>
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-dim mt-1">
             Dùng để kiểm tra ngữ pháp bằng AI (Gemini 2.0 Flash - miễn phí)
           </p>
         </div>

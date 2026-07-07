@@ -84,7 +84,10 @@
   .bg-app { background: var(--bg); }
   .bg-surface { background: var(--surface); }
   .bg-surface-2 { background: var(--surface-2); }
+  .bg-surface-3 { background: var(--surface-3); }
   .border-token { border-color: var(--border); }
+  .border-token-strong { border-color: var(--border-strong); }
+  .text-strong { color: var(--text); }
   .text-dim { color: var(--text-dim); }
   .text-faint { color: var(--text-faint); }
 }

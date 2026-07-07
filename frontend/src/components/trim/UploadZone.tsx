@@ -37,7 +37,7 @@ export default function UploadZone({ onFileSelected, uploading, uploadProgress }
         if (!uploading) handleFiles(e.dataTransfer.files)
       }}
       className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition ${
-        dragOver ? 'border-primary-500 bg-primary-50' : 'border-gray-300 hover:border-primary-400'
+        dragOver ? 'border-primary-500 bg-primary-50' : 'border-token hover:border-primary-400'
       } ${uploading ? 'pointer-events-none opacity-70' : ''}`}
     >
       <input
@@ -47,11 +47,11 @@ export default function UploadZone({ onFileSelected, uploading, uploadProgress }
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}
       />
-      <Upload size={40} className="mx-auto text-gray-400 mb-3" />
-      <p className="text-gray-700 font-medium mb-1">
+      <Upload size={40} className="mx-auto text-faint mb-3" />
+      <p className="text-dim font-medium mb-1">
         Kéo thả file video vào đây hoặc bấm để chọn
       </p>
-      <p className="text-sm text-gray-500">MP4, MOV, MKV, AVI, WebM — tối đa 2 GB</p>
+      <p className="text-sm text-dim">MP4, MOV, MKV, AVI, WebM — tối đa 2 GB</p>
       {uploading && (
         <div className="mt-4">
           <div className="w-full bg-gray-200 rounded-full h-2.5">
@@ -60,7 +60,7 @@ export default function UploadZone({ onFileSelected, uploading, uploadProgress }
               style={{ width: `${uploadProgress}%` }}
             />
           </div>
-          <p className="text-sm text-gray-600 mt-2">Đang upload… {uploadProgress}%</p>
+          <p className="text-sm text-dim mt-2">Đang upload… {uploadProgress}%</p>
         </div>
       )}
     </div>

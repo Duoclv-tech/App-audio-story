@@ -2,9 +2,72 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---- Design tokens ---------------------------------------------------------
+   Surfaces/neutrals live as CSS variables so the whole shell shares one source
+   of truth (and dark mode is a small follow-up: redefine these under .dark). */
+:root {
+  --bg: #EDEEF2;          /* app background — cool indigo-slate */
+  --surface: #FFFFFF;
+  --surface-2: #F5F6F9;
+  --surface-3: #EDEFF3;
+  --border: #E1E3EA;
+  --border-strong: #CFD2DC;
+  --text: #191B22;
+  --text-dim: #5C6070;
+  --text-faint: #8A8F9E;
+  --accent: #C67E15;
+  --accent-bright: #E1932B;
+  --accent-soft: rgba(225, 147, 43, 0.12);
+  --accent-line: rgba(225, 147, 43, 0.32);
+}
+
 @layer base {
   body {
-    @apply bg-gray-50 text-gray-900;
+    background: var(--bg);
+    color: var(--text);
+    font-family: theme('fontFamily.sans');
+  }
+}
+
+@layer components {
+  /* Reusable building blocks shared by the shell and pages. Pages that still
+     use raw utilities keep working; these are opt-in. */
+  .btn {
+    @apply inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold
+           cursor-pointer border border-transparent transition-colors select-none;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn-primary { @apply bg-primary-500 text-white hover:bg-primary-600; box-shadow: 0 1px 2px var(--accent-line); }
+  .btn-secondary {
+    background: var(--surface); color: var(--text);
+    border-color: var(--border-strong);
+  }
+  .btn-secondary:hover { background: var(--surface-2); }
+  .btn-ghost { color: var(--text-dim); }
+  .btn-ghost:hover { background: var(--surface-2); color: var(--text); }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    @apply rounded-xl;
+    box-shadow: 0 1px 2px rgba(20,22,34,0.05), 0 6px 20px rgba(20,22,34,0.05);
+  }
+
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+  .pill-dot { @apply w-1.5 h-1.5 rounded-full bg-current; }
+  .pill-ok { background: rgba(31,157,107,0.13); color: #1F9D6B; }
+  .pill-run { background: var(--accent-soft); color: var(--accent); }
+  .pill-warn { background: rgba(184,121,26,0.15); color: #B8791A; }
+  .pill-err { background: rgba(214,75,69,0.12); color: #D64B45; }
+
+  /* Active sidebar item: tinted background + accent left-rail. */
+  .nav-active { background: var(--accent-soft); }
+  .nav-active::before {
+    content: ""; position: absolute; left: -2px; top: 8px; bottom: 8px; width: 3px;
+    border-radius: 0 3px 3px 0; background: var(--accent-bright);
   }
 }
 
@@ -12,6 +75,12 @@
   .animate-slide-up {
     animation: slideUp 0.3s ease-out;
   }
+  .bg-app { background: var(--bg); }
+  .bg-surface { background: var(--surface); }
+  .bg-surface-2 { background: var(--surface-2); }
+  .border-token { border-color: var(--border); }
+  .text-dim { color: var(--text-dim); }
+  .text-faint { color: var(--text-faint); }
 }
 
 @keyframes slideUp {

@@ -1,11 +1,36 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { NavLink, Link } from 'react-router-dom'
 import axios from 'axios'
-import { Home, History, Settings, Shield, MessageSquare, Menu, ChevronLeft, Scissors, AlertTriangle } from 'lucide-react'
+import { Home, History, Settings, Shield, MessageSquare, Menu, ChevronLeft, Scissors, AlertTriangle, Mic } from 'lucide-react'
 
 interface LayoutProps {
   children: React.ReactNode
 }
+
+interface NavEntry {
+  to: string
+  label: string
+  icon: typeof Home
+}
+
+const NAV_SECTIONS: { title: string; items: NavEntry[] }[] = [
+  {
+    title: 'Sản xuất',
+    items: [
+      { to: '/', label: 'Trang chủ', icon: Home },
+      { to: '/history', label: 'Lịch sử', icon: History },
+      { to: '/video-trimmer', label: 'Cắt video', icon: Scissors },
+    ],
+  },
+  {
+    title: 'Cấu hình',
+    items: [
+      { to: '/banned-words', label: 'Từ kiểm duyệt', icon: Shield },
+      { to: '/prompts', label: 'Prompts', icon: MessageSquare },
+      { to: '/settings', label: 'Cài đặt', icon: Settings },
+    ],
+  },
+]
 
 export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -24,103 +49,104 @@ export default function Layout({ children }: LayoutProps) {
   }, [])
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="p-2 rounded-lg hover:bg-gray-100 transition"
-                title={sidebarOpen ? 'Đóng menu' : 'Mở menu'}
-              >
-                {sidebarOpen ? <ChevronLeft size={20} /> : <Menu size={20} />}
-              </button>
-              <h1 className="text-2xl font-bold text-primary-600">
-                📖 Audio Story
-              </h1>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-500">v1.0.0</span>
-            </div>
+    <div className="min-h-screen flex bg-app">
+      {/* Sidebar */}
+      <aside
+        className={`shrink-0 flex flex-col border-r border-token transition-all duration-300 bg-surface-2 ${
+          sidebarOpen ? 'w-64' : 'w-[68px]'
+        }`}
+      >
+        {/* Brand */}
+        <div className="flex items-center gap-3 px-4 h-16 border-b border-token">
+          <div
+            className="w-9 h-9 rounded-[10px] shrink-0 grid place-items-center text-white"
+            style={{
+              background: 'linear-gradient(150deg, var(--accent-bright), var(--accent))',
+              boxShadow: '0 2px 8px var(--accent-line)',
+            }}
+          >
+            <Mic size={19} />
           </div>
+          {sidebarOpen && (
+            <div className="min-w-0">
+              <div className="font-bold text-[15px] tracking-tight leading-tight">Audio Story</div>
+              <div className="font-mono text-[10px] text-faint tracking-wide">STUDIO · v1.0</div>
+            </div>
+          )}
         </div>
-      </header>
 
-      {/* First-run API-key nudge */}
-      {needsApiKey && (
-        <div className="bg-amber-50 border-b border-amber-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center gap-2 text-sm text-amber-800">
-            <AlertTriangle size={16} className="shrink-0" />
-            <span>Chưa cấu hình API key VBEE — tính năng chuyển văn bản thành giọng đọc (TTS) sẽ không hoạt động.</span>
-            <Link to="/settings" className="font-semibold underline hover:text-amber-900">Mở Cài đặt</Link>
-          </div>
-        </div>
-      )}
+        {/* Nav */}
+        <nav className="flex-1 px-2.5 py-3 overflow-y-auto">
+          {NAV_SECTIONS.map((section) => (
+            <div key={section.title} className="mb-1">
+              {sidebarOpen && (
+                <div className="font-mono text-[10px] tracking-[0.12em] uppercase text-faint px-3 pt-3 pb-1.5">
+                  {section.title}
+                </div>
+              )}
+              <div className="flex flex-col gap-0.5">
+                {section.items.map(({ to, label, icon: Icon }) => (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    end={to === '/'}
+                    title={label}
+                    className={({ isActive }) =>
+                      `relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13.5px] font-medium transition-colors ${
+                        isActive
+                          ? 'text-[var(--text)] font-semibold nav-active'
+                          : 'text-dim hover:text-[var(--text)] hover:bg-surface'
+                      }`
+                    }
+                  >
+                    <Icon size={18} className="shrink-0" />
+                    {sidebarOpen && <span className="truncate">{label}</span>}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+          ))}
+        </nav>
 
-      <div className="flex-1 flex">
-        {/* Sidebar */}
-        <aside
-          className={`bg-white border-r transition-all duration-300 overflow-hidden ${
-            sidebarOpen ? 'w-64' : 'w-16'
-          }`}
-        >
-          <nav className="p-2 space-y-2">
-            <Link
-              to="/"
-              className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 transition"
-              title="Trang chủ"
-            >
-              <Home size={20} className="shrink-0" />
-              {sidebarOpen && <span>Trang chủ</span>}
-            </Link>
-            <Link
-              to="/history"
-              className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 transition"
-              title="Lịch sử"
-            >
-              <History size={20} className="shrink-0" />
-              {sidebarOpen && <span>Lịch sử</span>}
-            </Link>
-            <Link
-              to="/banned-words"
-              className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 transition"
-              title="Từ kiểm duyệt"
-            >
-              <Shield size={20} className="shrink-0" />
-              {sidebarOpen && <span>Từ kiểm duyệt</span>}
-            </Link>
-            <Link
-              to="/prompts"
-              className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 transition"
-              title="Prompts"
-            >
-              <MessageSquare size={20} className="shrink-0" />
-              {sidebarOpen && <span>Prompts</span>}
-            </Link>
-            <Link
-              to="/video-trimmer"
-              className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 transition"
-              title="Cắt video"
-            >
-              <Scissors size={20} className="shrink-0" />
-              {sidebarOpen && <span>Cắt video</span>}
-            </Link>
+        {/* API-key nudge, docked at the bottom of the sidebar */}
+        {needsApiKey && sidebarOpen && (
+          <div className="p-3 border-t border-token">
             <Link
               to="/settings"
-              className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 transition"
-              title="Cài đặt"
+              className="flex gap-2.5 items-start p-3 rounded-lg transition-colors hover:brightness-95"
+              style={{ background: 'rgba(214,75,69,0.10)' }}
             >
-              <Settings size={20} className="shrink-0" />
-              {sidebarOpen && <span>Cài đặt</span>}
+              <AlertTriangle size={16} className="shrink-0 mt-0.5" style={{ color: '#D64B45' }} />
+              <div>
+                <div className="text-xs font-semibold">Chưa có API key VBEE</div>
+                <div className="text-[11.5px] text-dim">TTS sẽ không chạy — mở Cài đặt để nhập.</div>
+              </div>
             </Link>
-          </nav>
-        </aside>
+          </div>
+        )}
+      </aside>
 
-        {/* Main Content */}
+      {/* Main column */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Header */}
+        <header className="h-16 shrink-0 flex items-center justify-between px-6 border-b border-token bg-surface">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="p-2 rounded-lg text-dim hover:bg-surface-2 hover:text-[var(--text)] transition-colors"
+              title={sidebarOpen ? 'Đóng menu' : 'Mở menu'}
+            >
+              {sidebarOpen ? <ChevronLeft size={20} /> : <Menu size={20} />}
+            </button>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="font-mono text-xs text-faint">v1.0.0</span>
+          </div>
+        </header>
+
+        {/* Content */}
         <main className="flex-1 overflow-auto">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="max-w-7xl mx-auto px-6 lg:px-8 py-8">
             {children}
           </div>
         </main>

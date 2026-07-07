@@ -1,7 +1,24 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, History, BookOpen } from 'lucide-react'
+import { Plus, History, BookOpen, Download, ScanText, PenLine, Mic, Combine, Activity, ArrowRight } from 'lucide-react'
 import { useState } from 'react'
 import axios from 'axios'
+
+const FEATURES = [
+  { icon: Download, title: 'Tải truyện tự động', desc: 'Tải nhiều chương cùng lúc từ TruyenFull' },
+  { icon: ScanText, title: 'Kiểm tra nội dung', desc: 'Phát hiện từ bị che và thống kê' },
+  { icon: PenLine, title: 'Chỉnh sửa trực tiếp', desc: 'Editor tích hợp chỉnh sửa nội dung' },
+  { icon: Mic, title: 'TTS VBEE', desc: 'Chuyển văn bản thành giọng nói' },
+  { icon: Combine, title: 'Nối audio', desc: 'Gộp tất cả chương thành một file' },
+  { icon: Activity, title: 'Theo dõi tiến độ', desc: 'Cập nhật trạng thái theo thời gian thực' },
+]
+
+const HOSTS = [
+  { name: 'TruyenFull.vision', note: 'Nguồn mặc định', primary: true },
+  { name: 'TruyenMoiii.org', note: 'Hỗ trợ đầy đủ', primary: false },
+  { name: 'TruyenHay.blog', note: 'Nền tảng WordPress', primary: false },
+  { name: 'NguyetTruyen.net', note: 'Hỗ trợ đầy đủ', primary: false },
+  { name: 'MeTruyen.mobi', note: 'Chống chặn bằng CSS', primary: false },
+]
 
 export default function HomePage() {
   const navigate = useNavigate()
@@ -10,14 +27,11 @@ export default function HomePage() {
   const handleCreateNewProject = async () => {
     setCreating(true)
     try {
-      console.log('Creating new project...')
       const response = await axios.post('/api/v1/stories/create-process')
-      console.log('Project created:', response.data)
-      const processId = response.data.id
-      navigate(`/processor/${processId}`)
+      navigate(`/processor/${response.data.id}`)
     } catch (error) {
       console.error('Error creating project:', error)
-      alert('Failed to create new project')
+      alert('Không tạo được dự án mới. Thử lại nhé.')
     } finally {
       setCreating(false)
     }
@@ -25,130 +39,98 @@ export default function HomePage() {
 
   return (
     <div className="space-y-8">
-      {/* Welcome Section */}
-      <div className="bg-white rounded-lg shadow-sm p-8">
-        <h2 className="text-3xl font-bold mb-4">
+      {/* Welcome / hero */}
+      <div className="card p-8">
+        <div className="font-mono text-[11px] tracking-[0.14em] uppercase text-primary-600 font-semibold mb-2">
+          Xưởng sản xuất audio truyện
+        </div>
+        <h2 className="text-3xl font-bold tracking-tight mb-3 text-balance">
           Chào mừng đến với Audio Story
         </h2>
-        <p className="text-gray-600 text-lg">
-          Công cụ tải truyện từ TruyenFull và chuyển đổi thành audio tự động
+        <p className="text-dim text-lg max-w-2xl">
+          Tải truyện, biên tập, chuyển thành giọng đọc và dựng video — tất cả trong một quy trình.
         </p>
       </div>
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Quick actions */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <button
           onClick={handleCreateNewProject}
           disabled={creating}
-          className="bg-primary-500 text-white rounded-lg p-6 hover:bg-primary-600 transition shadow-lg text-left disabled:bg-gray-400 disabled:cursor-not-allowed"
+          className="group text-left rounded-xl p-6 text-white transition disabled:opacity-60 disabled:cursor-not-allowed"
+          style={{
+            background: 'linear-gradient(150deg, var(--accent-bright), var(--accent))',
+            boxShadow: '0 8px 24px var(--accent-line)',
+          }}
         >
-          <Plus size={32} className="mb-4" />
-          <h3 className="text-xl font-semibold mb-2">
-            {creating ? 'Đang tạo...' : 'Tạo Project Mới'}
+          <div className="flex items-center justify-between mb-6">
+            <Plus size={30} />
+            <ArrowRight size={20} className="opacity-60 group-hover:translate-x-1 transition-transform" />
+          </div>
+          <h3 className="text-xl font-semibold mb-1">
+            {creating ? 'Đang tạo...' : 'Tạo dự án mới'}
           </h3>
-          <p className="text-primary-100">
-            Bắt đầu tải và xử lý truyện mới
-          </p>
+          <p className="text-white/80 text-sm">Bắt đầu tải và xử lý truyện mới</p>
         </button>
 
-        <Link
-          to="/history"
-          className="bg-white rounded-lg p-6 hover:shadow-lg transition border"
-        >
-          <History size={32} className="mb-4 text-gray-700" />
-          <h3 className="text-xl font-semibold mb-2">Lịch Sử</h3>
-          <p className="text-gray-600">
-            Xem các project đã xử lý
-          </p>
+        <Link to="/history" className="card p-6 hover:-translate-y-0.5 transition-transform group">
+          <History size={30} className="text-dim mb-6" />
+          <h3 className="text-xl font-semibold mb-1 flex items-center gap-2">
+            Lịch sử
+            <ArrowRight size={18} className="text-faint opacity-0 group-hover:opacity-100 transition-opacity" />
+          </h3>
+          <p className="text-dim text-sm">Xem các dự án đã xử lý</p>
         </Link>
 
-        <div className="bg-white rounded-lg p-6 border">
-          <BookOpen size={32} className="mb-4 text-gray-700" />
-          <h3 className="text-xl font-semibold mb-2">Hướng Dẫn</h3>
-          <p className="text-gray-600">
-            Tìm hiểu cách sử dụng công cụ
-          </p>
-        </div>
+        <Link to="/settings" className="card p-6 hover:-translate-y-0.5 transition-transform group">
+          <BookOpen size={30} className="text-dim mb-6" />
+          <h3 className="text-xl font-semibold mb-1 flex items-center gap-2">
+            Cấu hình & Hướng dẫn
+            <ArrowRight size={18} className="text-faint opacity-0 group-hover:opacity-100 transition-opacity" />
+          </h3>
+          <p className="text-dim text-sm">Nhập API key và tùy chỉnh mặc định</p>
+        </Link>
       </div>
 
       {/* Features */}
-      <div className="bg-white rounded-lg shadow-sm p-8">
-        <h3 className="text-2xl font-bold mb-6">Tính Năng</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <h4 className="font-semibold mb-2">✅ Tải truyện tự động</h4>
-            <p className="text-gray-600">Tải nhiều chương cùng lúc từ TruyenFull</p>
-          </div>
-          <div>
-            <h4 className="font-semibold mb-2">✅ Kiểm tra nội dung</h4>
-            <p className="text-gray-600">Phát hiện từ bị che và thống kê</p>
-          </div>
-          <div>
-            <h4 className="font-semibold mb-2">✅ Chỉnh sửa trực tiếp</h4>
-            <p className="text-gray-600">Editor tích hợp chỉnh sửa nội dung</p>
-          </div>
-          <div>
-            <h4 className="font-semibold mb-2">✅ TTS VBEE</h4>
-            <p className="text-gray-600">Chuyển văn bản thành giọng nói</p>
-          </div>
-          <div>
-            <h4 className="font-semibold mb-2">✅ Nối audio</h4>
-            <p className="text-gray-600">Gộp tất cả chương thành một file</p>
-          </div>
-          <div>
-            <h4 className="font-semibold mb-2">✅ Theo dõi tiến độ</h4>
-            <p className="text-gray-600">Real-time progress tracking</p>
-          </div>
+      <div className="card p-8">
+        <h3 className="text-lg font-bold mb-6">Tính năng chính</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-6">
+          {FEATURES.map(({ icon: Icon, title, desc }) => (
+            <div key={title} className="flex gap-3">
+              <div
+                className="w-9 h-9 rounded-lg shrink-0 grid place-items-center"
+                style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}
+              >
+                <Icon size={18} />
+              </div>
+              <div>
+                <h4 className="font-semibold text-[14.5px] mb-0.5">{title}</h4>
+                <p className="text-dim text-sm">{desc}</p>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Supported Hosts */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <h3 className="text-lg font-semibold mb-4">Các Nguồn Được Hỗ Trợ</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="border rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-              <span className="font-semibold">TruyenFull.vision</span>
+      {/* Supported hosts */}
+      <div className="card p-6">
+        <h3 className="text-base font-bold mb-4">Nguồn được hỗ trợ</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {HOSTS.map((h) => (
+            <div key={h.name} className="rounded-lg border border-token p-4 bg-surface-2">
+              <div className="flex items-center gap-2 mb-1">
+                <span
+                  className="w-2 h-2 rounded-full"
+                  style={{ background: h.primary ? 'var(--accent)' : '#1F9D6B' }}
+                />
+                <span className="font-semibold text-sm">{h.name}</span>
+              </div>
+              <p className="text-xs text-dim ml-4">{h.note}</p>
             </div>
-            <p className="text-sm text-gray-600">Nguồn mặc định</p>
-          </div>
-
-          <div className="border rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              <span className="font-semibold">TruyenMoiii.org</span>
-            </div>
-            <p className="text-sm text-gray-600">Hỗ trợ đầy đủ</p>
-          </div>
-
-          <div className="border rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              <span className="font-semibold">TruyenHay.blog</span>
-            </div>
-            <p className="text-sm text-gray-600">WordPress platform</p>
-          </div>
-
-          <div className="border rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              <span className="font-semibold">NguyetTruyen.net</span>
-            </div>
-            <p className="text-sm text-gray-600">Hỗ trợ đầy đủ</p>
-          </div>
-
-          <div className="border rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              <span className="font-semibold">MeTruyen.mobi</span>
-            </div>
-            <p className="text-sm text-gray-600">Anti-scraping CSS</p>
-          </div>
+          ))}
         </div>
-        <p className="text-sm text-gray-500 mt-4">
-          💡 Tự động phát hiện domain và áp dụng selectors phù hợp
-        </p>
+        <p className="text-xs text-faint mt-4">Tự động phát hiện domain và áp dụng bộ selector phù hợp.</p>
       </div>
     </div>
   )

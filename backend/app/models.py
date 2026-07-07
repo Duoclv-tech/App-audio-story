@@ -132,7 +132,7 @@ class Setting(Base):
 class Voice(Base):
     __tablename__ = "voices"
 
-    id = Column(String(36), primary_key=True)
+    id = Column(String(36), primary_key=True, default=generate_uuid)
     code = Column(String(100), unique=True, nullable=False, index=True)
     name = Column(String(255), nullable=False)
     gender = Column(String(10), nullable=False, index=True)

@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from loguru import logger
 
 from app.database import get_db
-from app import models, schemas
+from app import models, schemas, paths
 from app.services.video_processor import VideoProcessor
 from app.services.fonts import list_fonts, ensure_font, get_font_file_path
 from app.workers.video_worker import run_video_task
@@ -25,7 +25,7 @@ router = APIRouter()
 
 _PREVIEW_JOBS: dict = {}
 _PREVIEW_LOCK = threading.Lock()
-_PREVIEW_CACHE_DIR = Path(__file__).resolve().parents[2] / "cache" / "previews"
+_PREVIEW_CACHE_DIR = paths.PREVIEW_CACHE_DIR
 _PREVIEW_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 _PREVIEW_TTL_SECONDS = 3600
 
@@ -412,7 +412,7 @@ async def get_audio_duration(path: str):
 # SRTs are stored under cache/srt/<story_id>/<uuid>.srt. They are scoped to one
 # story (uploading for story A never returns paths usable from story B's UI)
 # and swept after 1 hour of inactivity to keep the cache bounded.
-_SRT_CACHE_DIR = Path(__file__).resolve().parents[2] / "cache" / "srt"
+_SRT_CACHE_DIR = paths.SRT_CACHE_DIR
 _SRT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 _SRT_TTL_SECONDS = 3600
 
@@ -896,8 +896,8 @@ async def preview_file(hash: str):
 # go to <backend>/cache/stickers_upload/<uuid>.<ext> and their absolute path is
 # stored directly in VideoConfig.stickers (no story scoping — stickers are
 # reusable across stories).
-_STICKER_LIB_DIR = Path(__file__).resolve().parents[2] / "stickers"
-_STICKER_UPLOAD_DIR = Path(__file__).resolve().parents[2] / "cache" / "stickers_upload"
+_STICKER_LIB_DIR = paths.STICKERS_DIR
+_STICKER_UPLOAD_DIR = paths.STICKER_UPLOAD_DIR
 _STICKER_LIB_DIR.mkdir(parents=True, exist_ok=True)
 _STICKER_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 _STICKER_MAX_BYTES = 5 * 1024 * 1024  # 5 MB cap per file

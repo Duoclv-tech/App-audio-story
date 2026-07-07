@@ -677,3 +677,37 @@ sequenceDiagram
 | Video render | Thread daemon | poll `video/status` (`-progress`) | → 7 |
 | Trim video | asyncio executor | **SSE** stream | (không DB) |
 | Batch CLI | tuần tự trong process | log + summary report | (ghi thẳng DB) |
+
+---
+
+## 12. Bản Desktop (Windows .exe)
+
+Ngoài chế độ web (Docker + MySQL) và batch CLI, dự án đã được đóng gói thành **app Windows cài-là-chạy** — không cần Docker/Python/Node/FFmpeg trên máy người dùng.
+
+### Khác biệt so với bản web
+
+| Hạng mục | Bản web | Bản desktop |
+|----------|---------|-------------|
+| Database | MySQL 8.0 (Docker, port 3307) | **SQLite** (`app.db`, không cần cài gì) |
+| Giao diện | Vite dev server `:5173` + backend `:8000` | **1 cửa sổ WebView2** (pywebview), FastAPI serve `dist` same-origin |
+| FFmpeg | cài sẵn trên máy | **bundled** trong app (`_internal/bin/`) |
+| Chạy | `start.bat` (nhiều terminal) | double-click app / `TruyenFullProcessor.exe` |
+| Đóng gói | — | PyInstaller onedir + Inno Setup → `Setup.exe` |
+
+### Vị trí dữ liệu (khi chạy bản đóng gói)
+- **Read-only (trong thư mục cài):** `_internal/frontend/dist`, `_internal/bin/ffmpeg.exe|ffprobe.exe`, `_internal/assets/fonts`.
+- **Ghi được (per-user):** `%LOCALAPPDATA%\TruyenFullProcessor\` — chứa `app.db`, `storage/`, `cache/`, `logs/`.
+
+### File cốt lõi của bản desktop
+- `backend/app/paths.py` — trung tâm hóa đường dẫn (phân biệt dev / frozen qua `sys.frozen` + `sys._MEIPASS`).
+- `backend/app/database.py` — engine SQLite + PRAGMA (`WAL`, `foreign_keys=ON`, `busy_timeout`); giữ nhánh MySQL nếu override `DATABASE_URL`.
+- `backend/app/seed.py` — nạp 14 giọng VBEE + 7 settings mặc định khi DB rỗng (thay cho SQL init của Docker).
+- `backend/desktop.py` — entry point: uvicorn chạy nền (port động) + cửa sổ pywebview; có `--selftest` để smoke-test.
+- `packaging/truyenfull.spec` — cấu hình PyInstaller.
+- `packaging/installer.iss` — Inno Setup (+ bootstrap WebView2 runtime).
+
+### Cách build lại
+Xem chi tiết ở [../packaging/BUILD.md](../packaging/BUILD.md). Tóm tắt: `npm run build` (frontend) → `pyinstaller packaging/truyenfull.spec` → `iscc packaging/installer.iss` → `packaging/Output/TruyenFullProcessor-Setup.exe`.
+
+### API key
+App **không** ship kèm key. Lần đầu mở, một banner nhắc người dùng vào **Cài đặt** nhập VBEE/Gemini key (lưu vào bảng `settings` của SQLite). `.env` không được đóng gói.

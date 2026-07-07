@@ -10,19 +10,22 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.style import WD_STYLE_TYPE
 from loguru import logger
 
+from app import paths
+
 
 class WordExporter:
     """Service for exporting stories to Word documents"""
 
-    def __init__(self, output_dir: str = "storage/exports"):
+    def __init__(self, output_dir: Optional[str] = None):
         """
         Initialize exporter
 
         Args:
-            output_dir: Directory to save exported files
+            output_dir: Directory to save exported files (defaults to the
+                per-user exports dir resolved by app.paths).
         """
-        self.output_dir = output_dir
-        os.makedirs(output_dir, exist_ok=True)
+        self.output_dir = output_dir or str(paths.EXPORTS_DIR)
+        os.makedirs(self.output_dir, exist_ok=True)
 
     def create_document(
         self,

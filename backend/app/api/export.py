@@ -9,7 +9,7 @@ from loguru import logger
 import os
 
 from app.database import get_db
-from app import models
+from app import models, paths
 from app.services.word_exporter import WordExporter
 
 router = APIRouter()
@@ -135,7 +135,7 @@ async def export_to_txt(story_id: str, db: Session = Depends(get_db)):
         content = "\n".join(lines)
 
         # Save to file
-        output_dir = "storage/exports"
+        output_dir = str(paths.EXPORTS_DIR)
         os.makedirs(output_dir, exist_ok=True)
 
         safe_title = "".join(c for c in story.title if c.isalnum() or c in (' ', '-', '_')).strip()[:50]

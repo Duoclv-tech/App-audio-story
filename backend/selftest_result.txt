@@ -1,0 +1,7 @@
+SELFTEST RESULTS:
+  [PASS] backend_ready
+  [PASS] health
+  [PASS] frontend_index
+  [PASS] api_voices
+  [PASS] ffmpeg_resolvable
+SELFTEST OK

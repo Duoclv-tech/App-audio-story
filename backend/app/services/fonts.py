@@ -8,6 +8,8 @@ from typing import Dict, List, Tuple
 import requests
 from loguru import logger
 
+from app import paths
+
 FONTS: Dict[str, Dict] = {
     "DejaVu Sans (system default)": {
         "name": "DejaVu Sans",
@@ -51,7 +53,7 @@ FONTS: Dict[str, Dict] = {
     },
 }
 
-FONTS_DIR = Path(__file__).resolve().parent.parent.parent / "fonts"
+FONTS_DIR = paths.FONTS_DIR
 
 
 def list_fonts() -> List[str]:

@@ -1,19 +1,21 @@
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from typing import List
-import os
+
+from app import paths
 
 class Settings(BaseSettings):
-    # Database
-    DATABASE_URL: str = "mysql+pymysql://truyenfull_user:truyenfull_pass@localhost:3307/truyenfull_db"
+    # Database — SQLite file under the per-user data dir (see app/paths.py).
+    # Kept overridable via .env for anyone still pointing at MySQL.
+    DATABASE_URL: str = f"sqlite:///{paths.DB_PATH}"
     DB_HOST: str = "localhost"
     DB_PORT: int = 3307
     DB_USER: str = "truyenfull_user"
     DB_PASSWORD: str = "truyenfull_pass"
     DB_NAME: str = "truyenfull_db"
 
-    # Storage
-    STORAGE_PATH: str = "./storage"
+    # Storage — absolute path resolved by app/paths.py (works dev + frozen)
+    STORAGE_PATH: str = str(paths.STORAGE_DIR)
 
     # VBEE TTS (Official API)
     VBEE_APP_ID: str = "c1c5c478-719d-4ec6-b665-58ed39484375"
@@ -58,7 +60,5 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# Ensure storage directories exist
-os.makedirs(os.path.join(settings.STORAGE_PATH, "stories"), exist_ok=True)
-os.makedirs(os.path.join(settings.STORAGE_PATH, "audio"), exist_ok=True)
-os.makedirs(os.path.join(settings.STORAGE_PATH, "videos"), exist_ok=True)
+# Storage/cache directories are created by app.paths.ensure_data_dirs()
+# (run on import of app.paths).

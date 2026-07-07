@@ -1,0 +1,38 @@
+# --- Secrets / local config ---
+backend/.env
+backend/.env.mysql.bak
+*.env.local
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+backend/venv/
+*.egg-info/
+
+# --- Database / runtime data ---
+backend/app.db
+backend/app.db-wal
+backend/app.db-shm
+backend/storage/
+backend/cache/
+backend/logs/
+backend/stickers/
+backend/fonts/
+logs/
+*.log
+
+# --- Bundled binaries (large; provide separately) ---
+backend/bin/ffmpeg.exe
+backend/bin/ffprobe.exe
+
+# --- Build artifacts ---
+frontend/node_modules/
+frontend/dist/
+build/
+dist/
+packaging/Output/
+*.spec.bak
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db

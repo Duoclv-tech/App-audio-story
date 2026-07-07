@@ -9,7 +9,9 @@ from typing import Optional
 
 from PIL import Image, ImageDraw
 
-MASK_DIR = Path(__file__).resolve().parent.parent.parent / "cache" / "masks"
+from app import paths
+
+MASK_DIR = paths.MASK_DIR
 MASK_SIZE = 512  # all masks are square at this resolution; ffmpeg scales to target
 
 VALID_SHAPES = {"none", "circle", "rounded", "star", "sun"}

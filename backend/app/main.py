@@ -1,17 +1,26 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from loguru import logger
 import sys
+
+from app import paths
+
+# Make bundled ffmpeg/ffprobe (backend/bin or the frozen bundle) resolvable by
+# the many literal 'ffmpeg'/'ffprobe' subprocess calls. No-op if the dir is
+# absent (dev without bundled binaries -> falls back to system PATH).
+paths.setup_ffmpeg_path()
 
 from app.config import settings
 from app.database import test_connection, init_db
 from app.api import stories, chapters, download, text, tts, audio, video, settings_api, banned_words, prompts, export, trim, video_presets
 
-# Configure loguru
+# Configure loguru — log into the per-user data dir so it works when frozen
+# (Program Files is read-only) and in dev alike.
 logger.remove()
 logger.add(sys.stderr, level="INFO" if not settings.DEBUG else "DEBUG")
-logger.add("logs/app.log", rotation="10 MB", level="DEBUG")
+logger.add(str(paths.LOG_DIR / "app.log"), rotation="10 MB", level="DEBUG")
 
 # Create FastAPI app
 app = FastAPI(
@@ -55,23 +64,27 @@ async def startup_event():
     logger.info(f"Debug mode: {settings.DEBUG}")
     logger.info(f"CORS origins: {settings.cors_origins_list}")
 
+    # Create tables (SQLite file is created on first run) then seed defaults.
+    init_db()
+
     # Test database connection
     if test_connection():
         logger.info("Database connection successful")
     else:
         logger.error("Database connection failed!")
 
-    # Initialize database tables
-    # init_db()
+    # Seed default voices + settings if the DB is empty
+    from app.seed import seed_defaults
+    seed_defaults()
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Shutdown event handler"""
     logger.info("Shutting down TruyenFull Processor API...")
 
-@app.get("/")
-async def root():
-    """Root endpoint"""
+@app.get("/api/info")
+async def api_info():
+    """API info endpoint"""
     return {
         "message": "TruyenFull Processor API",
         "version": "1.0.0",
@@ -88,6 +101,39 @@ async def health_check():
         "database": "connected" if db_status else "disconnected",
         "version": "1.0.0"
     }
+
+# --- Serve the built frontend (SPA) -----------------------------------------
+# Registered LAST so /api/*, /storage and /docs match first. The catch-all
+# returns index.html for client-side routes (/history, /processor/...) so a
+# page refresh doesn't 404.
+if paths.FRONTEND_DIST.is_dir():
+    _ASSETS_DIR = paths.FRONTEND_DIST / "assets"
+    if _ASSETS_DIR.is_dir():
+        app.mount("/assets", StaticFiles(directory=_ASSETS_DIR), name="assets")
+
+    _INDEX_HTML = paths.FRONTEND_DIST / "index.html"
+
+    @app.get("/")
+    async def spa_root():
+        return FileResponse(_INDEX_HTML)
+
+    _DIST_ROOT = paths.FRONTEND_DIST.resolve()
+
+    @app.get("/{full_path:path}")
+    async def spa_fallback(full_path: str):
+        # Never swallow API/storage/docs paths — let them 404 as JSON.
+        if full_path.startswith(("api/", "storage/")) or full_path in ("docs", "redoc", "openapi.json"):
+            raise HTTPException(status_code=404, detail="Not found")
+        # Serve a real static file only if it resolves INSIDE the dist dir
+        # (guards against path traversal like ../../etc/...).
+        candidate = (paths.FRONTEND_DIST / full_path).resolve()
+        if candidate.is_file() and candidate.is_relative_to(_DIST_ROOT):
+            return FileResponse(candidate)
+        return FileResponse(_INDEX_HTML)
+else:
+    @app.get("/")
+    async def root_no_frontend():
+        return {"message": "TruyenFull Processor API (frontend not built)", "docs": "/docs"}
 
 if __name__ == "__main__":
     import uvicorn

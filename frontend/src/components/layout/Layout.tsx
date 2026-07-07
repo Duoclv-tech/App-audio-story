@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Home, History, Settings, Shield, MessageSquare, Menu, ChevronLeft, Scissors } from 'lucide-react'
+import axios from 'axios'
+import { Home, History, Settings, Shield, MessageSquare, Menu, ChevronLeft, Scissors, AlertTriangle } from 'lucide-react'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -8,6 +9,19 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [needsApiKey, setNeedsApiKey] = useState(false)
+
+  // First-run nudge: if VBEE credentials aren't set yet, TTS won't work.
+  useEffect(() => {
+    axios.get('/api/v1/settings')
+      .then((res) => {
+        const map: Record<string, any> = {}
+        ;(res.data || []).forEach((s: any) => { map[s.setting_key] = s.setting_value })
+        const missing = !map['VBEE_APP_ID'] || !map['VBEE_BEARER_TOKEN']
+        setNeedsApiKey(missing)
+      })
+      .catch(() => {})
+  }, [])
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -33,6 +47,17 @@ export default function Layout({ children }: LayoutProps) {
           </div>
         </div>
       </header>
+
+      {/* First-run API-key nudge */}
+      {needsApiKey && (
+        <div className="bg-amber-50 border-b border-amber-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center gap-2 text-sm text-amber-800">
+            <AlertTriangle size={16} className="shrink-0" />
+            <span>Chưa cấu hình API key VBEE — tính năng chuyển văn bản thành giọng đọc (TTS) sẽ không hoạt động.</span>
+            <Link to="/settings" className="font-semibold underline hover:text-amber-900">Mở Cài đặt</Link>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 flex">
         {/* Sidebar */}

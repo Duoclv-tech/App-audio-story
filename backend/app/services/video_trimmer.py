@@ -10,9 +10,11 @@ from typing import Callable, Optional
 
 from loguru import logger
 
-STORAGE_BASE = Path(__file__).parent.parent.parent / "storage"
-TRIM_TEMP_DIR = STORAGE_BASE / "trim_temp"
-FONT_PATH = STORAGE_BASE / "fonts" / "DejaVuSans-Bold.ttf"
+from app import paths
+
+STORAGE_BASE = paths.STORAGE_DIR
+TRIM_TEMP_DIR = paths.TRIM_TEMP_DIR
+FONT_PATH = paths.default_font_path()
 
 
 def _ensure_dir(path: Path):

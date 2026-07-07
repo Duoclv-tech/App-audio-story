@@ -2498,7 +2498,7 @@ export default function ProcessorPage() {
                 onClick={handleSaveChapters}
                 className="flex-1 bg-primary-500 text-white py-2 px-4 rounded-md hover:bg-primary-600 transition"
               >
-                Continue to Grammar Check
+                Tiếp tục: Kiểm tra chính tả
               </button>
             </div>
           </div>
@@ -2577,7 +2577,7 @@ export default function ProcessorPage() {
                       {mergedView.isChecking ? (
                         <><div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div> Đang kiểm tra...</>
                       ) : (
-                        <> AI Check Grammar</>
+                        <>Kiểm tra AI</>
                       )}
                     </button>
                   </div>
@@ -2613,8 +2613,9 @@ export default function ProcessorPage() {
                       style={{
                         height: 'calc(100vh - 350px)',
                         minHeight: '500px',
-                        backgroundColor: mergedView.findText ? 'transparent' : 'white',
-                        caretColor: 'black',
+                        backgroundColor: mergedView.findText ? 'transparent' : 'var(--surface)',
+                        color: 'var(--text)',
+                        caretColor: 'var(--text)',
                         lineHeight: '1.5'
                       }}
                       placeholder="Nội dung truyện sẽ hiển thị ở đây..."
@@ -2770,19 +2771,19 @@ export default function ProcessorPage() {
                     disabled={mergedView.isSaving}
                     className="flex-1 bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 transition disabled:bg-gray-400"
                   >
-                    {mergedView.isSaving ? 'Đang lưu...' : ' Lưu thay đổi'}
+                    {mergedView.isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
                   </button>
                   <button
                     onClick={() => moveToStep(5)}
                     className="flex-1 bg-primary-500 text-white py-2 px-4 rounded-md hover:bg-primary-600 transition"
                   >
-                    Continue to TTS Configuration
+                    Tiếp tục: Cấu hình TTS
                   </button>
                   <button
                     onClick={() => moveToStep(7)}
                     className="flex-1 bg-purple-500 text-white py-2 px-4 rounded-md hover:bg-purple-600 transition"
                   >
-                    Skip to Video
+                    Bỏ qua sang Video
                   </button>
                 </div>
               </div>
@@ -5313,17 +5314,18 @@ export default function ProcessorPage() {
                           width: '100%',
                           height: '480px',
                           lineHeight: '24px',
-                          backgroundColor: editDialog.findText ? 'transparent' : 'white',
-                          caretColor: 'black'
+                          backgroundColor: editDialog.findText ? 'transparent' : 'var(--surface)',
+                          color: 'var(--text)',
+                          caretColor: 'var(--text)'
                         }}
-                        placeholder="Enter chapter content"
+                        placeholder="Nội dung chương..."
                         spellCheck={false}
                       />
                     </div>
                   </div>
 
                   <div className="mt-1 text-sm text-dim">
-                    Character count: {editDialog.content.length.toLocaleString()} | Lines: {getLineNumbers(editDialog.content).length}
+                    Số ký tự: {editDialog.content.length.toLocaleString()} | Số dòng: {getLineNumbers(editDialog.content).length}
                   </div>
                 </div>
               </div>

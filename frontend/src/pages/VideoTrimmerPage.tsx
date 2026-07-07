@@ -575,9 +575,9 @@ export default function VideoTrimmerPage() {
                 {segments.map((seg, idx) => (
                   <div
                     key={seg.id}
-                    className="flex items-center gap-3 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded text-sm"
+                    className="flex items-center gap-3 px-3 py-1.5 bg-primary-50 border border-primary-200 rounded text-sm"
                   >
-                    <span className="text-blue-400 font-mono text-xs w-4 text-right">{idx + 1}</span>
+                    <span className="text-primary-400 font-mono text-xs w-4 text-right">{idx + 1}</span>
                     <span className="font-mono text-gray-800">
                       {fmtSec(seg.start)} → {fmtSec(seg.end)}
                     </span>

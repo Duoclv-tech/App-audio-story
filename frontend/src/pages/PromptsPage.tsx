@@ -264,7 +264,7 @@ export default function PromptsPage() {
           {!showForm && (
             <button
               onClick={() => setShowForm(true)}
-              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition"
+              className="px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 transition"
             >
               + Thêm prompt
             </button>
@@ -287,7 +287,7 @@ export default function PromptsPage() {
                 placeholder="Tìm kiếm theo tiêu đề, nội dung, mô tả..."
                 value={searchTerm}
                 onChange={(e) => handleSearchChange(e.target.value)}
-                className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
 
@@ -295,7 +295,7 @@ export default function PromptsPage() {
               <select
                 value={categoryFilter}
                 onChange={(e) => handleCategoryFilterChange(e.target.value)}
-                className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 <option value="">Tất cả danh mục</option>
                 {categories.map((cat) => (
@@ -309,11 +309,11 @@ export default function PromptsPage() {
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <span>Đang lọc:</span>
               {searchTerm && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded">
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 text-primary-800 rounded">
                   Từ khóa: "{searchTerm}"
                   <button
                     onClick={() => handleSearchChange('')}
-                    className="hover:text-blue-900"
+                    className="hover:text-primary-900"
                   >
                     ×
                   </button>
@@ -339,7 +339,7 @@ export default function PromptsPage() {
 
         {/* Form */}
         {showForm && (
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="mb-6 p-4 bg-primary-50 border border-primary-200 rounded-lg">
             <h3 className="text-lg font-semibold mb-4">
               {editingId ? 'Chỉnh sửa prompt' : 'Thêm prompt mới'}
             </h3>
@@ -353,7 +353,7 @@ export default function PromptsPage() {
                     type="text"
                     value={formData.title}
                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                     placeholder="Nhập tiêu đề..."
                     required
                     disabled={loading}
@@ -367,7 +367,7 @@ export default function PromptsPage() {
                     type="text"
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                     placeholder="Nhập danh mục..."
                     list="category-list"
                     disabled={loading}
@@ -386,7 +386,7 @@ export default function PromptsPage() {
                 <textarea
                   value={formData.content}
                   onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
                   placeholder="Nhập nội dung prompt..."
                   rows={6}
                   required
@@ -400,7 +400,7 @@ export default function PromptsPage() {
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="Nhập mô tả (tùy chọn)..."
                   rows={2}
                   disabled={loading}
@@ -412,7 +412,7 @@ export default function PromptsPage() {
                   id="is_active"
                   checked={formData.is_active}
                   onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                  className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
                   disabled={loading}
                 />
                 <label htmlFor="is_active" className="ml-2 text-sm text-gray-700">
@@ -423,7 +423,7 @@ export default function PromptsPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition disabled:bg-gray-400"
+                  className="px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 transition disabled:bg-gray-400"
                 >
                   {loading ? 'Đang lưu...' : (editingId ? 'Cập nhật' : 'Thêm mới')}
                 </button>
@@ -511,7 +511,7 @@ export default function PromptsPage() {
                             handleEdit(prompt)
                             setActionMenu({ isOpen: false, promptId: null })
                           }}
-                          className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-blue-600"
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-primary-600"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -590,7 +590,7 @@ export default function PromptsPage() {
                       onClick={() => handlePageChange(pageNum)}
                       className={`px-4 py-2 rounded-md border ${
                         currentPage === pageNum
-                          ? 'bg-blue-500 text-white border-blue-500'
+                          ? 'bg-primary-500 text-white border-primary-500'
                           : 'hover:bg-gray-50'
                       }`}
                     >

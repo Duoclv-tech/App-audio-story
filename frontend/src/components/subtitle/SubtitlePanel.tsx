@@ -140,7 +140,7 @@ export function SubtitlePanel({
     }
   }, [srtPath])
 
-  const inputCls = 'w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500'
+  const inputCls = 'w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary-500'
 
   return (
     <div className="space-y-3">
@@ -174,7 +174,7 @@ export function SubtitlePanel({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 rounded text-xs text-white"
+              className="px-3 py-1.5 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded text-xs text-white"
             >{uploading ? 'Đang upload…' : 'Chọn file SRT'}</button>
             <div className="text-[11px] text-gray-500 mt-1">hoặc kéo thả vào đây</div>
           </>
@@ -297,7 +297,7 @@ export function SubtitlePanel({
               key={a}
               type="button"
               onClick={() => onChange({ subtitle_align: a })}
-              className={`px-2 py-0.5 ${style.subtitle_align === a ? 'bg-blue-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
+              className={`px-2 py-0.5 ${style.subtitle_align === a ? 'bg-primary-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
               title={`Căn ${a}`}
             >{a === 'left' ? '⇤' : a === 'right' ? '⇥' : '⇔'}</button>
           ))}
@@ -306,7 +306,7 @@ export function SubtitlePanel({
 
       <div className="text-[11px] text-gray-500">
         Vị trí: X {Math.round(style.subtitle_x * 100)}% · Y {Math.round(style.subtitle_y * 100)}%
-        <span className="ml-1 text-blue-500">(kéo phụ đề trên preview để chỉnh)</span>
+        <span className="ml-1 text-primary-500">(kéo phụ đề trên preview để chỉnh)</span>
       </div>
     </div>
   )

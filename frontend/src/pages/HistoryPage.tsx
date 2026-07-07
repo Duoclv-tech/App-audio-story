@@ -133,7 +133,7 @@ export default function HistoryPage() {
   const getStatusBadge = (status: string) => {
     const statusColors: Record<string, string> = {
       'draft': 'bg-gray-100 text-gray-800',
-      'created': 'bg-blue-100 text-blue-800',
+      'created': 'bg-primary-100 text-primary-800',
       'downloading': 'bg-yellow-100 text-yellow-800',
       'downloaded': 'bg-green-100 text-green-800',
       'ready_for_tts': 'bg-purple-100 text-purple-800',
@@ -194,7 +194,7 @@ export default function HistoryPage() {
           <h2 className="text-2xl font-bold">Lịch Sử</h2>
           <button
             onClick={() => loadStories(currentPage)}
-            className="text-sm text-blue-600 hover:text-blue-800 underline"
+            className="text-sm text-primary-600 hover:text-primary-800 underline"
           >
             Làm mới
           </button>
@@ -207,7 +207,7 @@ export default function HistoryPage() {
             placeholder="Tìm kiếm theo tên truyện, URL, hoặc tác giả..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
 
           <div className="flex items-center gap-2">
@@ -216,7 +216,7 @@ export default function HistoryPage() {
                 type="checkbox"
                 checked={favoriteOnly}
                 onChange={(e) => handleFavoriteFilterChange(e.target.checked)}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
               />
               <span className="flex items-center gap-1 text-sm text-gray-700">
                 <svg
@@ -239,8 +239,8 @@ export default function HistoryPage() {
 
         {/* Stats Summary */}
         <div className="grid grid-cols-4 gap-4 mb-6">
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <div className="text-2xl font-bold text-blue-600">{paginationMeta.total}</div>
+          <div className="bg-primary-50 p-4 rounded-lg">
+            <div className="text-2xl font-bold text-primary-600">{paginationMeta.total}</div>
             <div className="text-sm text-gray-600">Tổng số truyện</div>
           </div>
           <div className="bg-green-50 p-4 rounded-lg">
@@ -320,7 +320,7 @@ export default function HistoryPage() {
                             href={story.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline truncate max-w-md"
+                            className="text-primary-600 hover:underline truncate max-w-md"
                           >
                             {story.url}
                           </a>
@@ -345,7 +345,7 @@ export default function HistoryPage() {
                     {/* Progress Info */}
                     <div className="flex items-center gap-6 text-sm">
                       <div className="flex items-center gap-2">
-                        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                         </svg>
                         <span className="text-gray-600">
@@ -385,7 +385,7 @@ export default function HistoryPage() {
                   <div className="flex items-center gap-2 ml-4">
                     <button
                       onClick={() => handleOpenStory(story.id)}
-                      className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition text-sm font-medium"
+                      className="px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 transition text-sm font-medium"
                     >
                       Mở
                     </button>
@@ -395,7 +395,7 @@ export default function HistoryPage() {
                         <a
                           href={`/api/v1/export/${story.id}/word`}
                           download
-                          className="px-3 py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-600 transition text-sm font-medium"
+                          className="px-3 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 transition text-sm font-medium"
                           title="Export Word"
                         >
                           Word
@@ -470,7 +470,7 @@ export default function HistoryPage() {
                       onClick={() => handlePageChange(pageNum)}
                       className={`px-4 py-2 rounded-md border ${
                         currentPage === pageNum
-                          ? 'bg-blue-500 text-white border-blue-500'
+                          ? 'bg-primary-500 text-white border-primary-500'
                           : 'hover:bg-gray-50'
                       }`}
                     >

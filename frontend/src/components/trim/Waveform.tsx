@@ -32,7 +32,7 @@ export default function Waveform({ peaks, duration, segments }: Props) {
       const x = i * barW
       const ratio = duration > 0 ? (i / peaks.length) * duration : 0
       const inSelection = segments.some((s) => ratio >= s.start && ratio <= s.end)
-      ctx.fillStyle = inSelection ? '#2563eb' : '#9ca3af'
+      ctx.fillStyle = inSelection ? '#AC6D12' : '#9ca3af'
       ctx.fillRect(x, y, Math.max(1, barW - 1), h)
     })
   }, [peaks, duration, segments])

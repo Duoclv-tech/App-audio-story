@@ -93,7 +93,7 @@ export function StickerPanel({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+            className="text-xs px-2 py-1 bg-primary-500 text-white rounded hover:bg-primary-600 disabled:opacity-50"
           >
             {uploading ? 'Đang tải...' : '+ Upload custom'}
           </button>
@@ -122,7 +122,7 @@ export function StickerPanel({
                 onClick={() => setActiveCategory(cat)}
                 className={`text-[11px] px-2 py-0.5 rounded ${
                   activeCategory === cat
-                    ? 'bg-blue-500 text-white'
+                    ? 'bg-primary-500 text-white'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
@@ -148,7 +148,7 @@ export function StickerPanel({
                 type="button"
                 onClick={() => handlePick(item)}
                 title={`${item._category} / ${item.name}${item.animated ? ' (animated)' : ''}`}
-                className="relative aspect-square bg-gray-50 rounded border border-gray-200 hover:border-blue-400 hover:bg-white p-1 transition"
+                className="relative aspect-square bg-gray-50 rounded border border-gray-200 hover:border-primary-400 hover:bg-white p-1 transition"
               >
                 <img
                   src={stickerFileUrl(item.path)}
@@ -156,7 +156,7 @@ export function StickerPanel({
                   className="w-full h-full object-contain pointer-events-none"
                 />
                 {item.animated && (
-                  <span className="absolute top-0 right-0 text-[8px] bg-blue-500 text-white px-1 rounded-bl">GIF</span>
+                  <span className="absolute top-0 right-0 text-[8px] bg-primary-500 text-white px-1 rounded-bl">GIF</span>
                 )}
               </button>
             ))}
@@ -189,7 +189,7 @@ export function StickerPanel({
                 onClick={() => onSelect(s.id)}
                 className={`flex items-center gap-2 p-1.5 rounded border cursor-pointer ${
                   selectedId === s.id
-                    ? 'border-blue-400 bg-blue-50'
+                    ? 'border-primary-400 bg-primary-50'
                     : 'border-gray-200 hover:border-gray-300'
                 }`}
               >

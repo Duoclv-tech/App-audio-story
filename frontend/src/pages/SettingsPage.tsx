@@ -75,15 +75,15 @@ export default function SettingsPage() {
       {/* VBEE API Configuration */}
       <div className="mb-8">
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <span className="text-blue-600">🔑</span>
+          <span className="text-primary-600">🔑</span>
           Cấu Hình VBEE API
         </h3>
 
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-          <div className="text-sm text-blue-800 mb-2 font-medium">
+        <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 mb-4">
+          <div className="text-sm text-primary-800 mb-2 font-medium">
             Hướng dẫn lấy credentials:
           </div>
-          <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
+          <ol className="text-sm text-primary-700 space-y-1 list-decimal list-inside">
             <li>Đăng nhập <a href="https://vbee.vn" target="_blank" rel="noopener noreferrer" className="underline">https://vbee.vn</a></li>
             <li>Vào phần <strong>Quản lý ứng dụng</strong></li>
             <li>Tạo app mới hoặc chọn app có sẵn</li>
@@ -103,7 +103,7 @@ export default function SettingsPage() {
               value={settings.VBEE_APP_ID || ''}
               onChange={(e) => handleInputChange('VBEE_APP_ID', e.target.value)}
               placeholder="c1c5c478-719d-4ec6-b665-58ed39484375"
-              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
             />
             <p className="text-xs text-gray-500 mt-1">
               ID ứng dụng từ VBEE Dashboard
@@ -121,12 +121,12 @@ export default function SettingsPage() {
                 value={settings.VBEE_BEARER_TOKEN || ''}
                 onChange={(e) => handleInputChange('VBEE_BEARER_TOKEN', e.target.value)}
                 placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI..."
-                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pr-20 font-mono text-sm"
+                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 pr-20 font-mono text-sm"
               />
               <button
                 type="button"
                 onClick={() => setShowTokens(!showTokens)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-blue-600 hover:text-blue-800"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-primary-600 hover:text-primary-800"
               >
                 {showTokens ? 'Ẩn' : 'Hiện'}
               </button>
@@ -199,7 +199,7 @@ export default function SettingsPage() {
         <button
           onClick={handleSaveSettings}
           disabled={saving}
-          className="bg-blue-500 text-white px-6 py-2 rounded-md hover:bg-blue-600 transition disabled:bg-gray-400"
+          className="bg-primary-500 text-white px-6 py-2 rounded-md hover:bg-primary-600 transition disabled:bg-gray-400"
         >
           {saving ? 'Đang lưu...' : 'Lưu Cài Đặt'}
         </button>

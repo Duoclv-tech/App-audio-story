@@ -2094,7 +2094,7 @@ export default function ProcessorPage() {
                   className={`
                     flex items-center justify-center w-10 h-10 rounded-full border-2
                     ${isCurrentStep
-                      ? 'bg-blue-500 text-white border-blue-500 cursor-pointer'
+                      ? 'bg-primary-500 text-white border-primary-500 cursor-pointer'
                       : isCompleted
                       ? 'bg-green-500 text-white border-green-500 cursor-pointer hover:bg-green-600'
                       : isAccessible
@@ -2254,7 +2254,7 @@ export default function ProcessorPage() {
                   value={storyData.url}
                   onChange={(e) => setStoryData({ ...storyData, url: e.target.value })}
                   placeholder="https://truyenfull.vision/story-name"
-                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   required
                   disabled={loading}
                 />
@@ -2266,7 +2266,7 @@ export default function ProcessorPage() {
                   value={storyData.title}
                   onChange={(e) => setStoryData({ ...storyData, title: e.target.value })}
                   placeholder="Enter story title"
-                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   required
                   disabled={loading}
                 />
@@ -2279,7 +2279,7 @@ export default function ProcessorPage() {
                     value={storyData.start_chapter}
                     onChange={(e) => setStoryData({ ...storyData, start_chapter: parseInt(e.target.value) })}
                     min="1"
-                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                     required
                     disabled={loading || (storyData.custom_chapter_urls && storyData.custom_chapter_urls.length > 0)}
                   />
@@ -2291,7 +2291,7 @@ export default function ProcessorPage() {
                     value={storyData.end_chapter}
                     onChange={(e) => setStoryData({ ...storyData, end_chapter: parseInt(e.target.value) })}
                     min="1"
-                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                     required
                     disabled={loading || (storyData.custom_chapter_urls && storyData.custom_chapter_urls.length > 0)}
                   />
@@ -2368,7 +2368,7 @@ export default function ProcessorPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition disabled:bg-gray-400"
+                className="w-full bg-primary-500 text-white py-2 px-4 rounded-md hover:bg-primary-600 transition disabled:bg-gray-400"
               >
                 {loading ? 'Downloading chapters...' : 'Start Download'}
               </button>
@@ -2383,16 +2383,16 @@ export default function ProcessorPage() {
 
             {/* Statistics Section */}
             {checkingGrammar && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
                 <div className="flex items-center gap-2">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
-                  <span className="text-sm text-blue-800">Đang kiểm tra ngữ pháp...</span>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600"></div>
+                  <span className="text-sm text-primary-800">Đang kiểm tra ngữ pháp...</span>
                 </div>
               </div>
             )}
 
             {chapterStats && !checkingGrammar && (
-              <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-4">
+              <div className="bg-gradient-to-r from-primary-50 to-purple-50 border border-primary-200 rounded-lg p-4">
                 <h4 className="font-semibold text-gray-800 mb-3">Thống kê</h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div className="bg-white rounded-lg p-3 shadow-sm">
@@ -2401,7 +2401,7 @@ export default function ProcessorPage() {
                   </div>
                   <div className="bg-white rounded-lg p-3 shadow-sm">
                     <div className="text-xs text-gray-500 mb-1">Tổng số ký tự</div>
-                    <div className="text-2xl font-bold text-blue-600">{chapterStats.total_characters.toLocaleString()}</div>
+                    <div className="text-2xl font-bold text-primary-600">{chapterStats.total_characters.toLocaleString()}</div>
                   </div>
                   <div className="bg-white rounded-lg p-3 shadow-sm">
                     <div className="text-xs text-gray-500 mb-1">Trung bình/chương</div>
@@ -2461,7 +2461,7 @@ export default function ProcessorPage() {
                         <div className="flex items-center gap-2 ml-4">
                           <button
                             onClick={() => handleEditChapter(chapter)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                            className="p-2 text-primary-600 hover:bg-primary-50 rounded-md transition-colors"
                             title="Edit chapter"
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2492,7 +2492,7 @@ export default function ProcessorPage() {
             <div className="flex gap-3">
               <button
                 onClick={handleSaveChapters}
-                className="flex-1 bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition"
+                className="flex-1 bg-primary-500 text-white py-2 px-4 rounded-md hover:bg-primary-600 transition"
               >
                 Continue to Grammar Check
               </button>
@@ -2646,8 +2646,8 @@ export default function ProcessorPage() {
 
                       {/* Summary */}
                       {mergedView.aiResult.summary && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                          <h4 className="font-semibold text-blue-700 mb-2">📋 Tóm tắt</h4>
+                        <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 mb-4">
+                          <h4 className="font-semibold text-primary-700 mb-2">📋 Tóm tắt</h4>
                           <p className="text-gray-700">{mergedView.aiResult.summary}</p>
                         </div>
                       )}
@@ -2765,7 +2765,7 @@ export default function ProcessorPage() {
                   </button>
                   <button
                     onClick={() => moveToStep(5)}
-                    className="flex-1 bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition"
+                    className="flex-1 bg-primary-500 text-white py-2 px-4 rounded-md hover:bg-primary-600 transition"
                   >
                     Continue to TTS Configuration
                   </button>
@@ -2791,7 +2791,7 @@ export default function ProcessorPage() {
                 <select
                   value={ttsConfig.voice_code}
                   onChange={(e) => setTtsConfig({ ...ttsConfig, voice_code: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   disabled={loading}
                 >
                   {voices.map((voice) => (
@@ -2811,7 +2811,7 @@ export default function ProcessorPage() {
                     min="0.5"
                     max="2.0"
                     step="0.1"
-                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                     disabled={loading}
                   />
                 </div>
@@ -2820,7 +2820,7 @@ export default function ProcessorPage() {
                   <select
                     value={ttsConfig.bitrate}
                     onChange={(e) => setTtsConfig({ ...ttsConfig, bitrate: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                     disabled={loading}
                   >
                     <option value={128}>128 kbps</option>
@@ -2835,7 +2835,7 @@ export default function ProcessorPage() {
               <button
                 onClick={handleStartTTS}
                 disabled={loading}
-                className="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition disabled:bg-gray-400"
+                className="w-full bg-primary-500 text-white py-2 px-4 rounded-md hover:bg-primary-600 transition disabled:bg-gray-400"
               >
                 {loading ? 'Processing TTS...' : 'Start TTS Processing'}
               </button>
@@ -2852,14 +2852,14 @@ export default function ProcessorPage() {
             <div className={`border rounded-lg p-4 ${
               mergedTtsStatus.status === 'completed' ? 'bg-green-50 border-green-200' :
               mergedTtsStatus.status === 'failed' ? 'bg-red-50 border-red-200' :
-              mergedTtsStatus.status === 'running' ? 'bg-blue-50 border-blue-200' :
+              mergedTtsStatus.status === 'running' ? 'bg-primary-50 border-primary-200' :
               'bg-gray-50 border-gray-200'
             }`}>
               <div className="flex items-center justify-between mb-3">
                 <span className="font-medium">Trạng thái TTS</span>
                 <button
                   onClick={() => fetchMergedTtsStatus()}
-                  className="text-xs text-blue-600 hover:text-blue-800 underline"
+                  className="text-xs text-primary-600 hover:text-primary-800 underline"
                 >
                   Refresh
                 </button>
@@ -2874,8 +2874,8 @@ export default function ProcessorPage() {
                     </span>
                   )}
                   {mergedTtsStatus.status === 'running' && (
-                    <span className="px-3 py-1 rounded-full bg-blue-200 text-blue-700 text-sm font-medium flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-700"></div>
+                    <span className="px-3 py-1 rounded-full bg-primary-200 text-primary-700 text-sm font-medium flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-700"></div>
                       Đang xử lý TTS...
                     </span>
                   )}
@@ -2936,8 +2936,8 @@ export default function ProcessorPage() {
 
             {/* Info Message */}
             {mergedTtsStatus.status === 'running' && (
-              <div className="text-sm text-blue-600 bg-blue-50 p-3 rounded-md flex items-center gap-2">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+              <div className="text-sm text-primary-600 bg-primary-50 p-3 rounded-md flex items-center gap-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
                 Đang xử lý TTS... Trang sẽ tự động cập nhật mỗi 10 giây.
               </div>
             )}
@@ -3013,7 +3013,7 @@ export default function ProcessorPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-semibold text-blue-600">📋 Preset:</span>
+                <span className="text-sm font-semibold text-primary-600">📋 Preset:</span>
                 <select
                   value={selectedPresetId}
                   onChange={(e) => {
@@ -3022,7 +3022,7 @@ export default function ProcessorPage() {
                     if (v !== '') loadPreset(v)
                   }}
                   disabled={isProcessing}
-                  className="px-2 py-1.5 text-sm border rounded bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 min-w-[180px]"
+                  className="px-2 py-1.5 text-sm border rounded bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 min-w-[180px]"
                 >
                   <option value="">
                     {videoPresets.length === 0 ? '-- Chưa có preset --' : '-- Chọn preset --'}
@@ -3036,7 +3036,7 @@ export default function ProcessorPage() {
                     <button
                       onClick={updateSelectedPresetCfg}
                       disabled={isProcessing}
-                      className="text-xs px-2 py-1.5 bg-gray-100 hover:bg-blue-100 text-gray-700 hover:text-blue-700 rounded border disabled:opacity-50"
+                      className="text-xs px-2 py-1.5 bg-gray-100 hover:bg-primary-100 text-gray-700 hover:text-primary-700 rounded border disabled:opacity-50"
                       title="Cập nhật preset đã chọn với config hiện tại"
                     >
                       🔄
@@ -3073,7 +3073,7 @@ export default function ProcessorPage() {
                 <button
                   onClick={savePreset}
                   disabled={isProcessing}
-                  className="text-xs px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+                  className="text-xs px-3 py-1.5 bg-primary-500 text-white rounded hover:bg-primary-600 disabled:opacity-50"
                 >
                   💾 Lưu config hiện tại
                 </button>
@@ -3119,7 +3119,7 @@ export default function ProcessorPage() {
                   onClick={() => setVideoTab(tab.key)}
                   className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
                     videoTab === tab.key
-                      ? 'border-blue-500 text-blue-600'
+                      ? 'border-primary-500 text-primary-600'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
                 >
@@ -3132,7 +3132,7 @@ export default function ProcessorPage() {
             {videoTab === 'basic' && <div className="space-y-3 p-3">
                 {/* Inputs card */}
                 <div className="border rounded-lg p-4 bg-white space-y-3">
-                  <h4 className="font-semibold text-blue-600 text-sm">📁 Nguồn dữ liệu</h4>
+                  <h4 className="font-semibold text-primary-600 text-sm">📁 Nguồn dữ liệu</h4>
 
                   <div>
                     <label className="block text-xs font-medium mb-1 text-gray-600">Audio File Path</label>
@@ -3142,7 +3142,7 @@ export default function ProcessorPage() {
                         value={videoConfig.audioPath}
                         onChange={(e) => setVideoConfig(prev => ({ ...prev, audioPath: e.target.value }))}
                         placeholder="D:\path\to\audio\file.mp3"
-                        className="flex-1 px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="flex-1 px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                         disabled={isProcessing}
                       />
                       <button
@@ -3166,7 +3166,7 @@ export default function ProcessorPage() {
                           setFolderValidation({ valid: false, videoCount: 0, totalDuration: '', checked: false })
                         }}
                         placeholder="D:\path\to\video\folder"
-                        className="flex-1 px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="flex-1 px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                         disabled={isProcessing}
                       />
                       <button
@@ -3179,7 +3179,7 @@ export default function ProcessorPage() {
                       <button
                         onClick={validateVideoFolder}
                         disabled={!videoConfig.folder.trim() || videoStatus.status === 'running'}
-                        className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+                        className="px-3 py-1.5 text-sm bg-primary-500 text-white rounded hover:bg-primary-600 disabled:opacity-50"
                       >
                         Validate
                       </button>
@@ -3201,7 +3201,7 @@ export default function ProcessorPage() {
                         value={videoConfig.bannerImage}
                         onChange={(e) => setVideoConfig(prev => ({ ...prev, bannerImage: e.target.value }))}
                         placeholder="D:\path\to\banner.png"
-                        className="flex-1 px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="flex-1 px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                         disabled={isProcessing}
                       />
                       <button
@@ -3239,7 +3239,7 @@ export default function ProcessorPage() {
 
                 {/* Config card */}
                 <div className="border rounded-lg p-4 bg-white space-y-3">
-                  <h4 className="font-semibold text-blue-600 text-sm">⚙️ Cấu hình video</h4>
+                  <h4 className="font-semibold text-primary-600 text-sm">⚙️ Cấu hình video</h4>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium mb-1 text-gray-600">Audio Speed</label>
@@ -3248,7 +3248,7 @@ export default function ProcessorPage() {
                         value={videoConfig.audio_speed}
                         onChange={(e) => setVideoConfig(prev => ({ ...prev, audio_speed: parseFloat(e.target.value) || 1.0 }))}
                         step="0.01" min="0.5" max="2.0"
-                        className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                         disabled={videoStatus.status === 'running'}
                       />
                     </div>
@@ -3259,7 +3259,7 @@ export default function ProcessorPage() {
                         value={videoConfig.transition_duration}
                         onChange={(e) => setVideoConfig(prev => ({ ...prev, transition_duration: parseFloat(e.target.value) || 0.5 }))}
                         step="0.1" min="0.1" max="3"
-                        className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                         disabled={videoStatus.status === 'running'}
                       />
                     </div>
@@ -3268,7 +3268,7 @@ export default function ProcessorPage() {
                       <select
                         value={videoConfig.resolution}
                         onChange={(e) => setVideoConfig(prev => ({ ...prev, resolution: e.target.value }))}
-                        className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                         disabled={videoStatus.status === 'running'}
                       >
                         <option value="1920x1080">1920x1080 (16:9 — 1080p)</option>
@@ -3317,7 +3317,7 @@ export default function ProcessorPage() {
                 className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-lg"
               >
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-blue-600 text-sm">🏷️ Watermark & 🌅 Fade</span>
+                  <span className="font-semibold text-primary-600 text-sm">🏷️ Watermark & 🌅 Fade</span>
                   {(() => {
                     const active: string[] = []
                     if (videoConfig.watermarkImage) active.push('logo')
@@ -3345,7 +3345,7 @@ export default function ProcessorPage() {
                       value={videoConfig.watermarkImage}
                       onChange={(e) => setVideoConfig(prev => ({ ...prev, watermarkImage: e.target.value }))}
                       placeholder="D:\path\to\logo.png"
-                      className="flex-1 min-w-0 px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="flex-1 min-w-0 px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                       disabled={isProcessing}
                     />
                     <button
@@ -3372,7 +3372,7 @@ export default function ProcessorPage() {
                       <div>
                         <label className="block text-xs text-gray-600 mb-1">
                           Vị trí: X {Math.round(videoConfig.watermark_x * 100)}% · Y {Math.round(videoConfig.watermark_y * 100)}%
-                          <span className="ml-2 text-[10px] text-blue-500">(kéo trên preview để chỉnh)</span>
+                          <span className="ml-2 text-[10px] text-primary-500">(kéo trên preview để chỉnh)</span>
                         </label>
                         <div className="grid grid-cols-5 gap-1">
                           {([
@@ -3390,8 +3390,8 @@ export default function ProcessorPage() {
                                 disabled={isProcessing}
                                 className={`text-sm px-2 py-1 rounded border ${
                                   active
-                                    ? 'bg-blue-500 text-white border-blue-500'
-                                    : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                                    ? 'bg-primary-500 text-white border-primary-500'
+                                    : 'bg-white text-gray-600 border-gray-300 hover:border-primary-400'
                                 }`}
                                 title={`${Math.round(x*100)}%, ${Math.round(y*100)}%`}
                               >
@@ -3410,7 +3410,7 @@ export default function ProcessorPage() {
                               type="number" min={16} max={4096} step={4}
                               value={videoConfig.watermark_w}
                               onChange={(e) => setVideoConfig(prev => ({ ...prev, watermark_w: parseInt(e.target.value) || 200 }))}
-                              className="w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                               disabled={isProcessing}
                             />
                           </div>
@@ -3421,7 +3421,7 @@ export default function ProcessorPage() {
                               type="number" min={16} max={4096} step={4}
                               value={videoConfig.watermark_h}
                               onChange={(e) => setVideoConfig(prev => ({ ...prev, watermark_h: parseInt(e.target.value) || 200 }))}
-                              className="w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                               disabled={isProcessing}
                             />
                           </div>
@@ -3456,8 +3456,8 @@ export default function ProcessorPage() {
                                 title={t}
                                 className={`text-base px-2 py-1 rounded border ${
                                   active
-                                    ? 'bg-blue-500 text-white border-blue-500'
-                                    : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                                    ? 'bg-primary-500 text-white border-primary-500'
+                                    : 'bg-white text-gray-600 border-gray-300 hover:border-primary-400'
                                 }`}
                               >
                                 {lbl}
@@ -3496,7 +3496,7 @@ export default function ProcessorPage() {
                     value={videoConfig.watermark_text}
                     onChange={(e) => setVideoConfig(prev => ({ ...prev, watermark_text: e.target.value }))}
                     placeholder="Vd: @MyChannel, ©2026..."
-                    className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                     disabled={isProcessing}
                   />
 
@@ -3507,7 +3507,7 @@ export default function ProcessorPage() {
                         <select
                           value={videoConfig.watermark_text_font}
                           onChange={(e) => setVideoConfig(prev => ({ ...prev, watermark_text_font: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                           disabled={isProcessing}
                         >
                           {availableFonts.map(f => <option key={f} value={f}>{f}</option>)}
@@ -3553,7 +3553,7 @@ export default function ProcessorPage() {
                       <div>
                         <label className="block text-xs text-gray-600 mb-1">
                           Vị trí: X {Math.round(videoConfig.watermark_text_x * 100)}% · Y {Math.round(videoConfig.watermark_text_y * 100)}%
-                          <span className="ml-2 text-[10px] text-blue-500">(kéo trên preview để chỉnh)</span>
+                          <span className="ml-2 text-[10px] text-primary-500">(kéo trên preview để chỉnh)</span>
                         </label>
                         <div className="grid grid-cols-5 gap-1">
                           {([
@@ -3571,8 +3571,8 @@ export default function ProcessorPage() {
                                 disabled={isProcessing}
                                 className={`text-sm px-2 py-1 rounded border ${
                                   active
-                                    ? 'bg-blue-500 text-white border-blue-500'
-                                    : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                                    ? 'bg-primary-500 text-white border-primary-500'
+                                    : 'bg-white text-gray-600 border-gray-300 hover:border-primary-400'
                                 }`}
                                 title={`${Math.round(x*100)}%, ${Math.round(y*100)}%`}
                               >
@@ -3639,7 +3639,7 @@ export default function ProcessorPage() {
                 className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-lg"
               >
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-blue-600 text-sm">🎵 Audio Visualizer</span>
+                  <span className="font-semibold text-primary-600 text-sm">🎵 Audio Visualizer</span>
                   {videoConfig.visualizer_enabled ? (
                     <span className="text-[11px] text-gray-500">
                       ({videoConfig.visualizer_style}
@@ -3685,8 +3685,8 @@ export default function ProcessorPage() {
                               title={t}
                               className={`text-xs px-2 py-1.5 rounded border ${
                                 active
-                                  ? 'bg-blue-500 text-white border-blue-500'
-                                  : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                                  ? 'bg-primary-500 text-white border-primary-500'
+                                  : 'bg-white text-gray-600 border-gray-300 hover:border-primary-400'
                               }`}
                             >
                               {lbl}
@@ -3774,7 +3774,7 @@ export default function ProcessorPage() {
                     <div>
                       <label className="block text-xs text-gray-600 mb-1">
                         Vị trí: X {Math.round(videoConfig.visualizer_x * 100)}% · Y {Math.round(videoConfig.visualizer_y * 100)}%
-                        <span className="ml-2 text-[10px] text-blue-500">(kéo trên preview để chỉnh)</span>
+                        <span className="ml-2 text-[10px] text-primary-500">(kéo trên preview để chỉnh)</span>
                       </label>
                       <div className="grid grid-cols-5 gap-1">
                         {([
@@ -3792,8 +3792,8 @@ export default function ProcessorPage() {
                               disabled={isProcessing}
                               className={`text-sm px-2 py-1 rounded border ${
                                 active
-                                  ? 'bg-blue-500 text-white border-blue-500'
-                                  : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                                  ? 'bg-primary-500 text-white border-primary-500'
+                                  : 'bg-white text-gray-600 border-gray-300 hover:border-primary-400'
                               }`}
                               title={`${Math.round(x*100)}%, ${Math.round(y*100)}%`}
                             >
@@ -3814,7 +3814,7 @@ export default function ProcessorPage() {
                             type="number" min={64} max={4096} step={4}
                             value={videoConfig.visualizer_w}
                             onChange={(e) => setVideoConfig(prev => ({ ...prev, visualizer_w: parseInt(e.target.value) || 800 }))}
-                            className="w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                             disabled={isProcessing}
                           />
                         </div>
@@ -3825,7 +3825,7 @@ export default function ProcessorPage() {
                             type="number" min={32} max={1080} step={4}
                             value={videoConfig.visualizer_h}
                             onChange={(e) => setVideoConfig(prev => ({ ...prev, visualizer_h: parseInt(e.target.value) || 120 }))}
-                            className="w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-2 py-1 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                             disabled={isProcessing}
                           />
                         </div>
@@ -3874,7 +3874,7 @@ export default function ProcessorPage() {
                         <select
                           value={videoConfig.visualizer_spectrum_preset}
                           onChange={(e) => setVideoConfig(prev => ({ ...prev, visualizer_spectrum_preset: e.target.value }))}
-                          className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                           disabled={isProcessing}
                         >
                           {['rainbow','intensity','channel','moreland','nebulae','fire','fiery','fruit','cool','magma','green','viridis','plasma','cividis','terrain'].map(p => (
@@ -3958,7 +3958,7 @@ export default function ProcessorPage() {
                 className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-lg"
               >
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-blue-600 text-sm">💬 Subtitle (SRT)</span>
+                  <span className="font-semibold text-primary-600 text-sm">💬 Subtitle (SRT)</span>
                   {videoConfig.subtitle_srt_path ? (
                     <span className="text-[11px] text-gray-500">({videoConfig.subtitle_animation})</span>
                   ) : (
@@ -4004,7 +4004,7 @@ export default function ProcessorPage() {
             {/* Transitions card (full width) */}
             <div className="border rounded-lg p-4 bg-white space-y-2">
               <div className="flex items-center justify-between">
-                <h4 className="font-semibold text-blue-600 text-sm">🎞️ Transitions Pool</h4>
+                <h4 className="font-semibold text-primary-600 text-sm">🎞️ Transitions Pool</h4>
                 <span className="text-xs text-gray-400">
                   {videoConfig.transitions_pool.length} chọn · random mỗi clip
                 </span>
@@ -4019,7 +4019,7 @@ export default function ProcessorPage() {
                       disabled={videoStatus.status === 'running'}
                       className={`text-xs px-2 py-1 rounded transition ${
                         active
-                          ? 'bg-blue-500 text-white'
+                          ? 'bg-primary-500 text-white'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                     >
@@ -4038,7 +4038,7 @@ export default function ProcessorPage() {
                 className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-lg"
               >
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-blue-600 text-sm">🏷️ Stickers / Nhãn dán</span>
+                  <span className="font-semibold text-primary-600 text-sm">🏷️ Stickers / Nhãn dán</span>
                   <span className="text-[11px] text-gray-500">
                     {videoConfig.stickers.length > 0
                       ? `(${videoConfig.stickers.length} đang dùng)`
@@ -4088,7 +4088,7 @@ export default function ProcessorPage() {
                 className="flex items-center justify-between w-full text-left"
                 onClick={() => setAntiDetectionOpen(v => !v)}
               >
-                <h4 className="font-semibold text-blue-600 text-sm">🛡️ Chống quét bản quyền</h4>
+                <h4 className="font-semibold text-primary-600 text-sm">🛡️ Chống quét bản quyền</h4>
                 <span className="flex items-center gap-2 text-xs text-gray-400">
                   {!antiDetectionOpen && <span>tích option để bật</span>}
                   <span className="text-gray-500">{antiDetectionOpen ? '▲' : '▼'}</span>
@@ -4290,7 +4290,7 @@ export default function ProcessorPage() {
             {/* Preview */}
             <div className="border rounded-lg p-4 bg-gradient-to-br from-slate-50 to-slate-100 space-y-3">
               <div className="flex items-center justify-between">
-                <h4 className="font-semibold text-blue-600 text-sm">📺 Preview</h4>
+                <h4 className="font-semibold text-primary-600 text-sm">📺 Preview</h4>
                 {clipList.length > 0 && (
                   <span className="text-[11px] text-gray-400">{clipList.length} clip · cycle theo folder order</span>
                 )}
@@ -4771,7 +4771,7 @@ export default function ProcessorPage() {
                     <div className="relative h-1.5 mb-2 group cursor-pointer">
                       <div className="absolute inset-0 rounded-full bg-white/25" />
                       <div
-                        className="absolute top-0 left-0 bottom-0 rounded-full bg-blue-500 group-hover:bg-blue-400 transition-colors"
+                        className="absolute top-0 left-0 bottom-0 rounded-full bg-primary-500 group-hover:bg-primary-400 transition-colors"
                         style={{ width: `${timelineTotal ? (previewCurrentTime / timelineTotal) * 100 : 0}%` }}
                       />
                       <div
@@ -4795,7 +4795,7 @@ export default function ProcessorPage() {
                       <button
                         type="button"
                         onClick={togglePreviewPlay}
-                        className="hover:text-blue-300 transition"
+                        className="hover:text-primary-300 transition"
                         title={previewPlaying ? 'Pause (k)' : 'Play (k)'}
                       >
                         {previewPlaying ? (
@@ -4818,7 +4818,7 @@ export default function ProcessorPage() {
                         <button
                           type="button"
                           onClick={togglePreviewMute}
-                          className="hover:text-blue-300 transition"
+                          className="hover:text-primary-300 transition"
                           title={previewMuted ? 'Unmute (m)' : 'Mute (m)'}
                         >
                           {previewMuted || previewVolume === 0 ? (
@@ -4840,7 +4840,7 @@ export default function ProcessorPage() {
                       <button
                         type="button"
                         onClick={togglePreviewFullscreen}
-                        className="hover:text-blue-300 transition"
+                        className="hover:text-primary-300 transition"
                         title="Fullscreen (f)"
                       >
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
@@ -4899,8 +4899,8 @@ export default function ProcessorPage() {
             {(videoStatus.status === 'running' || videoStatus.status === 'queued') && (
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-blue-600 flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  <span className="text-primary-600 flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
                     Đang xử lý video...
                   </span>
                   <span>{videoStatus.progress}%</span>
@@ -5106,7 +5106,7 @@ export default function ProcessorPage() {
                     type="text"
                     value={editDialog.title}
                     onChange={(e) => setEditDialog({ ...editDialog, title: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                     placeholder="Enter chapter title"
                     spellCheck={false}
                   />
@@ -5115,8 +5115,8 @@ export default function ProcessorPage() {
                 {/* Find and Replace + Quick Add Banned Word - Side by Side */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Find and Replace Section */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <h4 className="text-sm font-semibold text-blue-900 mb-3">Tìm và Thay Thế</h4>
+                  <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-primary-900 mb-3">Tìm và Thay Thế</h4>
                     <div className="space-y-3">
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">Tìm kiếm</label>
@@ -5131,7 +5131,7 @@ export default function ProcessorPage() {
                             setEditDialog(prev => ({ ...prev, findText: e.target.value, matchCount: matches ? matches.length : 0 }))
                           }}
                           onKeyPress={(e) => e.key === 'Enter' && handleFindText()}
-                          className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                           placeholder="Nhập từ cần tìm..."
                           spellCheck={false}
                         />
@@ -5142,7 +5142,7 @@ export default function ProcessorPage() {
                           type="text"
                           value={editDialog.replaceText}
                           onChange={(e) => setEditDialog({ ...editDialog, replaceText: e.target.value })}
-                          className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                           placeholder="Nhập từ thay thế..."
                           spellCheck={false}
                         />
@@ -5165,7 +5165,7 @@ export default function ProcessorPage() {
                       <div className="flex flex-wrap gap-2">
                         <button
                           onClick={handleFindText}
-                          className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition"
+                          className="px-3 py-1.5 text-sm bg-primary-500 text-white rounded hover:bg-primary-600 transition"
                           disabled={!editDialog.findText}
                         >
                           🔍 Tìm
@@ -5288,7 +5288,7 @@ export default function ProcessorPage() {
                         value={editDialog.content}
                         onChange={(e) => setEditDialog({ ...editDialog, content: e.target.value })}
                         onScroll={handleTextareaScroll}
-                        className="relative px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm resize-none leading-6"
+                        className="relative px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm resize-none leading-6"
                         style={{
                           width: '100%',
                           height: '480px',
@@ -5336,7 +5336,7 @@ export default function ProcessorPage() {
                 </button>
                 <button
                   onClick={handleSaveEditedChapter}
-                  className="px-6 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition disabled:bg-gray-400"
+                  className="px-6 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 transition disabled:bg-gray-400"
                   disabled={loading}
                 >
                   {loading ? 'Saving...' : 'Save Changes'}
@@ -5375,7 +5375,7 @@ export default function ProcessorPage() {
             <div className="flex-1 overflow-y-auto p-2" style={{ minHeight: '300px' }}>
               {folderBrowser.loading ? (
                 <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
                   <span className="ml-2 text-gray-500">Loading...</span>
                 </div>
               ) : (
@@ -5384,7 +5384,7 @@ export default function ProcessorPage() {
                   {folderBrowser.parentPath !== null && (
                     <button
                       onClick={() => openFolderBrowser(folderBrowser.parentPath || '')}
-                      className="w-full text-left px-3 py-2 hover:bg-blue-50 rounded flex items-center gap-2 text-blue-600"
+                      className="w-full text-left px-3 py-2 hover:bg-primary-50 rounded flex items-center gap-2 text-primary-600"
                     >
                       <span>&#8593;</span> ..
                     </button>
@@ -5413,7 +5413,7 @@ export default function ProcessorPage() {
               <button
                 onClick={selectFolder}
                 disabled={!folderBrowser.currentPath}
-                className="flex-1 bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 disabled:opacity-50 transition font-semibold"
+                className="flex-1 bg-primary-500 text-white py-2 px-4 rounded-md hover:bg-primary-600 disabled:opacity-50 transition font-semibold"
               >
                 Select This Folder
                 {folderBrowser.videoCount > 0 && ` (${folderBrowser.videoCount} videos)`}
@@ -5444,12 +5444,12 @@ export default function ProcessorPage() {
               {(exactPreview.status === 'queued' || exactPreview.status === 'running') && (
                 <div className="space-y-3 py-8">
                   <div className="flex items-center justify-center gap-3 text-gray-700">
-                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"></div>
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary-600 border-t-transparent"></div>
                     <span>Đang render preview với ffmpeg... ({exactPreview.progress}%)</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                     <div
-                      className="bg-blue-500 h-full transition-all"
+                      className="bg-primary-500 h-full transition-all"
                       style={{ width: `${exactPreview.progress}%` }}
                     />
                   </div>
@@ -5521,7 +5521,7 @@ export default function ProcessorPage() {
             <div className="flex-1 overflow-y-auto p-2" style={{ minHeight: '300px' }}>
               {audioBrowser.loading ? (
                 <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
                   <span className="ml-2 text-gray-500">Loading...</span>
                 </div>
               ) : (
@@ -5530,7 +5530,7 @@ export default function ProcessorPage() {
                   {audioBrowser.parentPath !== null && (
                     <button
                       onClick={() => openAudioBrowser(audioBrowser.parentPath || '')}
-                      className="w-full text-left px-3 py-2 hover:bg-blue-50 rounded flex items-center gap-2 text-blue-600"
+                      className="w-full text-left px-3 py-2 hover:bg-primary-50 rounded flex items-center gap-2 text-primary-600"
                     >
                       <span>&#8593;</span> ..
                     </button>
@@ -5555,7 +5555,7 @@ export default function ProcessorPage() {
                       onClick={() => selectAudioFile(file)}
                       className="w-full text-left px-3 py-2 hover:bg-green-50 rounded flex items-center gap-2 text-sm truncate"
                     >
-                      <span className="text-blue-500 flex-shrink-0">&#127925;</span>
+                      <span className="text-primary-500 flex-shrink-0">&#127925;</span>
                       <span className="truncate">{file}</span>
                     </button>
                   ))}
@@ -5608,7 +5608,7 @@ export default function ProcessorPage() {
             <div className="flex-1 overflow-y-auto p-2" style={{ minHeight: '300px' }}>
               {imageBrowser.loading ? (
                 <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
                   <span className="ml-2 text-gray-500">Loading...</span>
                 </div>
               ) : (
@@ -5617,7 +5617,7 @@ export default function ProcessorPage() {
                   {imageBrowser.parentPath !== null && (
                     <button
                       onClick={() => openImageBrowser(imageBrowser.parentPath || '')}
-                      className="w-full text-left px-3 py-2 hover:bg-blue-50 rounded flex items-center gap-2 text-blue-600"
+                      className="w-full text-left px-3 py-2 hover:bg-primary-50 rounded flex items-center gap-2 text-primary-600"
                     >
                       <span>&#8593;</span> ..
                     </button>
@@ -5800,7 +5800,7 @@ export default function ProcessorPage() {
                   }
                 }}
                 placeholder="VD: Preset mặc định, Quảng cáo 60s..."
-                className="w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               {presetModal.mode === 'create' && (
                 <p className="text-xs text-gray-500">
@@ -5818,7 +5818,7 @@ export default function ProcessorPage() {
               <button
                 onClick={confirmPresetModal}
                 disabled={!presetModal.name.trim()}
-                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 transition text-sm font-semibold"
+                className="px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 disabled:opacity-50 transition text-sm font-semibold"
               >
                 Save
               </button>
@@ -5859,7 +5859,7 @@ export default function ProcessorPage() {
                 className={`px-4 py-2 text-white rounded-md transition text-sm font-semibold ${
                   confirmDialog.variant === 'danger'
                     ? 'bg-red-500 hover:bg-red-600'
-                    : 'bg-blue-500 hover:bg-blue-600'
+                    : 'bg-primary-500 hover:bg-primary-600'
                 }`}
               >
                 {confirmDialog.confirmText}
@@ -5874,7 +5874,7 @@ export default function ProcessorPage() {
         <div className="fixed bottom-6 right-6 z-[100] animate-slide-up">
           <div className={`flex items-center gap-3 px-5 py-4 rounded-lg shadow-lg ${
             toast.type === 'success' ? 'bg-green-500' :
-            toast.type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+            toast.type === 'error' ? 'bg-red-500' : 'bg-primary-500'
           } text-white`}>
             {toast.type === 'success' && (
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

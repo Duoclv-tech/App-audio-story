@@ -23,6 +23,21 @@ os.environ.setdefault("DEBUG", "release")
 from app import paths
 paths.setup_ffmpeg_path()
 
+# A windowed PyInstaller build has NO console: sys.stdout/stderr are None.
+# Any library that writes there (loguru, uvicorn, print) would crash with
+# "Cannot log to objects of type 'NoneType'". Redirect them to a log file
+# BEFORE importing app.main (which configures loguru).
+if sys.stdout is None or sys.stderr is None:
+    try:
+        _logf = open(paths.LOG_DIR / "desktop.out.log", "a", encoding="utf-8", buffering=1)
+    except Exception:
+        import io
+        _logf = io.StringIO()
+    if sys.stdout is None:
+        sys.stdout = _logf
+    if sys.stderr is None:
+        sys.stderr = _logf
+
 import uvicorn
 from loguru import logger
 

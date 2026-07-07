@@ -45,7 +45,11 @@
       "Bash('/c/Program Files \\(x86\\)/Inno Setup 6/ISCC.exe' packaging/installer.iss)",
       "Bash(echo \"final rebuild started \\(PID $!\\)\")",
       "Bash(./backend/venv/Scripts/python.exe -c \"import subprocess; subprocess.run\\(['taskkill','/f','/im','TruyenFullProcessor.exe'],capture_output=True\\)\")",
-      "Bash(echo \"rebuild with security fix started \\(PID $!\\)\")"
+      "Bash(echo \"rebuild with security fix started \\(PID $!\\)\")",
+      "Bash(explorer.exe \"D:\\\\\\\\Project\\\\\\\\web_app\\\\\\\\dist\\\\\\\\TruyenFullProcessor\")",
+      "Read(//c/Program Files/Docker/Docker/**)",
+      "Bash(./venv/Scripts/python.exe -m pip install \"pymysql==1.1.0\" \"cryptography\")",
+      "Bash(PYTHONUTF8=1 ./venv/Scripts/python.exe migrate_mysql_to_sqlite.py)"
     ]
   }
 }

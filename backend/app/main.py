@@ -19,7 +19,9 @@ from app.api import stories, chapters, download, text, tts, audio, video, settin
 # Configure loguru — log into the per-user data dir so it works when frozen
 # (Program Files is read-only) and in dev alike.
 logger.remove()
-logger.add(sys.stderr, level="INFO" if not settings.DEBUG else "DEBUG")
+# In a windowed frozen build sys.stderr is None -> guard the console sink.
+if sys.stderr is not None:
+    logger.add(sys.stderr, level="INFO" if not settings.DEBUG else "DEBUG")
 logger.add(str(paths.LOG_DIR / "app.log"), rotation="10 MB", level="DEBUG")
 
 # Create FastAPI app

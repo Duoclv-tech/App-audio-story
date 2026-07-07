@@ -238,6 +238,7 @@ Verify end-to-end sau **mỗi** phase (Phase 1–5 test chế độ dev; Phase 6
 - **Bug đã sửa**: `Voice.id` thiếu `default=generate_uuid` (NOT NULL fail khi seed) → đã thêm.
 - **Review sau khi build**: sửa **path traversal** trong SPA fallback (`main.py` — chặn `../` thoát `dist`); dọn dead code trong `.spec`; làm `selftest` không crash khi endpoint lỗi.
 - **Windows console cp1252**: khi DEBUG=True (dev), SQLAlchemy echo tiếng Việt gây `UnicodeEncodeError` ở logging — vô hại, chỉ dev; bản desktop DEBUG=False nên không gặp.
+- **🔴 QUAN TRỌNG — windowed `sys.stderr=None`**: khi double-click app (windowed, không console), `sys.stdout/stderr = None` → `logger.add(sys.stderr)` crash `TypeError: Cannot log to objects of type 'NoneType'`. Selftest chạy từ terminal KHÔNG bắt được (terminal có stderr). Fix: `desktop.py` redirect stream None → file log trước khi import app.main; `main.py` guard `if sys.stderr is not None`. Verify đúng cách bằng `Start-Process` (không console) — không phải chạy từ bash.
 
 ### Điểm dễ quên (nhắc lại)
 - **Phase 2 seeding:** bỏ Docker → mất 14 giọng VBEE + settings mặc định (vốn do SQL init script nạp) → **bắt buộc** viết `seed.py` nạp lại lúc chạy đầu.

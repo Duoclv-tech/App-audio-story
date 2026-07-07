@@ -49,7 +49,17 @@
       "Bash(explorer.exe \"D:\\\\\\\\Project\\\\\\\\web_app\\\\\\\\dist\\\\\\\\TruyenFullProcessor\")",
       "Read(//c/Program Files/Docker/Docker/**)",
       "Bash(./venv/Scripts/python.exe -m pip install \"pymysql==1.1.0\" \"cryptography\")",
-      "Bash(PYTHONUTF8=1 ./venv/Scripts/python.exe migrate_mysql_to_sqlite.py)"
+      "Bash(PYTHONUTF8=1 ./venv/Scripts/python.exe migrate_mysql_to_sqlite.py)",
+      "Bash(\"d:/Project/web_app/backend/venv/Scripts/python.exe\" -c \"import webview; print\\(webview.__version__\\)\")",
+      "Bash(\"d:/Project/web_app/backend/venv/Scripts/python.exe\" -c \"import importlib.metadata as m; print\\('pywebview', m.version\\('pywebview'\\)\\)\")",
+      "Bash(\"d:/Project/web_app/backend/venv/Scripts/python.exe\" -c \"import webview; print\\('FOLDER_DIALOG',webview.FOLDER_DIALOG\\); print\\('OPEN_DIALOG',webview.OPEN_DIALOG\\); print\\(hasattr\\(webview,'windows'\\)\\)\")",
+      "Bash(\"d:/Project/web_app/backend/venv/Scripts/python.exe\" -c \"import webview; print\\('FileDialog', webview.FileDialog.FOLDER, webview.FileDialog.OPEN\\)\")",
+      "Bash(\"d:/Project/web_app/backend/venv/Scripts/python.exe\" -m py_compile \"d:/Project/web_app/backend/desktop.py\")",
+      "PowerShell(Set-Location \"d:\\\\Project\\\\web_app\"; & \"dist\\\\TruyenFullProcessor\\\\TruyenFullProcessor.exe\" --selftest; Start-Sleep -Seconds 2; Get-Content \"$env:LOCALAPPDATA\\\\TruyenFullProcessor\\\\selftest_result.txt\" -ErrorAction SilentlyContinue)",
+      "Bash(where ISCC)",
+      "Read(//c/Program Files/**)",
+      "PowerShell(winget install --id JRSoftware.InnoSetup -e --accept-source-agreements --accept-package-agreements --silent 2>&1)",
+      "PowerShell(winget install --id JRSoftware.InnoSetup -e --source winget --accept-source-agreements --accept-package-agreements --silent 2>&1)"
     ]
   }
 }

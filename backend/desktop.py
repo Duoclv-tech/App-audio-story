@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 import urllib.request
+from pathlib import Path
 
 # Force production behaviour BEFORE app.config is imported: no uvicorn reload,
 # no SQLAlchemy echo. Env vars take priority over any .env file.
@@ -48,6 +49,64 @@ from loguru import logger
 from app.main import app as fastapi_app
 
 WINDOW_TITLE = "TruyenFull Processor"
+
+
+class NativeApi:
+    """Exposed to the web page as ``window.pywebview.api``.
+
+    Lets the React UI open the **native Windows** file/folder pickers instead of
+    the in-app HTML browser. Every method returns the selected absolute path as a
+    string, or ``None`` if the user cancels. When the app runs in a plain browser
+    (dev), ``window.pywebview`` is absent and the UI falls back to the HTML browser.
+    """
+
+    _AUDIO_TYPES = (
+        "Audio Files (*.mp3;*.wav;*.m4a;*.aac;*.flac;*.ogg)",
+        "All files (*.*)",
+    )
+    _IMAGE_TYPES = (
+        "Image Files (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif)",
+        "All files (*.*)",
+    )
+
+    def _window(self):
+        import webview
+        return webview.windows[0] if webview.windows else None
+
+    def pick_folder(self, start: str = ""):
+        import webview
+        w = self._window()
+        if w is None:
+            return None
+        directory = start if (start and Path(start).is_dir()) else ""
+        result = w.create_file_dialog(webview.FileDialog.FOLDER, directory=directory)
+        return result[0] if result else None
+
+    def pick_audio_file(self, start: str = ""):
+        return self._pick_file(start, self._AUDIO_TYPES)
+
+    def pick_image_file(self, start: str = ""):
+        return self._pick_file(start, self._IMAGE_TYPES)
+
+    def _pick_file(self, start: str, file_types):
+        import webview
+        w = self._window()
+        if w is None:
+            return None
+        # ``start`` may be a file path or a directory; open in its containing dir.
+        directory = ""
+        if start:
+            p = Path(start)
+            cand = p if p.is_dir() else p.parent
+            if cand.is_dir():
+                directory = str(cand)
+        result = w.create_file_dialog(
+            webview.FileDialog.OPEN,
+            directory=directory,
+            allow_multiple=False,
+            file_types=file_types,
+        )
+        return result[0] if result else None
 
 
 def _find_free_port() -> int:
@@ -159,7 +218,11 @@ def main() -> int:
     import webview  # imported late so headless server tests don't need a GUI
 
     url = f"http://127.0.0.1:{port}/"
-    webview.create_window(WINDOW_TITLE, url, width=1400, height=900, min_size=(1000, 700))
+    # js_api exposes native OS file/folder pickers to the page (window.pywebview.api).
+    webview.create_window(
+        WINDOW_TITLE, url, js_api=NativeApi(),
+        width=1400, height=900, min_size=(1000, 700),
+    )
     try:
         webview.start()  # blocks until the window is closed
     finally:

@@ -7,6 +7,7 @@ import { SubtitleSegment, DEFAULT_SUBTITLE_STYLE } from '../components/subtitle/
 import { StickerPanel } from '../components/sticker/StickerPanel'
 import { StickerOverlay } from '../components/sticker/StickerOverlay'
 import { Sticker, toBackendSticker } from '../components/sticker/sticker'
+import { hasNativeDialogs, pickFolderNative, pickAudioFileNative, pickImageFileNative } from '../services/nativeDialog'
 
 // Define workflow steps
 const WORKFLOW_STEPS = [
@@ -1160,6 +1161,15 @@ export default function ProcessorPage() {
   }
 
   const openFolderBrowser = async (startPath?: string) => {
+    // In the packaged desktop app, use the native Windows folder picker.
+    if (hasNativeDialogs()) {
+      const picked = await pickFolderNative(startPath)
+      if (picked) {
+        setVideoConfig(prev => ({ ...prev, folder: picked }))
+        setFolderValidation({ valid: false, videoCount: 0, totalDuration: '', checked: false })
+      }
+      return
+    }
     setFolderBrowser(prev => ({ ...prev, isOpen: true, loading: true }))
     try {
       const response = await axios.post('/api/v1/video/browse', { path: startPath || '' })
@@ -1194,6 +1204,12 @@ export default function ProcessorPage() {
 
   // Audio file browser functions
   const openAudioBrowser = async (startPath?: string, isFilePath: boolean = false) => {
+    // In the packaged desktop app, use the native Windows file picker.
+    if (hasNativeDialogs()) {
+      const picked = await pickAudioFileNative(startPath)
+      if (picked) setVideoConfig(prev => ({ ...prev, audioPath: picked }))
+      return
+    }
     setAudioBrowser(prev => ({ ...prev, isOpen: true, loading: true }))
     try {
       let dirPath = startPath || ''
@@ -1237,6 +1253,16 @@ export default function ProcessorPage() {
   // doesn't reset the target back to 'banner').
   const openImageBrowser = async (startPath?: string, isFilePath: boolean = false, target?: 'banner' | 'watermark') => {
     if (target !== undefined) setImageBrowserTarget(target)
+    // In the packaged desktop app, use the native Windows file picker.
+    if (hasNativeDialogs()) {
+      const tgt = target !== undefined ? target : imageBrowserTarget
+      const picked = await pickImageFileNative(startPath)
+      if (picked) {
+        if (tgt === 'watermark') setVideoConfig(prev => ({ ...prev, watermarkImage: picked }))
+        else setVideoConfig(prev => ({ ...prev, bannerImage: picked }))
+      }
+      return
+    }
     setImageBrowser(prev => ({ ...prev, isOpen: true, loading: true }))
     try {
       let dirPath = startPath || ''

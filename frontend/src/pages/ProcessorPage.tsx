@@ -5011,7 +5011,7 @@ export default function ProcessorPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full">
       <div className="card p-6 md:p-8">
         <h2 className="text-2xl font-bold tracking-tight mb-6">Xử lý truyện</h2>
 

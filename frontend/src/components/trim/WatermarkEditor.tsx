@@ -115,7 +115,7 @@ export default function WatermarkEditor({ value, onChange, previewAspect = 16 / 
                 className={`aspect-square rounded flex items-center justify-center text-base transition ${
                   value.position === p.value
                     ? 'bg-primary-600 text-white'
-                    : 'bg-surface-3 hover:bg-gray-200 text-dim'
+                    : 'bg-surface-3 hover:bg-gray-200 dark:hover:bg-gray-700 text-dim'
                 }`}
               >
                 {p.label}
@@ -160,7 +160,7 @@ export default function WatermarkEditor({ value, onChange, previewAspect = 16 / 
                 type="button"
                 onClick={() => update({ rotation: a })}
                 className={`text-xs px-2 py-0.5 border rounded transition ${
-                  value.rotation === a ? 'bg-primary-100 border-primary-400' : 'hover:bg-surface-3'
+                  value.rotation === a ? 'bg-primary-100 dark:bg-primary-500/20 border-primary-400 dark:border-primary-500/30' : 'hover:bg-surface-3'
                 }`}
               >
                 {a}°
@@ -224,7 +224,7 @@ export default function WatermarkEditor({ value, onChange, previewAspect = 16 / 
         <div className="text-xs text-dim mb-1">
           Xem trước (xấp xỉ)
           {isCustom && (
-            <span className="ml-2 text-primary-600">— kéo chữ để đặt vị trí</span>
+            <span className="ml-2 text-primary-600 dark:text-primary-400">— kéo chữ để đặt vị trí</span>
           )}
         </div>
         <WatermarkPreview

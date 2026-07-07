@@ -156,7 +156,7 @@ export function SubtitlePanel({
       >
         {srtPath ? (
           <div className="text-xs">
-            <div className="font-mono break-all mb-1 text-green-700">{filename ?? srtPath.split(/[\\/]/).pop()}</div>
+            <div className="font-mono break-all mb-1 text-green-700 dark:text-green-400">{filename ?? srtPath.split(/[\\/]/).pop()}</div>
             {uploadInfo && (
               <div className="text-dim">
                 {uploadInfo.segment_count} dòng · {uploadInfo.first_start.toFixed(1)}s {uploadInfo.last_end.toFixed(1)}s
@@ -165,7 +165,7 @@ export function SubtitlePanel({
             <button
               type="button"
               onClick={handleClear}
-              className="mt-2 text-red-600 hover:text-red-700 underline text-xs"
+              className="mt-2 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-400 underline text-xs"
             >Bỏ phụ đề</button>
           </div>
         ) : (
@@ -189,7 +189,7 @@ export function SubtitlePanel({
       </div>
 
       {warning && (
-        <div className="text-xs text-yellow-800 bg-yellow-50 border border-yellow-200 rounded px-2 py-1.5">
+        <div className="text-xs text-yellow-800 dark:text-yellow-300 bg-yellow-50 dark:bg-yellow-500/10 border border-yellow-200 dark:border-yellow-500/30 rounded px-2 py-1.5">
            {warning}
         </div>
       )}
@@ -306,7 +306,7 @@ export function SubtitlePanel({
 
       <div className="text-[11px] text-dim">
         Vị trí: X {Math.round(style.subtitle_x * 100)}% · Y {Math.round(style.subtitle_y * 100)}%
-        <span className="ml-1 text-primary-500">(kéo phụ đề trên preview để chỉnh)</span>
+        <span className="ml-1 text-primary-500 dark:text-primary-400">(kéo phụ đề trên preview để chỉnh)</span>
       </div>
     </div>
   )

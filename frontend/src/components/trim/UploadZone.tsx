@@ -37,7 +37,7 @@ export default function UploadZone({ onFileSelected, uploading, uploadProgress }
         if (!uploading) handleFiles(e.dataTransfer.files)
       }}
       className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition ${
-        dragOver ? 'border-primary-500 bg-primary-50' : 'border-token hover:border-primary-400'
+        dragOver ? 'border-primary-500 bg-primary-50 dark:bg-primary-500/10' : 'border-token hover:border-primary-400'
       } ${uploading ? 'pointer-events-none opacity-70' : ''}`}
     >
       <input
@@ -54,7 +54,7 @@ export default function UploadZone({ onFileSelected, uploading, uploadProgress }
       <p className="text-sm text-dim">MP4, MOV, MKV, AVI, WebM — tối đa 2 GB</p>
       {uploading && (
         <div className="mt-4">
-          <div className="w-full bg-gray-200 rounded-full h-2.5">
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
             <div
               className="bg-primary-600 h-2.5 rounded-full transition-all"
               style={{ width: `${uploadProgress}%` }}

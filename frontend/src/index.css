@@ -21,6 +21,22 @@
   --accent-line: rgba(225, 147, 43, 0.32);
 }
 
+.dark {
+  --bg: #0E0F16;
+  --surface: #181A23;
+  --surface-2: #1E212C;
+  --surface-3: #242836;
+  --border: #2A2E3B;
+  --border-strong: #3A3F4F;
+  --text: #ECEDF2;
+  --text-dim: #969CAC;
+  --text-faint: #6C7283;
+  --accent: #F0A83C;
+  --accent-bright: #F6B857;
+  --accent-soft: rgba(240, 168, 60, 0.14);
+  --accent-line: rgba(240, 168, 60, 0.40);
+}
+
 @layer base {
   body {
     background: var(--bg);

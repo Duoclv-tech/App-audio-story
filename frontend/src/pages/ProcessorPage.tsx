@@ -2317,15 +2317,15 @@ export default function ProcessorPage() {
                   </button>
                 </div>
                 {storyData.custom_chapter_urls && storyData.custom_chapter_urls.length > 0 && (
-                  <div className="bg-purple-50 border border-purple-200 rounded-md p-3">
+                  <div className="bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/30 rounded-md p-3">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-purple-700 font-medium">
+                      <span className="text-sm text-purple-700 dark:text-purple-400 font-medium">
                         ✓ Đã nhập {storyData.custom_chapter_urls.length} link chương
                       </span>
                       <button
                         type="button"
                         onClick={() => setStoryData({ ...storyData, custom_chapter_urls: undefined })}
-                        className="text-xs text-red-500 hover:text-red-700"
+                        className="text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-400"
                       >
                         Xóa tất cả
                       </button>
@@ -2335,18 +2335,18 @@ export default function ProcessorPage() {
                         <div key={i} className="truncate">Chương {i + 1}: {url}</div>
                       ))}
                       {storyData.custom_chapter_urls.length > 3 && (
-                        <div className="text-purple-600">...và {storyData.custom_chapter_urls.length - 3} link khác</div>
+                        <div className="text-purple-600 dark:text-purple-400">...và {storyData.custom_chapter_urls.length - 3} link khác</div>
                       )}
                     </div>
                   </div>
                 )}
               </div>
               {error && (
-                <div className={`p-4 rounded-md ${duplicateStory ? 'bg-orange-50 border border-orange-200' : 'bg-red-50 border border-red-200'}`}>
-                  <div className={`text-sm font-medium ${duplicateStory ? 'text-orange-800' : 'text-red-800'} mb-2`}>
+                <div className={`p-4 rounded-md ${duplicateStory ? 'bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30' : 'bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30'}`}>
+                  <div className={`text-sm font-medium ${duplicateStory ? 'text-orange-800 dark:text-orange-300' : 'text-red-800 dark:text-red-300'} mb-2`}>
                     {duplicateStory ? ' Truyện đã tồn tại' : ' Lỗi'}
                   </div>
-                  <div className={`text-sm ${duplicateStory ? 'text-orange-700' : 'text-red-700'} mb-3`}>
+                  <div className={`text-sm ${duplicateStory ? 'text-orange-700 dark:text-orange-400' : 'text-red-700 dark:text-red-400'} mb-3`}>
                     {error}
                   </div>
                   {duplicateStory && (
@@ -2387,16 +2387,16 @@ export default function ProcessorPage() {
 
             {/* Statistics Section */}
             {checkingGrammar && (
-              <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
+              <div className="bg-primary-50 dark:bg-primary-500/10 border border-primary-200 dark:border-primary-500/30 rounded-lg p-4">
                 <div className="flex items-center gap-2">
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600"></div>
-                  <span className="text-sm text-primary-800">Đang kiểm tra ngữ pháp...</span>
+                  <span className="text-sm text-primary-800 dark:text-primary-300">Đang kiểm tra ngữ pháp...</span>
                 </div>
               </div>
             )}
 
             {chapterStats && !checkingGrammar && (
-              <div className="bg-gradient-to-r from-primary-50 to-purple-50 border border-primary-200 rounded-lg p-4">
+              <div className="bg-gradient-to-r from-primary-50 to-purple-50 border border-primary-200 dark:border-primary-500/30 rounded-lg p-4">
                 <h4 className="font-semibold text-strong mb-3">Thống kê</h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div className="bg-surface rounded-lg p-3 shadow-sm">
@@ -2405,21 +2405,21 @@ export default function ProcessorPage() {
                   </div>
                   <div className="bg-surface rounded-lg p-3 shadow-sm">
                     <div className="text-xs text-dim mb-1">Tổng số ký tự</div>
-                    <div className="text-2xl font-bold text-primary-600">{chapterStats.total_characters.toLocaleString()}</div>
+                    <div className="text-2xl font-bold text-primary-600 dark:text-primary-400">{chapterStats.total_characters.toLocaleString()}</div>
                   </div>
                   <div className="bg-surface rounded-lg p-3 shadow-sm">
                     <div className="text-xs text-dim mb-1">Trung bình/chương</div>
-                    <div className="text-2xl font-bold text-green-600">{chapterStats.average_characters.toLocaleString()}</div>
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">{chapterStats.average_characters.toLocaleString()}</div>
                   </div>
                   <div className="bg-surface rounded-lg p-3 shadow-sm">
                     <div className="text-xs text-dim mb-1">Chương có lỗi</div>
-                    <div className={`text-2xl font-bold ${chapterStats.chapters_with_censored_words > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                    <div className={`text-2xl font-bold ${chapterStats.chapters_with_censored_words > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`}>
                       {chapterStats.chapters_with_censored_words}
                     </div>
                   </div>
                   <div className="bg-surface rounded-lg p-3 shadow-sm">
                     <div className="text-xs text-dim mb-1">Tổng lỗi ngữ pháp</div>
-                    <div className={`text-2xl font-bold ${chapterStats.total_censored_words > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    <div className={`text-2xl font-bold ${chapterStats.total_censored_words > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
                       {chapterStats.total_censored_words}
                     </div>
                   </div>
@@ -2432,7 +2432,7 @@ export default function ProcessorPage() {
               {chapters.length > 0 ? (
                 <div className="space-y-2">
                   {chapters.map((chapter) => (
-                    <div key={chapter.id} className={`p-3 border rounded hover:bg-surface-2 transition-colors ${chapter.chapter_number === 0 ? 'border-purple-300 bg-purple-50' : ''}`}>
+                    <div key={chapter.id} className={`p-3 border rounded hover:bg-surface-2 transition-colors ${chapter.chapter_number === 0 ? 'border-purple-300 dark:border-purple-500/30 bg-purple-50 dark:bg-purple-500/10' : ''}`}>
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
@@ -2446,17 +2446,17 @@ export default function ProcessorPage() {
                           <div className="flex items-center gap-4 mt-1">
                             <span className="text-sm text-dim">{chapter.char_count.toLocaleString()} ký tự</span>
                             {chapter.chapter_number === 0 && chapter.char_count === 0 && (
-                              <span className="text-sm text-purple-600 italic">
+                              <span className="text-sm text-purple-600 dark:text-purple-400 italic">
                                  Thêm nội dung giới thiệu (hoặc để trống để bỏ qua)
                               </span>
                             )}
                             {(chapter.chapter_number !== 0 || chapter.char_count > 0) && chapter.censored_count > 0 && (
-                              <span className="text-sm text-orange-600 font-medium">
+                              <span className="text-sm text-orange-600 dark:text-orange-400 font-medium">
                                  {chapter.censored_count} lỗi ngữ pháp
                               </span>
                             )}
                             {(chapter.chapter_number !== 0 || chapter.char_count > 0) && chapter.censored_count === 0 && (
-                              <span className="text-sm text-green-600">
+                              <span className="text-sm text-green-600 dark:text-green-400">
                                 ✓ Không có lỗi
                               </span>
                             )}
@@ -2465,7 +2465,7 @@ export default function ProcessorPage() {
                         <div className="flex items-center gap-2 ml-4">
                           <button
                             onClick={() => handleEditChapter(chapter)}
-                            className="p-2 text-primary-600 hover:bg-primary-50 rounded-md transition-colors"
+                            className="p-2 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-500/15 rounded-md transition-colors"
                             title="Edit chapter"
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2475,7 +2475,7 @@ export default function ProcessorPage() {
                           </button>
                           <button
                             onClick={() => handleDeleteChapter(chapter)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                            className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/15 rounded-md transition-colors"
                             title="Delete chapter"
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2549,7 +2549,7 @@ export default function ProcessorPage() {
                       className="flex-1 min-w-[150px] px-3 py-2 border rounded"
                     />
                     {mergedView.matchCount > 0 && (
-                      <span className="text-sm text-orange-600 font-medium px-2">
+                      <span className="text-sm text-orange-600 dark:text-orange-400 font-medium px-2">
                         {mergedView.matchCount} kết quả
                       </span>
                     )}
@@ -2645,16 +2645,16 @@ export default function ProcessorPage() {
                     <div className="flex-1 overflow-y-auto p-4">
                       {/* Error */}
                       {mergedView.aiResult.error && (
-                        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-                          <h4 className="font-semibold text-red-700 mb-2"> Lỗi</h4>
-                          <p className="text-red-600 text-sm">{mergedView.aiResult.error}</p>
+                        <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-lg p-4 mb-4">
+                          <h4 className="font-semibold text-red-700 dark:text-red-400 mb-2"> Lỗi</h4>
+                          <p className="text-red-600 dark:text-red-400 text-sm">{mergedView.aiResult.error}</p>
                         </div>
                       )}
 
                       {/* Summary */}
                       {mergedView.aiResult.summary && (
-                        <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 mb-4">
-                          <h4 className="font-semibold text-primary-700 mb-2"> Tóm tắt</h4>
+                        <div className="bg-primary-50 dark:bg-primary-500/10 border border-primary-200 dark:border-primary-500/30 rounded-lg p-4 mb-4">
+                          <h4 className="font-semibold text-primary-700 dark:text-primary-400 mb-2"> Tóm tắt</h4>
                           <p className="text-dim">{mergedView.aiResult.summary}</p>
                         </div>
                       )}
@@ -2662,10 +2662,10 @@ export default function ProcessorPage() {
                       {/* Stats */}
                       {mergedView.aiResult.success && (
                         <div className="flex gap-3 mb-4">
-                          <span className="px-3 py-2 rounded-lg bg-red-100 text-red-700 font-medium">
+                          <span className="px-3 py-2 rounded-lg bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 font-medium">
                              {mergedView.aiResult.total_issues || 0} lỗi chính tả
                           </span>
-                          <span className="px-3 py-2 rounded-lg bg-orange-100 text-orange-700 font-medium">
+                          <span className="px-3 py-2 rounded-lg bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400 font-medium">
                              {mergedView.aiResult.total_watermarks || 0} watermark
                           </span>
                         </div>
@@ -2674,16 +2674,16 @@ export default function ProcessorPage() {
                       {/* Spelling Errors */}
                       {mergedView.aiResult.spelling_errors && mergedView.aiResult.spelling_errors.length > 0 && (
                         <div className="mb-4">
-                          <h4 className="font-semibold text-red-700 mb-3 text-lg"> Lỗi chính tả</h4>
+                          <h4 className="font-semibold text-red-700 dark:text-red-400 mb-3 text-lg"> Lỗi chính tả</h4>
                           <div className="space-y-3">
                             {mergedView.aiResult.spelling_errors.map((error: any, idx: number) => (
                               <div key={idx} className="bg-surface-2 border rounded-lg p-3">
                                 <div className="flex items-center justify-between gap-2 mb-2">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="text-dim text-sm">{idx + 1}.</span>
-                                    <span className="bg-red-100 text-red-700 px-2 py-1 rounded line-through">{error.original}</span>
+                                    <span className="bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 px-2 py-1 rounded line-through">{error.original}</span>
                                     <span className="text-faint"></span>
-                                    <span className="bg-green-100 text-green-700 px-2 py-1 rounded font-medium">{error.suggestion}</span>
+                                    <span className="bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 px-2 py-1 rounded font-medium">{error.suggestion}</span>
                                   </div>
                                   <button
                                     onClick={() => {
@@ -2708,14 +2708,14 @@ export default function ProcessorPage() {
                       {/* Watermarks */}
                       {mergedView.aiResult.watermarks && mergedView.aiResult.watermarks.length > 0 && (
                         <div className="mb-4">
-                          <h4 className="font-semibold text-orange-700 mb-3 text-lg"> Watermark phát hiện</h4>
+                          <h4 className="font-semibold text-orange-700 dark:text-orange-400 mb-3 text-lg"> Watermark phát hiện</h4>
                           <div className="space-y-3">
                             {mergedView.aiResult.watermarks.map((wm: any, idx: number) => (
-                              <div key={idx} className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                              <div key={idx} className="bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 rounded-lg p-3">
                                 <div className="flex items-center justify-between gap-2 mb-2">
                                   <div className="flex items-center gap-2">
                                     <span className="text-dim text-sm">{idx + 1}.</span>
-                                    <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded font-medium">{wm.text}</span>
+                                    <span className="bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400 px-2 py-1 rounded font-medium">{wm.text}</span>
                                   </div>
                                   <button
                                     onClick={() => {
@@ -2745,7 +2745,7 @@ export default function ProcessorPage() {
                           <div className="mx-auto mb-4 w-14 h-14 rounded-full grid place-items-center" style={{ background: 'rgba(31,157,107,0.14)', color: '#1F9D6B' }}>
                             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
                           </div>
-                          <p className="text-green-600 font-semibold text-lg">Không tìm thấy lỗi!</p>
+                          <p className="text-green-600 dark:text-green-400 font-semibold text-lg">Không tìm thấy lỗi!</p>
                           <p className="text-dim">Văn bản đã sạch chính tả và watermark</p>
                         </div>
                       )}
@@ -2842,7 +2842,7 @@ export default function ProcessorPage() {
                 </div>
               </div>
               {error && (
-                <div className="text-red-600 text-sm">{error}</div>
+                <div className="text-red-600 dark:text-red-400 text-sm">{error}</div>
               )}
               <button
                 onClick={handleStartTTS}
@@ -2865,16 +2865,16 @@ export default function ProcessorPage() {
 
             {/* TTS Status */}
             <div className={`border rounded-lg p-4 ${
-              mergedTtsStatus.status === 'completed' ? 'bg-green-50 border-green-200' :
-              mergedTtsStatus.status === 'failed' ? 'bg-red-50 border-red-200' :
-              mergedTtsStatus.status === 'running' ? 'bg-primary-50 border-primary-200' :
+              mergedTtsStatus.status === 'completed' ? 'bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/30' :
+              mergedTtsStatus.status === 'failed' ? 'bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30' :
+              mergedTtsStatus.status === 'running' ? 'bg-primary-50 dark:bg-primary-500/10 border-primary-200 dark:border-primary-500/30' :
               'bg-surface-2 border-token'
             }`}>
               <div className="flex items-center justify-between mb-3">
                 <span className="font-medium">Trạng thái TTS</span>
                 <button
                   onClick={() => fetchMergedTtsStatus()}
-                  className="text-xs text-primary-600 hover:text-primary-800 underline"
+                  className="text-xs text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300 underline"
                 >
                   Refresh
                 </button>
@@ -2884,23 +2884,23 @@ export default function ProcessorPage() {
                 {/* Status Badge */}
                 <div className="flex items-center gap-3">
                   {mergedTtsStatus.status === 'idle' && (
-                    <span className="px-3 py-1 rounded-full bg-gray-200 text-dim text-sm font-medium">
+                    <span className="px-3 py-1 rounded-full bg-gray-200 dark:bg-gray-700 text-dim text-sm font-medium">
                       ⏳ Chờ xử lý
                     </span>
                   )}
                   {mergedTtsStatus.status === 'running' && (
-                    <span className="px-3 py-1 rounded-full bg-primary-200 text-primary-700 text-sm font-medium flex items-center gap-2">
+                    <span className="px-3 py-1 rounded-full bg-primary-200 text-primary-700 dark:text-primary-400 text-sm font-medium flex items-center gap-2">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-700"></div>
                       Đang xử lý TTS...
                     </span>
                   )}
                   {mergedTtsStatus.status === 'completed' && (
-                    <span className="px-3 py-1 rounded-full bg-green-200 text-green-700 text-sm font-medium">
+                    <span className="px-3 py-1 rounded-full bg-green-200 text-green-700 dark:text-green-400 text-sm font-medium">
                        Hoàn thành
                     </span>
                   )}
                   {mergedTtsStatus.status === 'failed' && (
-                    <span className="px-3 py-1 rounded-full bg-red-200 text-red-700 text-sm font-medium">
+                    <span className="px-3 py-1 rounded-full bg-red-200 text-red-700 dark:text-red-400 text-sm font-medium">
                        Thất bại
                     </span>
                   )}
@@ -2913,7 +2913,7 @@ export default function ProcessorPage() {
 
                 {/* Audio File */}
                 {mergedTtsStatus.audioFile && (
-                  <div className="text-sm text-green-700 bg-green-100 p-2 rounded">
+                  <div className="text-sm text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-500/20 p-2 rounded">
                      File: {mergedTtsStatus.audioFile.split('/').pop()}
                     {mergedTtsStatus.audioSize && (
                       <span className="ml-2">({(mergedTtsStatus.audioSize / 1024 / 1024).toFixed(2)} MB)</span>
@@ -2923,7 +2923,7 @@ export default function ProcessorPage() {
 
                 {/* Error */}
                 {mergedTtsStatus.error && (
-                  <div className="text-sm text-red-700 bg-red-100 p-2 rounded">
+                  <div className="text-sm text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-500/20 p-2 rounded">
                      Lỗi: {mergedTtsStatus.error}
                   </div>
                 )}
@@ -2951,14 +2951,14 @@ export default function ProcessorPage() {
 
             {/* Info Message */}
             {mergedTtsStatus.status === 'running' && (
-              <div className="text-sm text-primary-600 bg-primary-50 p-3 rounded-md flex items-center gap-2">
+              <div className="text-sm text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-500/10 p-3 rounded-md flex items-center gap-2">
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
                 Đang xử lý TTS... Trang sẽ tự động cập nhật mỗi 10 giây.
               </div>
             )}
 
             {error && (
-              <div className="text-red-600 text-sm bg-red-50 p-3 rounded-md">{error}</div>
+              <div className="text-red-600 dark:text-red-400 text-sm bg-red-50 dark:bg-red-500/10 p-3 rounded-md">{error}</div>
             )}
 
             {/* Continue Button - Show when TTS is complete */}
@@ -3031,7 +3031,7 @@ export default function ProcessorPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-semibold text-primary-600"> Preset:</span>
+                <span className="text-sm font-semibold text-primary-600 dark:text-primary-400"> Preset:</span>
                 <select
                   value={selectedPresetId}
                   onChange={(e) => {
@@ -3054,7 +3054,7 @@ export default function ProcessorPage() {
                     <button
                       onClick={updateSelectedPresetCfg}
                       disabled={isProcessing}
-                      className="text-xs px-2 py-1.5 bg-surface-3 hover:bg-primary-100 text-dim hover:text-primary-700 rounded border disabled:opacity-50"
+                      className="text-xs px-2 py-1.5 bg-surface-3 hover:bg-primary-100 dark:hover:bg-primary-500/25 text-dim hover:text-primary-700 dark:hover:text-primary-400 rounded border disabled:opacity-50"
                       title="Cập nhật preset đã chọn với config hiện tại"
                     >
                       
@@ -3062,7 +3062,7 @@ export default function ProcessorPage() {
                     <button
                       onClick={renamePreset}
                       disabled={isProcessing}
-                      className="text-xs px-2 py-1.5 bg-surface-3 hover:bg-yellow-100 text-dim hover:text-yellow-700 rounded border disabled:opacity-50"
+                      className="text-xs px-2 py-1.5 bg-surface-3 hover:bg-yellow-100 dark:hover:bg-yellow-500/25 text-dim hover:text-yellow-700 dark:hover:text-yellow-400 rounded border disabled:opacity-50"
                       title="Đổi tên preset đã chọn"
                     >
                       
@@ -3081,7 +3081,7 @@ export default function ProcessorPage() {
                         })
                       }}
                       disabled={isProcessing}
-                      className="text-xs px-2 py-1.5 bg-surface-3 hover:bg-red-100 text-dim hover:text-red-600 rounded border disabled:opacity-50"
+                      className="text-xs px-2 py-1.5 bg-surface-3 hover:bg-red-100 dark:hover:bg-red-500/25 text-dim hover:text-red-600 rounded border disabled:opacity-50"
                       title="Xoá preset đã chọn"
                     >
                       
@@ -3113,7 +3113,7 @@ export default function ProcessorPage() {
                     })
                   }}
                   disabled={isProcessing}
-                  className="text-xs px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 rounded border border-red-200 disabled:opacity-50"
+                  className="text-xs px-3 py-1.5 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/25 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-400 rounded border border-red-200 dark:border-red-500/30 disabled:opacity-50"
                   title="Reset toàn bộ cài đặt video (giữ folder/audio/file đã chọn)"
                 >
                    Reset
@@ -3137,7 +3137,7 @@ export default function ProcessorPage() {
                   onClick={() => setVideoTab(tab.key)}
                   className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${
                     videoTab === tab.key
-                      ? 'border-primary-500 text-primary-600'
+                      ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                       : 'border-transparent text-dim hover:text-dim hover:border-token'
                   }`}
                 >
@@ -3150,7 +3150,7 @@ export default function ProcessorPage() {
             {videoTab === 'basic' && <div className="space-y-3 p-3">
                 {/* Inputs card */}
                 <div className="border rounded-lg p-4 bg-surface space-y-3">
-                  <h4 className="font-semibold text-primary-600 text-sm"> Nguồn dữ liệu</h4>
+                  <h4 className="font-semibold text-primary-600 dark:text-primary-400 text-sm"> Nguồn dữ liệu</h4>
 
                   <div>
                     <label className="block text-xs font-medium mb-1 text-dim">Audio File Path</label>
@@ -3203,7 +3203,7 @@ export default function ProcessorPage() {
                       </button>
                     </div>
                     {folderValidation.checked && (
-                      <div className={`mt-1 text-xs ${folderValidation.valid ? 'text-green-600' : 'text-red-600'}`}>
+                      <div className={`mt-1 text-xs ${folderValidation.valid ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                         {folderValidation.valid
                           ? `✓ ${folderValidation.videoCount} videos (${folderValidation.totalDuration})`
                           : 'Invalid folder'}
@@ -3257,7 +3257,7 @@ export default function ProcessorPage() {
 
                 {/* Config card */}
                 <div className="border rounded-lg p-4 bg-surface space-y-3">
-                  <h4 className="font-semibold text-primary-600 text-sm"> Cấu hình video</h4>
+                  <h4 className="font-semibold text-primary-600 dark:text-primary-400 text-sm"> Cấu hình video</h4>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium mb-1 text-dim">Audio Speed</label>
@@ -3335,7 +3335,7 @@ export default function ProcessorPage() {
                 className="w-full flex items-center justify-between p-4 text-left hover:bg-surface-2 rounded-lg"
               >
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-primary-600 text-sm"> Watermark & Fade</span>
+                  <span className="font-semibold text-primary-600 dark:text-primary-400 text-sm"> Watermark & Fade</span>
                   {(() => {
                     const active: string[] = []
                     if (videoConfig.watermarkImage) active.push('logo')
@@ -3390,7 +3390,7 @@ export default function ProcessorPage() {
                       <div>
                         <label className="block text-xs text-dim mb-1">
                           Vị trí: X {Math.round(videoConfig.watermark_x * 100)}% · Y {Math.round(videoConfig.watermark_y * 100)}%
-                          <span className="ml-2 text-[10px] text-primary-500">(kéo trên preview để chỉnh)</span>
+                          <span className="ml-2 text-[10px] text-primary-500 dark:text-primary-400">(kéo trên preview để chỉnh)</span>
                         </label>
                         <div className="grid grid-cols-5 gap-1">
                           {([
@@ -3447,7 +3447,7 @@ export default function ProcessorPage() {
                             type="button"
                             onClick={() => setVideoConfig(prev => ({ ...prev, watermark_h: prev.watermark_w }))}
                             disabled={isProcessing}
-                            className="mt-3 text-xs px-2 py-1 bg-surface-3 text-dim rounded hover:bg-gray-200"
+                            className="mt-3 text-xs px-2 py-1 bg-surface-3 text-dim rounded hover:bg-gray-200 dark:hover:bg-gray-700"
                             title="Đồng bộ H = W (vuông)"
                           >
                             ⊡
@@ -3571,7 +3571,7 @@ export default function ProcessorPage() {
                       <div>
                         <label className="block text-xs text-dim mb-1">
                           Vị trí: X {Math.round(videoConfig.watermark_text_x * 100)}% · Y {Math.round(videoConfig.watermark_text_y * 100)}%
-                          <span className="ml-2 text-[10px] text-primary-500">(kéo trên preview để chỉnh)</span>
+                          <span className="ml-2 text-[10px] text-primary-500 dark:text-primary-400">(kéo trên preview để chỉnh)</span>
                         </label>
                         <div className="grid grid-cols-5 gap-1">
                           {([
@@ -3657,7 +3657,7 @@ export default function ProcessorPage() {
                 className="w-full flex items-center justify-between p-4 text-left hover:bg-surface-2 rounded-lg"
               >
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-primary-600 text-sm"> Audio Visualizer</span>
+                  <span className="font-semibold text-primary-600 dark:text-primary-400 text-sm"> Audio Visualizer</span>
                   {videoConfig.visualizer_enabled ? (
                     <span className="text-[11px] text-dim">
                       ({videoConfig.visualizer_style}
@@ -3792,7 +3792,7 @@ export default function ProcessorPage() {
                     <div>
                       <label className="block text-xs text-dim mb-1">
                         Vị trí: X {Math.round(videoConfig.visualizer_x * 100)}% · Y {Math.round(videoConfig.visualizer_y * 100)}%
-                        <span className="ml-2 text-[10px] text-primary-500">(kéo trên preview để chỉnh)</span>
+                        <span className="ml-2 text-[10px] text-primary-500 dark:text-primary-400">(kéo trên preview để chỉnh)</span>
                       </label>
                       <div className="grid grid-cols-5 gap-1">
                         {([
@@ -3976,7 +3976,7 @@ export default function ProcessorPage() {
                 className="w-full flex items-center justify-between p-4 text-left hover:bg-surface-2 rounded-lg"
               >
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-primary-600 text-sm"> Subtitle (SRT)</span>
+                  <span className="font-semibold text-primary-600 dark:text-primary-400 text-sm"> Subtitle (SRT)</span>
                   {videoConfig.subtitle_srt_path ? (
                     <span className="text-[11px] text-dim">({videoConfig.subtitle_animation})</span>
                   ) : (
@@ -4022,7 +4022,7 @@ export default function ProcessorPage() {
             {/* Transitions card (full width) */}
             <div className="border rounded-lg p-4 bg-surface space-y-2">
               <div className="flex items-center justify-between">
-                <h4 className="font-semibold text-primary-600 text-sm"> Transitions Pool</h4>
+                <h4 className="font-semibold text-primary-600 dark:text-primary-400 text-sm"> Transitions Pool</h4>
                 <span className="text-xs text-faint">
                   {videoConfig.transitions_pool.length} chọn · random mỗi clip
                 </span>
@@ -4038,7 +4038,7 @@ export default function ProcessorPage() {
                       className={`text-xs px-2 py-1 rounded transition ${
                         active
                           ? 'bg-primary-500 text-white'
-                          : 'bg-surface-3 text-dim hover:bg-gray-200'
+                          : 'bg-surface-3 text-dim hover:bg-gray-200 dark:hover:bg-gray-700'
                       }`}
                     >
                       {t}
@@ -4056,7 +4056,7 @@ export default function ProcessorPage() {
                 className="w-full flex items-center justify-between p-4 text-left hover:bg-surface-2 rounded-lg"
               >
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-primary-600 text-sm"> Stickers / Nhãn dán</span>
+                  <span className="font-semibold text-primary-600 dark:text-primary-400 text-sm"> Stickers / Nhãn dán</span>
                   <span className="text-[11px] text-dim">
                     {videoConfig.stickers.length > 0
                       ? `(${videoConfig.stickers.length} đang dùng)`
@@ -4106,7 +4106,7 @@ export default function ProcessorPage() {
                 className="flex items-center justify-between w-full text-left"
                 onClick={() => setAntiDetectionOpen(v => !v)}
               >
-                <h4 className="font-semibold text-primary-600 text-sm"> Chống quét bản quyền</h4>
+                <h4 className="font-semibold text-primary-600 dark:text-primary-400 text-sm"> Chống quét bản quyền</h4>
                 <span className="flex items-center gap-2 text-xs text-faint">
                   {!antiDetectionOpen && <span>tích option để bật</span>}
                   <span className="text-dim">{antiDetectionOpen ? '▲' : '▼'}</span>
@@ -4308,7 +4308,7 @@ export default function ProcessorPage() {
             {/* Preview */}
             <div className="border rounded-lg p-4 bg-gradient-to-br from-slate-50 to-slate-100 space-y-3">
               <div className="flex items-center justify-between">
-                <h4 className="font-semibold text-primary-600 text-sm"> Preview</h4>
+                <h4 className="font-semibold text-primary-600 dark:text-primary-400 text-sm"> Preview</h4>
                 {clipList.length > 0 && (
                   <span className="text-[11px] text-faint">{clipList.length} clip · cycle theo folder order</span>
                 )}
@@ -4917,13 +4917,13 @@ export default function ProcessorPage() {
             {(videoStatus.status === 'running' || videoStatus.status === 'queued') && (
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-primary-600 flex items-center gap-2">
+                  <span className="text-primary-600 dark:text-primary-400 flex items-center gap-2">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
                     Đang xử lý video...
                   </span>
                   <span>{videoStatus.progress}%</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                   <div
                     className="bg-purple-600 h-2 rounded-full transition-all"
                     style={{ width: `${videoStatus.progress}%` }}
@@ -4934,25 +4934,25 @@ export default function ProcessorPage() {
 
             {/* Status */}
             {videoStatus.status === 'completed' && (
-              <div className="bg-green-50 border border-green-200 p-4 rounded-md">
-                <p className="text-green-700 font-semibold">Video processing completed!</p>
+              <div className="bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30 p-4 rounded-md">
+                <p className="text-green-700 dark:text-green-400 font-semibold">Video processing completed!</p>
                 {videoStatus.outputPath && (
-                  <p className="text-sm text-green-600 mt-1">Output: {videoStatus.outputPath}</p>
+                  <p className="text-sm text-green-600 dark:text-green-400 mt-1">Output: {videoStatus.outputPath}</p>
                 )}
               </div>
             )}
 
             {videoStatus.status === 'failed' && (
-              <div className="bg-red-50 border border-red-200 p-4 rounded-md">
-                <p className="text-red-700 font-semibold">Video processing failed</p>
+              <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 p-4 rounded-md">
+                <p className="text-red-700 dark:text-red-400 font-semibold">Video processing failed</p>
                 {videoStatus.error && (
-                  <p className="text-sm text-red-600 mt-1">{videoStatus.error}</p>
+                  <p className="text-sm text-red-600 dark:text-red-400 mt-1">{videoStatus.error}</p>
                 )}
               </div>
             )}
 
             {error && (
-              <div className="text-red-600 text-sm bg-red-50 p-3 rounded-md">{error}</div>
+              <div className="text-red-600 dark:text-red-400 text-sm bg-red-50 dark:bg-red-500/10 p-3 rounded-md">{error}</div>
             )}
 
             {/* Action Buttons */}
@@ -4967,7 +4967,7 @@ export default function ProcessorPage() {
               )}
               <button
                 onClick={() => moveToStep(8)}
-                className={`${videoStatus.status === 'completed' ? 'flex-1' : 'w-full'} bg-gray-400 text-white py-3 px-4 rounded-md hover:bg-gray-500 transition`}
+                className={`${videoStatus.status === 'completed' ? 'flex-1' : 'w-full'} bg-gray-400 dark:bg-gray-600 text-white py-3 px-4 rounded-md hover:bg-gray-500 dark:hover:bg-gray-600 transition`}
                 disabled={videoStatus.status === 'running' || videoStatus.status === 'queued'}
               >
                 Skip Video
@@ -5033,12 +5033,12 @@ export default function ProcessorPage() {
 
               {/* Grammar Errors Section */}
               {editDialog.censoredWords.length > 0 && (
-                <div className="mb-4 bg-orange-50 border border-orange-200 rounded-lg p-4">
+                <div className="mb-4 bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30 rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-3">
-                    <svg className="w-5 h-5 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-5 h-5 text-orange-600 dark:text-orange-400" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                     </svg>
-                    <h4 className="font-semibold text-orange-800">
+                    <h4 className="font-semibold text-orange-800 dark:text-orange-300">
                       Phát hiện {editDialog.censoredWords.length} lỗi
                       {editDialog.censoredWords.filter(w => w.word_type === 'banned').length > 0 && (
                         <span className="ml-2 text-sm font-normal">
@@ -5060,8 +5060,8 @@ export default function ProcessorPage() {
                             <div className="flex items-center gap-2 mb-2">
                               <span className={`font-mono px-2 py-0.5 rounded ${
                                 word.word_type === 'banned'
-                                  ? 'bg-red-100 text-red-800'
-                                  : 'bg-orange-100 text-orange-800'
+                                  ? 'bg-red-100 dark:bg-red-500/20 text-red-800 dark:text-red-300'
+                                  : 'bg-orange-100 dark:bg-orange-500/20 text-orange-800 dark:text-orange-300'
                               }`}>
                                 {word.word}
                               </span>
@@ -5077,7 +5077,7 @@ export default function ProcessorPage() {
                             {word.suggested_replacement && (
                               <div className="mb-2 text-sm">
                                 <span className="text-dim">Thay thế: </span>
-                                <span className="font-mono bg-green-100 text-green-800 px-2 py-0.5 rounded">
+                                <span className="font-mono bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300 px-2 py-0.5 rounded">
                                   {word.suggested_replacement}
                                 </span>
                               </div>
@@ -5097,7 +5097,7 @@ export default function ProcessorPage() {
                             </button>
                           )}
                           {word.fixed && (
-                            <span className="text-xs text-green-600 font-medium">
+                            <span className="text-xs text-green-600 dark:text-green-400 font-medium">
                               ✓ Đã sửa
                             </span>
                           )}
@@ -5109,8 +5109,8 @@ export default function ProcessorPage() {
               )}
 
               {editDialog.censoredWords.length === 0 && (
-                <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 text-green-800">
+                <div className="mb-4 bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-green-800 dark:text-green-300">
                     <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                     </svg>
@@ -5135,8 +5135,8 @@ export default function ProcessorPage() {
                 {/* Find and Replace + Quick Add Banned Word - Side by Side */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Find and Replace Section */}
-                  <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
-                    <h4 className="text-sm font-semibold text-primary-900 mb-3">Tìm và Thay Thế</h4>
+                  <div className="bg-primary-50 dark:bg-primary-500/10 border border-primary-200 dark:border-primary-500/30 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-primary-900 dark:text-primary-300 mb-3">Tìm và Thay Thế</h4>
                     <div className="space-y-3">
                       <div>
                         <label className="block text-xs font-medium text-dim mb-1">Tìm kiếm</label>
@@ -5172,7 +5172,7 @@ export default function ProcessorPage() {
                       {editDialog.findText && (
                         <div className={`text-xs px-3 py-1.5 rounded font-medium ${
                           editDialog.matchCount > 0
-                            ? 'text-green-700 bg-green-50 border border-green-200'
+                            ? 'text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30'
                             : 'text-dim bg-surface-2 border border-token'
                         }`}>
                           {editDialog.matchCount > 0
@@ -5212,7 +5212,7 @@ export default function ProcessorPage() {
                               replaceText: '',
                               matchCount: 0
                             })}
-                            className="px-3 py-1.5 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 transition"
+                            className="px-3 py-1.5 text-sm bg-gray-500 dark:bg-gray-600 text-white rounded hover:bg-gray-600 transition"
                           >
                              Xóa
                           </button>
@@ -5222,8 +5222,8 @@ export default function ProcessorPage() {
                   </div>
 
                   {/* Quick Add Banned Word Section */}
-                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                    <h4 className="text-sm font-semibold text-purple-900 mb-3">Thêm Từ Kiểm Duyệt Nhanh</h4>
+                  <div className="bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/30 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-purple-900 dark:text-purple-300 mb-3">Thêm Từ Kiểm Duyệt Nhanh</h4>
                     <div className="space-y-3">
                       <div>
                         <label className="block text-xs font-medium text-dim mb-1">Từ bị cấm</label>
@@ -5385,7 +5385,7 @@ export default function ProcessorPage() {
             <div className="px-4 py-2 bg-surface-2 border-b text-sm font-mono text-dim truncate">
               {folderBrowser.currentPath || 'Drives'}
               {folderBrowser.videoCount > 0 && (
-                <span className="ml-2 text-green-600 font-sans">
+                <span className="ml-2 text-green-600 dark:text-green-400 font-sans">
                   ({folderBrowser.videoCount} videos)
                 </span>
               )}
@@ -5404,7 +5404,7 @@ export default function ProcessorPage() {
                   {folderBrowser.parentPath !== null && (
                     <button
                       onClick={() => openFolderBrowser(folderBrowser.parentPath || '')}
-                      className="w-full text-left px-3 py-2 hover:bg-primary-50 rounded flex items-center gap-2 text-primary-600"
+                      className="w-full text-left px-3 py-2 hover:bg-primary-50 dark:hover:bg-primary-500/15 rounded flex items-center gap-2 text-primary-600 dark:text-primary-400"
                     >
                       <span>&#8593;</span> ..
                     </button>
@@ -5420,7 +5420,7 @@ export default function ProcessorPage() {
                       onClick={() => navigateFolder(folder)}
                       className="w-full text-left px-3 py-2 hover:bg-surface-3 rounded flex items-center gap-2 text-sm truncate"
                     >
-                      <span className="text-yellow-500 flex-shrink-0">&#128193;</span>
+                      <span className="text-yellow-500 dark:text-yellow-400 flex-shrink-0">&#128193;</span>
                       <span className="truncate">{folder}</span>
                     </button>
                   ))}
@@ -5440,7 +5440,7 @@ export default function ProcessorPage() {
               </button>
               <button
                 onClick={() => setFolderBrowser(prev => ({ ...prev, isOpen: false }))}
-                className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 transition"
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition"
               >
                 Cancel
               </button>
@@ -5456,7 +5456,7 @@ export default function ProcessorPage() {
             <div className="p-4 border-b flex items-center justify-between">
               <h3 className="text-lg font-semibold">
                  Exact Preview
-                {exactPreview.cached && <span className="ml-2 text-xs text-green-600 font-normal">(cache)</span>}
+                {exactPreview.cached && <span className="ml-2 text-xs text-green-600 dark:text-green-400 font-normal">(cache)</span>}
               </h3>
               <button onClick={closeExactPreview} className="text-dim hover:text-strong text-2xl leading-none">×</button>
             </div>
@@ -5467,7 +5467,7 @@ export default function ProcessorPage() {
                     <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary-600 border-t-transparent"></div>
                     <span>Đang render preview với ffmpeg... ({exactPreview.progress}%)</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
                     <div
                       className="bg-primary-500 h-full transition-all"
                       style={{ width: `${exactPreview.progress}%` }}
@@ -5479,7 +5479,7 @@ export default function ProcessorPage() {
                 </div>
               )}
               {exactPreview.status === 'failed' && (
-                <div className="bg-red-50 text-red-700 p-3 rounded text-sm space-y-2">
+                <div className="bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 p-3 rounded text-sm space-y-2">
                   <div className="font-semibold"> Render failed</div>
                   <div className="font-mono text-xs whitespace-pre-wrap">{exactPreview.error || 'Unknown error'}</div>
                   <button
@@ -5531,7 +5531,7 @@ export default function ProcessorPage() {
             <div className="px-4 py-2 bg-surface-2 border-b text-sm font-mono text-dim truncate">
               {audioBrowser.currentPath || 'Drives'}
               {audioBrowser.files.length > 0 && (
-                <span className="ml-2 text-green-600 font-sans">
+                <span className="ml-2 text-green-600 dark:text-green-400 font-sans">
                   ({audioBrowser.files.length} audio files)
                 </span>
               )}
@@ -5550,7 +5550,7 @@ export default function ProcessorPage() {
                   {audioBrowser.parentPath !== null && (
                     <button
                       onClick={() => openAudioBrowser(audioBrowser.parentPath || '')}
-                      className="w-full text-left px-3 py-2 hover:bg-primary-50 rounded flex items-center gap-2 text-primary-600"
+                      className="w-full text-left px-3 py-2 hover:bg-primary-50 dark:hover:bg-primary-500/15 rounded flex items-center gap-2 text-primary-600 dark:text-primary-400"
                     >
                       <span>&#8593;</span> ..
                     </button>
@@ -5563,7 +5563,7 @@ export default function ProcessorPage() {
                       onClick={() => navigateAudioFolder(folder)}
                       className="w-full text-left px-3 py-2 hover:bg-surface-3 rounded flex items-center gap-2 text-sm truncate"
                     >
-                      <span className="text-yellow-500 flex-shrink-0">&#128193;</span>
+                      <span className="text-yellow-500 dark:text-yellow-400 flex-shrink-0">&#128193;</span>
                       <span className="truncate">{folder}</span>
                     </button>
                   ))}
@@ -5573,9 +5573,9 @@ export default function ProcessorPage() {
                     <button
                       key={file}
                       onClick={() => selectAudioFile(file)}
-                      className="w-full text-left px-3 py-2 hover:bg-green-50 rounded flex items-center gap-2 text-sm truncate"
+                      className="w-full text-left px-3 py-2 hover:bg-green-50 dark:hover:bg-green-500/15 rounded flex items-center gap-2 text-sm truncate"
                     >
-                      <span className="text-primary-500 flex-shrink-0">&#127925;</span>
+                      <span className="text-primary-500 dark:text-primary-400 flex-shrink-0">&#127925;</span>
                       <span className="truncate">{file}</span>
                     </button>
                   ))}
@@ -5591,7 +5591,7 @@ export default function ProcessorPage() {
             <div className="p-4 border-t">
               <button
                 onClick={() => setAudioBrowser(prev => ({ ...prev, isOpen: false }))}
-                className="w-full px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 transition"
+                className="w-full px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition"
               >
                 Cancel
               </button>
@@ -5618,7 +5618,7 @@ export default function ProcessorPage() {
             <div className="px-4 py-2 bg-surface-2 border-b text-sm font-mono text-dim truncate">
               {imageBrowser.currentPath || 'Drives'}
               {imageBrowser.files.length > 0 && (
-                <span className="ml-2 text-green-600 font-sans">
+                <span className="ml-2 text-green-600 dark:text-green-400 font-sans">
                   ({imageBrowser.files.length} image files)
                 </span>
               )}
@@ -5637,7 +5637,7 @@ export default function ProcessorPage() {
                   {imageBrowser.parentPath !== null && (
                     <button
                       onClick={() => openImageBrowser(imageBrowser.parentPath || '')}
-                      className="w-full text-left px-3 py-2 hover:bg-primary-50 rounded flex items-center gap-2 text-primary-600"
+                      className="w-full text-left px-3 py-2 hover:bg-primary-50 dark:hover:bg-primary-500/15 rounded flex items-center gap-2 text-primary-600 dark:text-primary-400"
                     >
                       <span>&#8593;</span> ..
                     </button>
@@ -5650,7 +5650,7 @@ export default function ProcessorPage() {
                       onClick={() => navigateImageFolder(folder)}
                       className="w-full text-left px-3 py-2 hover:bg-surface-3 rounded flex items-center gap-2 text-sm truncate"
                     >
-                      <span className="text-yellow-500 flex-shrink-0">&#128193;</span>
+                      <span className="text-yellow-500 dark:text-yellow-400 flex-shrink-0">&#128193;</span>
                       <span className="truncate">{folder}</span>
                     </button>
                   ))}
@@ -5660,9 +5660,9 @@ export default function ProcessorPage() {
                     <button
                       key={file}
                       onClick={() => selectImageFile(file)}
-                      className="w-full text-left px-3 py-2 hover:bg-green-50 rounded flex items-center gap-2 text-sm truncate"
+                      className="w-full text-left px-3 py-2 hover:bg-green-50 dark:hover:bg-green-500/15 rounded flex items-center gap-2 text-sm truncate"
                     >
-                      <span className="text-green-500 flex-shrink-0">&#128444;</span>
+                      <span className="text-green-500 dark:text-green-400 flex-shrink-0">&#128444;</span>
                       <span className="truncate">{file}</span>
                     </button>
                   ))}
@@ -5678,7 +5678,7 @@ export default function ProcessorPage() {
             <div className="p-4 border-t">
               <button
                 onClick={() => setImageBrowser(prev => ({ ...prev, isOpen: false }))}
-                className="w-full px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 transition"
+                className="w-full px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition"
               >
                 Cancel
               </button>
@@ -5699,7 +5699,7 @@ export default function ProcessorPage() {
                 {deleteDialog.chapter?.title && (
                   <span className="block mt-2 font-medium">"{deleteDialog.chapter.title}"</span>
                 )}
-                <span className="block mt-2 text-sm text-red-600">This action cannot be undone.</span>
+                <span className="block mt-2 text-sm text-red-600 dark:text-red-400">This action cannot be undone.</span>
               </p>
 
               <div className="flex justify-end gap-3">
@@ -5831,7 +5831,7 @@ export default function ProcessorPage() {
             <div className="p-4 border-t flex gap-2 justify-end">
               <button
                 onClick={() => setPresetModal({ isOpen: false, mode: 'create', name: '', presetId: null })}
-                className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 transition text-sm"
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition text-sm"
               >
                 Cancel
               </button>
@@ -5866,7 +5866,7 @@ export default function ProcessorPage() {
             <div className="p-4 border-t flex gap-2 justify-end">
               <button
                 onClick={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
-                className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300 transition text-sm"
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition text-sm"
               >
                 Cancel
               </button>

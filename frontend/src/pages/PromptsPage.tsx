@@ -273,8 +273,8 @@ export default function PromptsPage() {
 
         {/* Error message */}
         {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
-            <p className="text-sm text-red-800">{error}</p>
+          <div className="mb-4 p-4 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-md">
+            <p className="text-sm text-red-800 dark:text-red-300">{error}</p>
           </div>
         )}
 
@@ -309,7 +309,7 @@ export default function PromptsPage() {
             <div className="flex items-center gap-2 text-sm text-dim">
               <span>Đang lọc:</span>
               {searchTerm && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 text-primary-800 rounded">
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 dark:bg-primary-500/20 text-primary-800 dark:text-primary-300 rounded">
                   Từ khóa: "{searchTerm}"
                   <button
                     onClick={() => handleSearchChange('')}
@@ -320,7 +320,7 @@ export default function PromptsPage() {
                 </span>
               )}
               {categoryFilter && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-800 rounded">
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 dark:bg-purple-500/20 text-purple-800 dark:text-purple-300 rounded">
                   Danh mục: {categoryFilter}
                   <button
                     onClick={() => handleCategoryFilterChange('')}
@@ -339,7 +339,7 @@ export default function PromptsPage() {
 
         {/* Form */}
         {showForm && (
-          <div className="mb-6 p-4 bg-primary-50 border border-primary-200 rounded-lg">
+          <div className="mb-6 p-4 bg-primary-50 dark:bg-primary-500/10 border border-primary-200 dark:border-primary-500/30 rounded-lg">
             <h3 className="text-lg font-semibold mb-4">
               {editingId ? 'Chỉnh sửa prompt' : 'Thêm prompt mới'}
             </h3>
@@ -347,7 +347,7 @@ export default function PromptsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-dim mb-1">
-                    Tiêu đề <span className="text-red-500">*</span>
+                    Tiêu đề <span className="text-red-500 dark:text-red-400">*</span>
                   </label>
                   <input
                     type="text"
@@ -381,7 +381,7 @@ export default function PromptsPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-dim mb-1">
-                  Nội dung <span className="text-red-500">*</span>
+                  Nội dung <span className="text-red-500 dark:text-red-400">*</span>
                 </label>
                 <textarea
                   value={formData.content}
@@ -412,7 +412,7 @@ export default function PromptsPage() {
                   id="is_active"
                   checked={formData.is_active}
                   onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                  className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                  className="w-4 h-4 text-primary-600 dark:text-primary-400 rounded focus:ring-primary-500"
                   disabled={loading}
                 />
                 <label htmlFor="is_active" className="ml-2 text-sm text-dim">
@@ -431,7 +431,7 @@ export default function PromptsPage() {
                   type="button"
                   onClick={handleCancel}
                   disabled={loading}
-                  className="px-4 py-2 bg-gray-300 text-dim rounded-md hover:bg-gray-400 transition"
+                  className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-dim rounded-md hover:bg-gray-400 dark:hover:bg-gray-600 transition"
                 >
                   Hủy
                 </button>
@@ -454,7 +454,7 @@ export default function PromptsPage() {
                     <div className="flex items-center gap-2 mb-2">
                       <h3 className="text-lg font-semibold text-strong">{prompt.title}</h3>
                       {prompt.category && (
-                        <span className="px-2 py-0.5 text-xs bg-purple-100 text-purple-800 rounded">
+                        <span className="px-2 py-0.5 text-xs bg-purple-100 dark:bg-purple-500/20 text-purple-800 dark:text-purple-300 rounded">
                           {prompt.category}
                         </span>
                       )}
@@ -491,10 +491,10 @@ export default function PromptsPage() {
                         >
                           {copiedId === prompt.id ? (
                             <>
-                              <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                               </svg>
-                              <span className="text-green-600">Đã copy!</span>
+                              <span className="text-green-600 dark:text-green-400">Đã copy!</span>
                             </>
                           ) : (
                             <>
@@ -511,7 +511,7 @@ export default function PromptsPage() {
                             handleEdit(prompt)
                             setActionMenu({ isOpen: false, promptId: null })
                           }}
-                          className="w-full px-4 py-2 text-left text-sm hover:bg-surface-2 flex items-center gap-2 text-primary-600"
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-surface-2 flex items-center gap-2 text-primary-600 dark:text-primary-400"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -524,7 +524,7 @@ export default function PromptsPage() {
                             handleDelete(prompt)
                             setActionMenu({ isOpen: false, promptId: null })
                           }}
-                          className="w-full px-4 py-2 text-left text-sm hover:bg-surface-2 flex items-center gap-2 text-red-600"
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-surface-2 flex items-center gap-2 text-red-600 dark:text-red-400"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -625,8 +625,8 @@ export default function PromptsPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-surface rounded-lg max-w-md w-full shadow-2xl transform transition-all">
             <div className="p-6">
-              <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full">
-                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 dark:bg-red-500/20 rounded-full">
+                <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                     d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
@@ -652,21 +652,21 @@ export default function PromptsPage() {
                   </div>
                 )}
 
-                <p className="text-sm text-red-600 font-medium">
+                <p className="text-sm text-red-600 dark:text-red-400 font-medium">
                   Hành động này không thể hoàn tác!
                 </p>
               </div>
 
               {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-                  <p className="text-sm text-red-800">{error}</p>
+                <div className="mb-4 p-3 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-md">
+                  <p className="text-sm text-red-800 dark:text-red-300">{error}</p>
                 </div>
               )}
 
               <div className="flex gap-3">
                 <button
                   onClick={() => setDeleteDialog({ isOpen: false, prompt: null })}
-                  className="flex-1 px-4 py-2.5 text-dim bg-surface-3 rounded-lg hover:bg-gray-200 transition font-medium"
+                  className="flex-1 px-4 py-2.5 text-dim bg-surface-3 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition font-medium"
                   disabled={loading}
                 >
                   Hủy bỏ

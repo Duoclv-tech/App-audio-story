@@ -216,8 +216,8 @@ export default function BannedWordsPage() {
 
         {/* Error message */}
         {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
-            <p className="text-sm text-red-800">{error}</p>
+          <div className="mb-4 p-4 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-md">
+            <p className="text-sm text-red-800 dark:text-red-300">{error}</p>
           </div>
         )}
 
@@ -254,7 +254,7 @@ export default function BannedWordsPage() {
             <div className="flex items-center gap-2 text-sm text-dim">
               <span>Đang lọc:</span>
               {searchTerm && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 text-primary-800 rounded">
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 dark:bg-primary-500/20 text-primary-800 dark:text-primary-300 rounded">
                   Từ khóa: "{searchTerm}"
                   <button
                     onClick={() => handleSearchChange('')}
@@ -265,7 +265,7 @@ export default function BannedWordsPage() {
                 </span>
               )}
               {statusFilter !== 'all' && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-800 rounded">
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300 rounded">
                   {statusFilter === 'active' ? 'Đang hoạt động' : 'Đã tắt'}
                   <button
                     onClick={() => handleStatusFilterChange('all')}
@@ -284,7 +284,7 @@ export default function BannedWordsPage() {
 
         {/* Form */}
         {showForm && (
-          <div className="mb-6 p-4 bg-primary-50 border border-primary-200 rounded-lg">
+          <div className="mb-6 p-4 bg-primary-50 dark:bg-primary-500/10 border border-primary-200 dark:border-primary-500/30 rounded-lg">
             <h3 className="text-lg font-semibold mb-4">
               {editingId ? 'Chỉnh sửa từ kiểm duyệt' : 'Thêm từ kiểm duyệt mới'}
             </h3>
@@ -292,7 +292,7 @@ export default function BannedWordsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-dim mb-1">
-                    Từ bị cấm <span className="text-red-500">*</span>
+                    Từ bị cấm <span className="text-red-500 dark:text-red-400">*</span>
                   </label>
                   <input
                     type="text"
@@ -306,7 +306,7 @@ export default function BannedWordsPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-dim mb-1">
-                    Từ thay thế <span className="text-red-500">*</span>
+                    Từ thay thế <span className="text-red-500 dark:text-red-400">*</span>
                   </label>
                   <input
                     type="text"
@@ -338,7 +338,7 @@ export default function BannedWordsPage() {
                   id="is_active"
                   checked={formData.is_active}
                   onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                  className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                  className="w-4 h-4 text-primary-600 dark:text-primary-400 rounded focus:ring-primary-500"
                   disabled={loading}
                 />
                 <label htmlFor="is_active" className="ml-2 text-sm text-dim">
@@ -357,7 +357,7 @@ export default function BannedWordsPage() {
                   type="button"
                   onClick={handleCancel}
                   disabled={loading}
-                  className="px-4 py-2 bg-gray-300 text-dim rounded-md hover:bg-gray-400 transition"
+                  className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-dim rounded-md hover:bg-gray-400 dark:hover:bg-gray-600 transition"
                 >
                   Hủy
                 </button>
@@ -399,12 +399,12 @@ export default function BannedWordsPage() {
                 bannedWords.map((word) => (
                   <tr key={word.id} className="hover:bg-surface-2">
                     <td className="px-4 py-3">
-                      <span className="font-mono bg-red-100 text-red-800 px-2 py-1 rounded text-sm">
+                      <span className="font-mono bg-red-100 dark:bg-red-500/20 text-red-800 dark:text-red-300 px-2 py-1 rounded text-sm">
                         {word.banned_word}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="font-mono bg-green-100 text-green-800 px-2 py-1 rounded text-sm">
+                      <span className="font-mono bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300 px-2 py-1 rounded text-sm">
                         {word.replacement_word}
                       </span>
                     </td>
@@ -413,7 +413,7 @@ export default function BannedWordsPage() {
                     </td>
                     <td className="px-4 py-3">
                       {word.is_active ? (
-                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300">
                           Hoạt động
                         </span>
                       ) : (
@@ -425,7 +425,7 @@ export default function BannedWordsPage() {
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => handleEdit(word)}
-                        className="text-primary-600 hover:text-primary-800 mr-3"
+                        className="text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300 mr-3"
                         title="Chỉnh sửa"
                       >
                         <svg className="w-5 h-5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -435,7 +435,7 @@ export default function BannedWordsPage() {
                       </button>
                       <button
                         onClick={() => handleDelete(word)}
-                        className="text-red-600 hover:text-red-800"
+                        className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
                         title="Xóa"
                       >
                         <svg className="w-5 h-5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -543,8 +543,8 @@ export default function BannedWordsPage() {
           <div className="bg-surface rounded-lg max-w-md w-full shadow-2xl transform transition-all">
             <div className="p-6">
               {/* Icon */}
-              <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full">
-                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 dark:bg-red-500/20 rounded-full">
+                <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                     d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
@@ -566,13 +566,13 @@ export default function BannedWordsPage() {
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       <div className="text-left">
                         <span className="text-dim block mb-1">Từ bị cấm:</span>
-                        <span className="font-mono bg-red-100 text-red-800 px-2 py-1 rounded inline-block">
+                        <span className="font-mono bg-red-100 dark:bg-red-500/20 text-red-800 dark:text-red-300 px-2 py-1 rounded inline-block">
                           {deleteDialog.word.banned_word}
                         </span>
                       </div>
                       <div className="text-left">
                         <span className="text-dim block mb-1">Từ thay thế:</span>
-                        <span className="font-mono bg-green-100 text-green-800 px-2 py-1 rounded inline-block">
+                        <span className="font-mono bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300 px-2 py-1 rounded inline-block">
                           {deleteDialog.word.replacement_word}
                         </span>
                       </div>
@@ -586,15 +586,15 @@ export default function BannedWordsPage() {
                   </div>
                 )}
 
-                <p className="text-sm text-red-600 font-medium">
+                <p className="text-sm text-red-600 dark:text-red-400 font-medium">
                    Hành động này không thể hoàn tác!
                 </p>
               </div>
 
               {/* Error message */}
               {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-                  <p className="text-sm text-red-800">{error}</p>
+                <div className="mb-4 p-3 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-md">
+                  <p className="text-sm text-red-800 dark:text-red-300">{error}</p>
                 </div>
               )}
 
@@ -602,7 +602,7 @@ export default function BannedWordsPage() {
               <div className="flex gap-3">
                 <button
                   onClick={() => setDeleteDialog({ isOpen: false, word: null })}
-                  className="flex-1 px-4 py-2.5 text-dim bg-surface-3 rounded-lg hover:bg-gray-200 transition font-medium"
+                  className="flex-1 px-4 py-2.5 text-dim bg-surface-3 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition font-medium"
                   disabled={loading}
                 >
                   Hủy bỏ

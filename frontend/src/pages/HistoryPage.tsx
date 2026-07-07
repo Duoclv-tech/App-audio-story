@@ -133,13 +133,13 @@ export default function HistoryPage() {
   const getStatusBadge = (status: string) => {
     const statusColors: Record<string, string> = {
       'draft': 'bg-surface-3 text-strong',
-      'created': 'bg-primary-100 text-primary-800',
-      'downloading': 'bg-yellow-100 text-yellow-800',
-      'downloaded': 'bg-green-100 text-green-800',
-      'ready_for_tts': 'bg-purple-100 text-purple-800',
-      'tts_processing': 'bg-orange-100 text-orange-800',
-      'tts_completed': 'bg-teal-100 text-teal-800',
-      'completed': 'bg-green-100 text-green-800'
+      'created': 'bg-primary-100 dark:bg-primary-500/20 text-primary-800 dark:text-primary-300',
+      'downloading': 'bg-yellow-100 dark:bg-yellow-500/20 text-yellow-800 dark:text-yellow-300',
+      'downloaded': 'bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300',
+      'ready_for_tts': 'bg-purple-100 dark:bg-purple-500/20 text-purple-800 dark:text-purple-300',
+      'tts_processing': 'bg-orange-100 dark:bg-orange-500/20 text-orange-800 dark:text-orange-300',
+      'tts_completed': 'bg-teal-100 dark:bg-teal-500/20 text-teal-800 dark:text-teal-300',
+      'completed': 'bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300'
     }
 
     const statusLabels: Record<string, string> = {
@@ -194,7 +194,7 @@ export default function HistoryPage() {
           <h2 className="text-2xl font-bold">Lịch Sử</h2>
           <button
             onClick={() => loadStories(currentPage)}
-            className="text-sm text-primary-600 hover:text-primary-800 underline"
+            className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300 underline"
           >
             Làm mới
           </button>
@@ -216,11 +216,11 @@ export default function HistoryPage() {
                 type="checkbox"
                 checked={favoriteOnly}
                 onChange={(e) => handleFavoriteFilterChange(e.target.checked)}
-                className="w-4 h-4 text-primary-600 border-token rounded focus:ring-primary-500"
+                className="w-4 h-4 text-primary-600 dark:text-primary-400 border-token rounded focus:ring-primary-500"
               />
               <span className="flex items-center gap-1 text-sm text-dim">
                 <svg
-                  className="w-4 h-4 text-yellow-500 fill-current"
+                  className="w-4 h-4 text-yellow-500 dark:text-yellow-400 fill-current"
                   viewBox="0 0 24 24"
                   xmlns="http://www.w3.org/2000/svg"
                 >
@@ -239,24 +239,24 @@ export default function HistoryPage() {
 
         {/* Stats Summary */}
         <div className="grid grid-cols-4 gap-4 mb-6">
-          <div className="bg-primary-50 p-4 rounded-lg">
-            <div className="text-2xl font-bold text-primary-600">{paginationMeta.total}</div>
+          <div className="bg-primary-50 dark:bg-primary-500/10 p-4 rounded-lg">
+            <div className="text-2xl font-bold text-primary-600 dark:text-primary-400">{paginationMeta.total}</div>
             <div className="text-sm text-dim">Tổng số truyện</div>
           </div>
-          <div className="bg-green-50 p-4 rounded-lg">
-            <div className="text-2xl font-bold text-green-600">
+          <div className="bg-green-50 dark:bg-green-500/10 p-4 rounded-lg">
+            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
               {stories.filter(s => s.status === 'completed').length}
             </div>
             <div className="text-sm text-dim">Đã hoàn thành (trang này)</div>
           </div>
-          <div className="bg-orange-50 p-4 rounded-lg">
-            <div className="text-2xl font-bold text-orange-600">
+          <div className="bg-orange-50 dark:bg-orange-500/10 p-4 rounded-lg">
+            <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
               {stories.filter(s => s.status === 'tts_processing' || s.status === 'downloading').length}
             </div>
             <div className="text-sm text-dim">Đang xử lý (trang này)</div>
           </div>
-          <div className="bg-purple-50 p-4 rounded-lg">
-            <div className="text-2xl font-bold text-purple-600">
+          <div className="bg-purple-50 dark:bg-purple-500/10 p-4 rounded-lg">
+            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
               {stories.filter(s => s.has_merged_audio).length}
             </div>
             <div className="text-sm text-dim">Có file merge (trang này)</div>
@@ -285,7 +285,7 @@ export default function HistoryPage() {
                       >
                         {story.is_favorite ? (
                           <svg
-                            className="w-6 h-6 text-yellow-500 fill-current"
+                            className="w-6 h-6 text-yellow-500 dark:text-yellow-400 fill-current"
                             viewBox="0 0 24 24"
                             xmlns="http://www.w3.org/2000/svg"
                           >
@@ -320,7 +320,7 @@ export default function HistoryPage() {
                             href={story.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-primary-600 hover:underline truncate max-w-md"
+                            className="text-primary-600 dark:text-primary-400 hover:underline truncate max-w-md"
                           >
                             {story.url}
                           </a>
@@ -345,7 +345,7 @@ export default function HistoryPage() {
                     {/* Progress Info */}
                     <div className="flex items-center gap-6 text-sm">
                       <div className="flex items-center gap-2">
-                        <svg className="w-4 h-4 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                         </svg>
                         <span className="text-dim">
@@ -354,7 +354,7 @@ export default function HistoryPage() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
                         </svg>
                         <span className="text-dim">
@@ -364,7 +364,7 @@ export default function HistoryPage() {
 
                       {story.has_merged_audio && (
                         <div className="flex items-center gap-2">
-                          <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-4 h-4 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                           </svg>
                           <span className="text-dim">
@@ -403,7 +403,7 @@ export default function HistoryPage() {
                         <a
                           href={`/api/v1/export/${story.id}/txt`}
                           download
-                          className="px-3 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition text-sm font-medium"
+                          className="px-3 py-2 bg-gray-500 dark:bg-gray-600 text-white rounded-md hover:bg-gray-600 transition text-sm font-medium"
                           title="Export TXT"
                         >
                           TXT
@@ -515,7 +515,7 @@ export default function HistoryPage() {
               </span>
             </p>
 
-            <p className="text-sm text-red-600 mb-6">
+            <p className="text-sm text-red-600 dark:text-red-400 mb-6">
               Hành động này sẽ xóa tất cả chapters, audio files và không thể hoàn tác.
             </p>
 

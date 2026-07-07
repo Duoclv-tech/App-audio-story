@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Link } from 'react-router-dom'
 import axios from 'axios'
-import { Home, History, Settings, Shield, MessageSquare, Menu, ChevronLeft, Scissors, AlertTriangle, Mic } from 'lucide-react'
+import { Home, History, Settings, Shield, MessageSquare, Menu, ChevronLeft, Scissors, AlertTriangle, Mic, Sun, Moon } from 'lucide-react'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -35,6 +35,14 @@ const NAV_SECTIONS: { title: string; items: NavEntry[] }[] = [
 export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [needsApiKey, setNeedsApiKey] = useState(false)
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'))
+
+  const toggleTheme = () => {
+    const next = !isDark
+    setIsDark(next)
+    document.documentElement.classList.toggle('dark', next)
+    localStorage.setItem('theme', next ? 'dark' : 'light')
+  }
 
   // First-run nudge: if VBEE credentials aren't set yet, TTS won't work.
   useEffect(() => {
@@ -126,9 +134,9 @@ export default function Layout({ children }: LayoutProps) {
           ))}
         </nav>
 
-        {/* API-key nudge, docked at the bottom of the sidebar */}
+        {/* API-key nudge, docked near the bottom of the sidebar */}
         {needsApiKey && sidebarOpen && (
-          <div className="p-3 border-t border-token">
+          <div className="px-3 pt-3">
             <Link
               to="/settings"
               className="flex gap-2.5 items-start p-3 rounded-lg transition-colors hover:brightness-95"
@@ -142,6 +150,20 @@ export default function Layout({ children }: LayoutProps) {
             </Link>
           </div>
         )}
+
+        {/* Theme toggle */}
+        <div className="p-3 border-t border-token">
+          <button
+            onClick={toggleTheme}
+            title={isDark ? 'Chuyển sang nền sáng' : 'Chuyển sang nền tối'}
+            className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-[13.5px] font-medium text-dim hover:text-[var(--text)] hover:bg-surface transition-colors ${
+              sidebarOpen ? '' : 'justify-center'
+            }`}
+          >
+            {isDark ? <Sun size={18} className="shrink-0" /> : <Moon size={18} className="shrink-0" />}
+            {sidebarOpen && <span>{isDark ? 'Nền sáng' : 'Nền tối'}</span>}
+          </button>
+        </div>
       </aside>
 
       {/* Content — no top header; content runs full-width right under the window bar */}

@@ -59,14 +59,14 @@ export default function Timeline({ duration, startSec, endSec, onChange }: Props
     <div className="relative select-none">
       <div
         ref={ref}
-        className="relative h-12 bg-gray-200 rounded"
+        className="relative h-12 bg-gray-200 dark:bg-gray-700 rounded"
       >
         {/* Selection highlight */}
         <div
           className="absolute top-0 bottom-0 bg-primary-200/70 border-x-2 border-primary-500"
           style={{ left: `${pctStart}%`, width: `${pctEnd - pctStart}%` }}
         >
-          <div className="absolute inset-0 flex items-center justify-center text-xs font-medium text-primary-900">
+          <div className="absolute inset-0 flex items-center justify-center text-xs font-medium text-primary-900 dark:text-primary-300">
             {fmt(selectionDuration)}
           </div>
         </div>

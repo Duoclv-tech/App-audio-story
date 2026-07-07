@@ -41,7 +41,7 @@ export default function HomePage() {
     <div className="space-y-8">
       {/* Welcome / hero */}
       <div className="card p-8">
-        <div className="font-mono text-[11px] tracking-[0.14em] uppercase text-primary-600 font-semibold mb-2">
+        <div className="font-mono text-[11px] tracking-[0.14em] uppercase text-primary-600 dark:text-primary-400 font-semibold mb-2">
           Xưởng sản xuất audio truyện
         </div>
         <h2 className="text-3xl font-bold tracking-tight mb-3 text-balance">

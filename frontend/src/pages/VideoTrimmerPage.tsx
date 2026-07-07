@@ -455,7 +455,7 @@ export default function VideoTrimmerPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <Scissors size={28} className="text-primary-600" />
+          <Scissors size={28} className="text-primary-600 dark:text-primary-400" />
           <h1 className="text-3xl font-bold text-strong">Cắt video</h1>
         </div>
         <button
@@ -542,7 +542,7 @@ export default function VideoTrimmerPage() {
               />
               <div className="self-end">
                 <div className="text-sm text-dim mb-1">Đoạn hiện tại</div>
-                <div className="text-lg font-mono font-semibold text-primary-700">
+                <div className="text-lg font-mono font-semibold text-primary-700 dark:text-primary-400">
                   {(endSec - startSec).toFixed(2)}s
                 </div>
               </div>
@@ -558,7 +558,7 @@ export default function VideoTrimmerPage() {
                   type="button"
                   onClick={addSegment}
                   disabled={endSec - startSec < 0.1}
-                  className="flex items-center gap-2 px-3 py-1.5 border border-primary-400 text-primary-700 rounded hover:bg-primary-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  className="flex items-center gap-2 px-3 py-1.5 border border-primary-400 dark:border-primary-500/30 text-primary-700 dark:text-primary-400 rounded hover:bg-primary-50 dark:hover:bg-primary-500/15 disabled:opacity-40 disabled:cursor-not-allowed transition"
                   title="Thêm đoạn này vào danh sách ghép"
                 >
                   <Plus size={16} /> Thêm đoạn
@@ -575,7 +575,7 @@ export default function VideoTrimmerPage() {
                 {segments.map((seg, idx) => (
                   <div
                     key={seg.id}
-                    className="flex items-center gap-3 px-3 py-1.5 bg-primary-50 border border-primary-200 rounded text-sm"
+                    className="flex items-center gap-3 px-3 py-1.5 bg-primary-50 dark:bg-primary-500/10 border border-primary-200 dark:border-primary-500/30 rounded text-sm"
                   >
                     <span className="text-primary-400 font-mono text-xs w-4 text-right">{idx + 1}</span>
                     <span className="font-mono text-strong">
@@ -625,7 +625,7 @@ export default function VideoTrimmerPage() {
             <h2 className="text-lg font-semibold">5. Xuất file</h2>
 
             {showStreamCopyWarning && (
-              <div className="bg-yellow-50 border border-yellow-300 text-yellow-900 text-sm p-3 rounded">
+              <div className="bg-yellow-50 dark:bg-yellow-500/10 border border-yellow-300 dark:border-yellow-500/30 text-yellow-900 dark:text-yellow-300 text-sm p-3 rounded">
                  <b>Stream copy</b> — điểm cắt có thể lệch ±2s do keyframe. Tick "Cắt chính xác
                 theo frame" để frame-accurate.
               </div>
@@ -644,7 +644,7 @@ export default function VideoTrimmerPage() {
             )}
 
             {validationError && (
-              <div className="bg-red-50 border border-red-300 text-red-800 text-sm p-3 rounded">
+              <div className="bg-red-50 dark:bg-red-500/10 border border-red-300 dark:border-red-500/30 text-red-800 dark:text-red-300 text-sm p-3 rounded">
                 {validationError}
               </div>
             )}
@@ -661,7 +661,7 @@ export default function VideoTrimmerPage() {
 
             {processStatus !== 'idle' && (
               <div>
-                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
                   <div
                     className={`h-2.5 rounded-full transition-all ${
                       processStatus === 'failed' ? 'bg-red-500' : 'bg-primary-600'
@@ -677,7 +677,7 @@ export default function VideoTrimmerPage() {
                 {processStatus === 'completed' && jobId && (
                   <a
                     href={getDownloadUrl(jobId)}
-                    className="text-sm text-primary-600 hover:underline"
+                    className="text-sm text-primary-600 dark:text-primary-400 hover:underline"
                   >
                     Tải lại file
                   </a>

@@ -110,7 +110,7 @@ export function StickerPanel({
         </div>
 
         {uploadError && (
-          <div className="text-[11px] text-red-600 bg-red-50 p-1.5 rounded">{uploadError}</div>
+          <div className="text-[11px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 p-1.5 rounded">{uploadError}</div>
         )}
 
         {/* Category tabs */}
@@ -123,7 +123,7 @@ export function StickerPanel({
                 className={`text-[11px] px-2 py-0.5 rounded ${
                   activeCategory === cat
                     ? 'bg-primary-500 text-white'
-                    : 'bg-surface-3 text-dim hover:bg-gray-200'
+                    : 'bg-surface-3 text-dim hover:bg-gray-200 dark:hover:bg-gray-700'
                 }`}
               >
                 {cat === 'all' ? 'Tất cả' : (library.find(c => c.name === cat)?.label || cat)}
@@ -171,7 +171,7 @@ export function StickerPanel({
              Sticker đang dùng ({stickers.length})
           </div>
           {stickers.length > 5 && (
-            <span className="text-[10px] text-amber-600" title="Quá nhiều sticker có thể làm encode chậm">
+            <span className="text-[10px] text-amber-600 dark:text-amber-400" title="Quá nhiều sticker có thể làm encode chậm">
                &gt;5 sticker, encode có thể chậm
             </span>
           )}
@@ -189,7 +189,7 @@ export function StickerPanel({
                 onClick={() => onSelect(s.id)}
                 className={`flex items-center gap-2 p-1.5 rounded border cursor-pointer ${
                   selectedId === s.id
-                    ? 'border-primary-400 bg-primary-50'
+                    ? 'border-primary-400 dark:border-primary-500/30 bg-primary-50 dark:bg-primary-500/10'
                     : 'border-token hover:border-token'
                 }`}
               >
@@ -210,7 +210,7 @@ export function StickerPanel({
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onRemove(s.id) }}
-                  className="text-xs text-red-500 hover:text-red-700 px-1"
+                  className="text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-400 px-1"
                   title="Xoá sticker"
                 >
                   ×
@@ -311,7 +311,7 @@ export function StickerPanel({
             <button
               type="button"
               onClick={() => onUpdate(selected.id, { x: 0.5, y: 0.5 })}
-              className="text-[11px] px-2 py-0.5 bg-surface-3 rounded hover:bg-gray-200"
+              className="text-[11px] px-2 py-0.5 bg-surface-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
             >
               ⊙ Center
             </button>

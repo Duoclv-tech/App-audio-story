@@ -75,15 +75,15 @@ export default function SettingsPage() {
       {/* VBEE API Configuration */}
       <div className="mb-8">
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <span className="text-primary-600"></span>
+          <span className="text-primary-600 dark:text-primary-400"></span>
           Cấu Hình VBEE API
         </h3>
 
-        <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 mb-4">
-          <div className="text-sm text-primary-800 mb-2 font-medium">
+        <div className="bg-primary-50 dark:bg-primary-500/10 border border-primary-200 dark:border-primary-500/30 rounded-lg p-4 mb-4">
+          <div className="text-sm text-primary-800 dark:text-primary-300 mb-2 font-medium">
             Hướng dẫn lấy credentials:
           </div>
-          <ol className="text-sm text-primary-700 space-y-1 list-decimal list-inside">
+          <ol className="text-sm text-primary-700 dark:text-primary-400 space-y-1 list-decimal list-inside">
             <li>Đăng nhập <a href="https://vbee.vn" target="_blank" rel="noopener noreferrer" className="underline">https://vbee.vn</a></li>
             <li>Vào phần <strong>Quản lý ứng dụng</strong></li>
             <li>Tạo app mới hoặc chọn app có sẵn</li>
@@ -96,7 +96,7 @@ export default function SettingsPage() {
           <div>
             <label className="block text-sm font-medium mb-1">
               App ID
-              <span className="text-red-500 ml-1">*</span>
+              <span className="text-red-500 dark:text-red-400 ml-1">*</span>
             </label>
             <input
               type="text"
@@ -113,7 +113,7 @@ export default function SettingsPage() {
           <div>
             <label className="block text-sm font-medium mb-1">
               Bearer Token
-              <span className="text-red-500 ml-1">*</span>
+              <span className="text-red-500 dark:text-red-400 ml-1">*</span>
             </label>
             <div className="relative">
               <input
@@ -126,7 +126,7 @@ export default function SettingsPage() {
               <button
                 type="button"
                 onClick={() => setShowTokens(!showTokens)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-primary-600 hover:text-primary-800"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300"
               >
                 {showTokens ? 'Ẩn' : 'Hiện'}
               </button>
@@ -141,15 +141,15 @@ export default function SettingsPage() {
       {/* Gemini AI Configuration */}
       <div className="mb-8">
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <span className="text-purple-600"></span>
+          <span className="text-purple-600 dark:text-purple-400"></span>
           Cấu Hình Gemini AI (Grammar Check)
         </h3>
 
-        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
-          <div className="text-sm text-purple-800 mb-2 font-medium">
+        <div className="bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/30 rounded-lg p-4 mb-4">
+          <div className="text-sm text-purple-800 dark:text-purple-300 mb-2 font-medium">
             Hướng dẫn lấy API Key (miễn phí):
           </div>
-          <ol className="text-sm text-purple-700 space-y-1 list-decimal list-inside">
+          <ol className="text-sm text-purple-700 dark:text-purple-400 space-y-1 list-decimal list-inside">
             <li>Vào <a href="https://ai.google.dev" target="_blank" rel="noopener noreferrer" className="underline">https://ai.google.dev</a></li>
             <li>Đăng nhập bằng Gmail</li>
             <li>Click <strong>"Get API Key"</strong> (góc trái)</li>
@@ -172,7 +172,7 @@ export default function SettingsPage() {
             <button
               type="button"
               onClick={() => setShowTokens(!showTokens)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-purple-600 hover:text-purple-800"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300"
             >
               {showTokens ? 'Ẩn' : 'Hiện'}
             </button>
@@ -187,8 +187,8 @@ export default function SettingsPage() {
       {message && (
         <div className={`mb-4 p-4 rounded-lg ${
           message.type === 'success'
-            ? 'bg-green-50 border border-green-200 text-green-800'
-            : 'bg-red-50 border border-red-200 text-red-800'
+            ? 'bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30 text-green-800 dark:text-green-300'
+            : 'bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 text-red-800 dark:text-red-300'
         }`}>
           {message.text}
         </div>

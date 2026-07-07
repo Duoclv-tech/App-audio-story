@@ -63,6 +63,12 @@
   .pill-warn { background: rgba(184,121,26,0.15); color: #B8791A; }
   .pill-err { background: rgba(214,75,69,0.12); color: #D64B45; }
 
+  /* "BƯỚC x/7" badge next to a wizard step title. */
+  .step-badge {
+    @apply font-mono text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0;
+    background: var(--accent-soft); color: var(--accent);
+  }
+
   /* Active sidebar item: tinted background + accent left-rail. */
   .nav-active { background: var(--accent-soft); }
   .nav-active::before {

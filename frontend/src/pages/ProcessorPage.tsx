@@ -11,14 +11,14 @@ import { hasNativeDialogs, pickFolderNative, pickAudioFileNative, pickImageFileN
 
 // Define workflow steps
 const WORKFLOW_STEPS = [
-  { id: 1, name: 'Input', description: 'Enter URL and configuration', hidden: false },
-  { id: 2, name: 'Download', description: 'Download chapters from TruyenFull', hidden: true }, // Hidden - runs automatically
-  { id: 3, name: 'Edit', description: 'Review and edit chapter content', hidden: false },
-  { id: 4, name: 'Grammar', description: 'Check grammar with AI', hidden: false },
-  { id: 5, name: 'TTS Config', description: 'Configure text-to-speech settings', hidden: false },
-  { id: 6, name: 'TTS Process', description: 'Convert text to speech', hidden: false },
-  { id: 7, name: 'Video', description: 'Create video from audio', hidden: false },
-  { id: 8, name: 'Complete', description: 'Download final audio', hidden: false }
+  { id: 1, name: 'Nhập', description: 'Nhập URL và cấu hình', hidden: false },
+  { id: 2, name: 'Tải', description: 'Tải chương từ TruyenFull', hidden: true }, // Hidden - runs automatically
+  { id: 3, name: 'Sửa', description: 'Xem lại và chỉnh sửa nội dung chương', hidden: false },
+  { id: 4, name: 'Kiểm tra', description: 'Kiểm tra chính tả bằng AI', hidden: false },
+  { id: 5, name: 'Cấu hình TTS', description: 'Cấu hình giọng đọc', hidden: false },
+  { id: 6, name: 'Đọc TTS', description: 'Chuyển văn bản thành giọng đọc', hidden: false },
+  { id: 7, name: 'Video', description: 'Tạo video từ audio', hidden: false },
+  { id: 8, name: 'Hoàn tất', description: 'Tải audio hoàn chỉnh', hidden: false }
 ]
 
 // Visible steps for UI (filter out hidden ones)
@@ -2080,56 +2080,54 @@ export default function ProcessorPage() {
     const maxAccessibleStep = storyData.current_step || 1
 
     return (
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
+      <div className="mb-8 overflow-x-auto pb-1">
+        <div className="flex items-start min-w-[620px]">
           {VISIBLE_STEPS.map((step, index) => {
             const isCurrentStep = currentStep === step.id
             const isAccessible = step.id <= maxAccessibleStep
             const isCompleted = step.id < maxAccessibleStep
+            const isLast = index === VISIBLE_STEPS.length - 1
+
+            const dotStyle = isCurrentStep
+              ? { background: 'var(--accent)', color: '#fff', boxShadow: '0 0 0 4px var(--accent-soft)' }
+              : isCompleted
+              ? { background: 'rgba(31,157,107,0.14)', color: '#1F9D6B', border: '1.5px solid rgba(31,157,107,0.45)' }
+              : { background: 'var(--surface-2)', border: '1.5px solid var(--border-strong)' }
 
             return (
-              <div key={step.id} className="flex items-center">
-                <div
-                  onClick={() => handleStepClick(step.id)}
-                  className={`
-                    flex items-center justify-center w-10 h-10 rounded-full border-2
-                    ${isCurrentStep
-                      ? 'bg-primary-500 text-white border-primary-500 cursor-pointer'
-                      : isCompleted
-                      ? 'bg-green-500 text-white border-green-500 cursor-pointer hover:bg-green-600'
-                      : isAccessible
-                      ? 'bg-gray-100 text-gray-700 border-gray-400 cursor-pointer hover:bg-gray-200'
-                      : 'bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed'}
-                    transition-colors duration-200
-                  `}
-                  title={isAccessible ? `Go to ${step.name}` : `Complete previous steps first`}
-                >
-                  {isCompleted ? '✓' : index + 1}
-                </div>
-                {index < VISIBLE_STEPS.length - 1 && (
-                  <div
-                    className={`w-20 h-1 mx-2 ${
-                      step.id < maxAccessibleStep ? 'bg-green-500' : 'bg-gray-300'
+              <div key={step.id} className={`flex items-start ${isLast ? '' : 'flex-1'}`}>
+                <div className="flex flex-col items-center gap-1.5 w-16 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleStepClick(step.id)}
+                    disabled={!isAccessible}
+                    title={isAccessible ? `Tới bước: ${step.name}` : 'Hoàn thành các bước trước đã'}
+                    className={`w-9 h-9 rounded-full grid place-items-center font-mono text-[13px] font-semibold border border-transparent transition-all ${
+                      isAccessible ? 'cursor-pointer hover:brightness-95' : 'cursor-not-allowed text-faint'
                     }`}
+                    style={dotStyle}
+                  >
+                    {isCompleted ? '✓' : index + 1}
+                  </button>
+                  <span
+                    className={`text-[11px] leading-tight text-center ${
+                      isCurrentStep ? 'font-semibold text-[var(--text)]' : 'text-dim'
+                    }`}
+                  >
+                    {step.name}
+                  </span>
+                </div>
+                {!isLast && (
+                  <div
+                    className="flex-1 h-0.5 rounded mt-[17px] mx-1"
+                    style={{ background: step.id < maxAccessibleStep ? 'rgba(31,157,107,0.5)' : 'var(--border-strong)' }}
                   />
                 )}
               </div>
             )
           })}
+        </div>
       </div>
-      <div className="flex items-center justify-between mt-2">
-        {VISIBLE_STEPS.map((step, index) => (
-          <div key={step.id} className="flex items-center">
-            <div className="text-xs text-center w-10">
-              {step.name}
-            </div>
-            {index < VISIBLE_STEPS.length - 1 && (
-              <div className="w-20 mx-2" />
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
     )
   }
 
@@ -2245,7 +2243,10 @@ export default function ProcessorPage() {
       case 1:
         return (
           <div className="space-y-4">
-            <h3 className="text-xl font-semibold mb-4">Step 1: Enter Story Information</h3>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <h3 className="text-xl font-semibold tracking-tight">Nhập thông tin truyện</h3>
+              <span className="step-badge">BƯỚC 1/7</span>
+            </div>
             <form onSubmit={handleSubmitURL} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">TruyenFull URL</label>
@@ -2379,7 +2380,10 @@ export default function ProcessorPage() {
       case 3:
         return (
           <div className="space-y-4">
-            <h3 className="text-xl font-semibold mb-4">Step 3: Review & Edit Chapters</h3>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <h3 className="text-xl font-semibold tracking-tight">Sửa nội dung chương</h3>
+              <span className="step-badge">BƯỚC 2/7</span>
+            </div>
 
             {/* Statistics Section */}
             {checkingGrammar && (
@@ -2504,7 +2508,10 @@ export default function ProcessorPage() {
         // Grammar Check Step - NEW
         return (
           <div className="space-y-4">
-            <h3 className="text-xl font-semibold mb-4">Step 4: Check Grammar</h3>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <h3 className="text-xl font-semibold tracking-tight">Kiểm tra chính tả</h3>
+              <span className="step-badge">BƯỚC 3/7</span>
+            </div>
 
             {/* Auto load merged content when entering this step */}
             {!mergedView.content && !mergedView.isOpen && (
@@ -2784,7 +2791,10 @@ export default function ProcessorPage() {
       case 5:
         return (
           <div className="space-y-4">
-            <h3 className="text-xl font-semibold mb-4">Step 5: Configure Text-to-Speech</h3>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <h3 className="text-xl font-semibold tracking-tight">Cấu hình giọng đọc</h3>
+              <span className="step-badge">BƯỚC 4/7</span>
+            </div>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Voice</label>
@@ -2846,7 +2856,10 @@ export default function ProcessorPage() {
       case 6:
         return (
           <div className="space-y-4">
-            <h3 className="text-xl font-semibold mb-4">Step 6: TTS Processing</h3>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <h3 className="text-xl font-semibold tracking-tight">Chuyển thành giọng đọc</h3>
+              <span className="step-badge">BƯỚC 5/7</span>
+            </div>
 
             {/* TTS Status */}
             <div className={`border rounded-lg p-4 ${
@@ -3007,8 +3020,11 @@ export default function ProcessorPage() {
           <div className="space-y-4">
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div>
-                <h3 className="text-xl font-semibold mb-1">Step 7: Video Processing</h3>
-                <p className="text-sm text-gray-500">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="text-xl font-semibold tracking-tight">Xử lý video</h3>
+                  <span className="step-badge">BƯỚC 6/7</span>
+                </div>
+                <p className="text-sm text-dim">
                   Tạo video từ audio + video ngắn làm nền. Bước này là tùy chọn, có thể bỏ qua.
                 </p>
               </div>
@@ -4991,9 +5007,9 @@ export default function ProcessorPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="bg-white rounded-lg shadow-sm p-8">
-        <h2 className="text-2xl font-bold mb-6">Story Processor</h2>
+    <div className="max-w-5xl mx-auto">
+      <div className="card p-6 md:p-8">
+        <h2 className="text-2xl font-bold tracking-tight mb-6">Xử lý truyện</h2>
 
         {renderStepIndicator()}
 

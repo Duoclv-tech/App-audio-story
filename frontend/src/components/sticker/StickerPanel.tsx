@@ -9,7 +9,7 @@ import {
 
 interface PanelProps {
   stickers: Sticker[]
-  audioDuration: number  // post-speedup duration drives default end_time clamp
+  audioDuration: number // post-speedup duration drives default end_time clamp
   selectedId: string | null
   onSelect: (id: string | null) => void
   onAdd: (s: Sticker) => void
@@ -88,7 +88,7 @@ export function StickerPanel({
       {/* Library picker */}
       <div className="border rounded p-3 bg-white space-y-2">
         <div className="flex items-center justify-between">
-          <div className="text-xs font-medium text-gray-700">📚 Thư viện sticker</div>
+          <div className="text-xs font-medium text-gray-700"> Thư viện sticker</div>
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -168,11 +168,11 @@ export function StickerPanel({
       <div className="border rounded p-3 bg-white space-y-2">
         <div className="flex items-center justify-between">
           <div className="text-xs font-medium text-gray-700">
-            🏷️ Sticker đang dùng ({stickers.length})
+             Sticker đang dùng ({stickers.length})
           </div>
           {stickers.length > 5 && (
             <span className="text-[10px] text-amber-600" title="Quá nhiều sticker có thể làm encode chậm">
-              ⚠️ &gt;5 sticker, encode có thể chậm
+               &gt;5 sticker, encode có thể chậm
             </span>
           )}
         </div>
@@ -203,7 +203,7 @@ export function StickerPanel({
                     {s.source_label || s.image_path.split(/[\\/]/).pop()}
                   </div>
                   <div className="text-[10px] text-gray-500">
-                    {fmtTime(s.start_time)} → {s.end_time == null ? 'hết' : fmtTime(s.end_time)}
+                    {fmtTime(s.start_time)} {s.end_time == null ? 'hết' : fmtTime(s.end_time)}
                     {' · '}{s.w}×{s.h}px
                   </div>
                 </div>
@@ -224,7 +224,7 @@ export function StickerPanel({
       {/* Selected sticker editor */}
       {selected && (
         <div className="border rounded p-3 bg-white space-y-2">
-          <div className="text-xs font-medium text-gray-700">⚙️ Tinh chỉnh sticker đang chọn</div>
+          <div className="text-xs font-medium text-gray-700"> Tinh chỉnh sticker đang chọn</div>
 
           <div className="grid grid-cols-2 gap-2">
             <div>

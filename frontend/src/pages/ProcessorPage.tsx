@@ -110,7 +110,7 @@ interface AudioRecord {
 export default function ProcessorPage() {
   const { storyId } = useParams<{ storyId: string }>()
   const navigate = useNavigate()
-  const [currentStep, setCurrentStep] = useState(1)  // Current viewing step (UI state)
+  const [currentStep, setCurrentStep] = useState(1) // Current viewing step (UI state)
   const [storyData, setStoryData] = useState<StoryData>({
     url: '',
     title: '',
@@ -295,7 +295,7 @@ export default function ProcessorPage() {
     stickers: [],
   }
 
-  // Migrate old configs (with *_position string) → x/y center coords
+  // Migrate old configs (with *_position string) x/y center coords
   const migrateOldCfg = (cfg: any): any => {
     if (!cfg) return cfg
     const posToXY = (pos: string) => ({
@@ -311,7 +311,7 @@ export default function ProcessorPage() {
       cfg.watermark_text_x = xy.x; cfg.watermark_text_y = xy.y
     }
     delete cfg.watermark_position; delete cfg.watermark_text_position
-    // Migrate old watermark_size (% of width) → w/h px (assume 1920 base)
+    // Migrate old watermark_size (% of width) w/h px (assume 1920 base)
     if (typeof cfg.watermark_size === 'number' && cfg.watermark_w === undefined) {
       const wpx = Math.max(32, Math.round(cfg.watermark_size * 1920))
       cfg.watermark_w = wpx
@@ -1384,7 +1384,7 @@ export default function ProcessorPage() {
     if (!cur) return
     setConfirmDialog({
       isOpen: true,
-      title: '🔄 Cập nhật preset',
+      title: ' Cập nhật preset',
       message: `Ghi đè preset "${cur.name}" bằng config hiện tại?`,
       confirmText: 'Cập nhật',
       variant: 'primary',
@@ -2344,7 +2344,7 @@ export default function ProcessorPage() {
               {error && (
                 <div className={`p-4 rounded-md ${duplicateStory ? 'bg-orange-50 border border-orange-200' : 'bg-red-50 border border-red-200'}`}>
                   <div className={`text-sm font-medium ${duplicateStory ? 'text-orange-800' : 'text-red-800'} mb-2`}>
-                    {duplicateStory ? '⚠️ Truyện đã tồn tại' : '❌ Lỗi'}
+                    {duplicateStory ? ' Truyện đã tồn tại' : ' Lỗi'}
                   </div>
                   <div className={`text-sm ${duplicateStory ? 'text-orange-700' : 'text-red-700'} mb-3`}>
                     {error}
@@ -2437,7 +2437,7 @@ export default function ProcessorPage() {
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <span className="font-medium">
-                              {chapter.chapter_number === 0 ? '📢 Giới thiệu (Chapter 0)' : `Chapter ${chapter.chapter_number}`}
+                              {chapter.chapter_number === 0 ? ' Giới thiệu (Chapter 0)' : `Chapter ${chapter.chapter_number}`}
                             </span>
                             {chapter.chapter_number !== 0 && chapter.title && (
                               <span className="text-sm text-gray-600">- {chapter.title}</span>
@@ -2447,12 +2447,12 @@ export default function ProcessorPage() {
                             <span className="text-sm text-gray-500">{chapter.char_count.toLocaleString()} ký tự</span>
                             {chapter.chapter_number === 0 && chapter.char_count === 0 && (
                               <span className="text-sm text-purple-600 italic">
-                                💡 Thêm nội dung giới thiệu (hoặc để trống để bỏ qua)
+                                 Thêm nội dung giới thiệu (hoặc để trống để bỏ qua)
                               </span>
                             )}
                             {(chapter.chapter_number !== 0 || chapter.char_count > 0) && chapter.censored_count > 0 && (
                               <span className="text-sm text-orange-600 font-medium">
-                                ⚠ {chapter.censored_count} lỗi ngữ pháp
+                                 {chapter.censored_count} lỗi ngữ pháp
                               </span>
                             )}
                             {(chapter.chapter_number !== 0 || chapter.char_count > 0) && chapter.censored_count === 0 && (
@@ -2520,7 +2520,7 @@ export default function ProcessorPage() {
                   onClick={loadMergedContent}
                   className="bg-purple-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-purple-600 transition"
                 >
-                  📝 Tải nội dung để kiểm tra
+                   Tải nội dung để kiểm tra
                 </button>
               </div>
             )}
@@ -2529,7 +2529,7 @@ export default function ProcessorPage() {
               <div className="space-y-4">
                 {/* Find & Replace */}
                 <div className="bg-white border rounded-lg p-4">
-                  <h4 className="font-semibold text-gray-800 mb-3">🔍 Tìm và Thay thế</h4>
+                  <h4 className="font-semibold text-gray-800 mb-3"> Tìm và Thay thế</h4>
                   <div className="flex flex-wrap gap-2 items-center">
                     <input
                       type="text"
@@ -2567,7 +2567,7 @@ export default function ProcessorPage() {
                 <div className="border rounded-lg overflow-hidden">
                   <div className="bg-gray-100 px-4 py-2 flex items-center justify-between border-b">
                     <span className="text-sm font-medium text-gray-700">
-                      📖 Nội dung truyện ({mergedView.content.length.toLocaleString()} ký tự)
+                       Nội dung truyện ({mergedView.content.length.toLocaleString()} ký tự)
                     </span>
                     <button
                       onClick={checkMergedGrammar}
@@ -2577,7 +2577,7 @@ export default function ProcessorPage() {
                       {mergedView.isChecking ? (
                         <><div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div> Đang kiểm tra...</>
                       ) : (
-                        <>🤖 AI Check Grammar</>
+                        <> AI Check Grammar</>
                       )}
                     </button>
                   </div>
@@ -2628,7 +2628,7 @@ export default function ProcessorPage() {
                     {/* Header */}
                     <div className="bg-purple-600 text-white px-4 py-3 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-lg">🤖</span>
+                        <span className="text-lg"></span>
                         <span className="font-semibold">Kết quả AI Check</span>
                       </div>
                       <button
@@ -2646,7 +2646,7 @@ export default function ProcessorPage() {
                       {/* Error */}
                       {mergedView.aiResult.error && (
                         <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-                          <h4 className="font-semibold text-red-700 mb-2">❌ Lỗi</h4>
+                          <h4 className="font-semibold text-red-700 mb-2"> Lỗi</h4>
                           <p className="text-red-600 text-sm">{mergedView.aiResult.error}</p>
                         </div>
                       )}
@@ -2654,7 +2654,7 @@ export default function ProcessorPage() {
                       {/* Summary */}
                       {mergedView.aiResult.summary && (
                         <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 mb-4">
-                          <h4 className="font-semibold text-primary-700 mb-2">📋 Tóm tắt</h4>
+                          <h4 className="font-semibold text-primary-700 mb-2"> Tóm tắt</h4>
                           <p className="text-gray-700">{mergedView.aiResult.summary}</p>
                         </div>
                       )}
@@ -2663,10 +2663,10 @@ export default function ProcessorPage() {
                       {mergedView.aiResult.success && (
                         <div className="flex gap-3 mb-4">
                           <span className="px-3 py-2 rounded-lg bg-red-100 text-red-700 font-medium">
-                            📝 {mergedView.aiResult.total_issues || 0} lỗi chính tả
+                             {mergedView.aiResult.total_issues || 0} lỗi chính tả
                           </span>
                           <span className="px-3 py-2 rounded-lg bg-orange-100 text-orange-700 font-medium">
-                            ⚠️ {mergedView.aiResult.total_watermarks || 0} watermark
+                             {mergedView.aiResult.total_watermarks || 0} watermark
                           </span>
                         </div>
                       )}
@@ -2674,7 +2674,7 @@ export default function ProcessorPage() {
                       {/* Spelling Errors */}
                       {mergedView.aiResult.spelling_errors && mergedView.aiResult.spelling_errors.length > 0 && (
                         <div className="mb-4">
-                          <h4 className="font-semibold text-red-700 mb-3 text-lg">📝 Lỗi chính tả</h4>
+                          <h4 className="font-semibold text-red-700 mb-3 text-lg"> Lỗi chính tả</h4>
                           <div className="space-y-3">
                             {mergedView.aiResult.spelling_errors.map((error: any, idx: number) => (
                               <div key={idx} className="bg-gray-50 border rounded-lg p-3">
@@ -2682,14 +2682,14 @@ export default function ProcessorPage() {
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="text-gray-500 text-sm">{idx + 1}.</span>
                                     <span className="bg-red-100 text-red-700 px-2 py-1 rounded line-through">{error.original}</span>
-                                    <span className="text-gray-400">→</span>
+                                    <span className="text-gray-400"></span>
                                     <span className="bg-green-100 text-green-700 px-2 py-1 rounded font-medium">{error.suggestion}</span>
                                   </div>
                                   <button
                                     onClick={() => {
                                       const newContent = mergedView.content.replaceAll(error.original, error.suggestion)
                                       setMergedView(prev => ({ ...prev, content: newContent }))
-                                      showToast(`Đã thay "${error.original}" → "${error.suggestion}"`, 'success')
+                                      showToast(`Đã thay "${error.original}" "${error.suggestion}"`, 'success')
                                     }}
                                     className="bg-green-500 text-white px-3 py-1 rounded text-sm font-medium hover:bg-green-600 transition whitespace-nowrap"
                                   >
@@ -2708,7 +2708,7 @@ export default function ProcessorPage() {
                       {/* Watermarks */}
                       {mergedView.aiResult.watermarks && mergedView.aiResult.watermarks.length > 0 && (
                         <div className="mb-4">
-                          <h4 className="font-semibold text-orange-700 mb-3 text-lg">⚠️ Watermark phát hiện</h4>
+                          <h4 className="font-semibold text-orange-700 mb-3 text-lg"> Watermark phát hiện</h4>
                           <div className="space-y-3">
                             {mergedView.aiResult.watermarks.map((wm: any, idx: number) => (
                               <div key={idx} className="bg-orange-50 border border-orange-200 rounded-lg p-3">
@@ -2725,7 +2725,7 @@ export default function ProcessorPage() {
                                     }}
                                     className="bg-red-500 text-white px-3 py-1 rounded text-sm font-medium hover:bg-red-600 transition whitespace-nowrap"
                                   >
-                                    🗑️ Xóa
+                                     Xóa
                                   </button>
                                 </div>
                                 {wm.context && (
@@ -2742,7 +2742,9 @@ export default function ProcessorPage() {
                        (!mergedView.aiResult.spelling_errors || mergedView.aiResult.spelling_errors.length === 0) &&
                        (!mergedView.aiResult.watermarks || mergedView.aiResult.watermarks.length === 0) && (
                         <div className="text-center py-8">
-                          <div className="text-6xl mb-4">✅</div>
+                          <div className="mx-auto mb-4 w-14 h-14 rounded-full grid place-items-center" style={{ background: 'rgba(31,157,107,0.14)', color: '#1F9D6B' }}>
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                          </div>
                           <p className="text-green-600 font-semibold text-lg">Không tìm thấy lỗi!</p>
                           <p className="text-gray-500">Văn bản đã sạch chính tả và watermark</p>
                         </div>
@@ -2751,7 +2753,7 @@ export default function ProcessorPage() {
                       {/* Raw response (collapsible) */}
                       <details className="mt-4">
                         <summary className="cursor-pointer text-gray-500 text-sm hover:text-gray-700">
-                          📄 Xem JSON gốc
+                           Xem JSON gốc
                         </summary>
                         <pre className="mt-2 bg-gray-900 text-green-400 text-xs p-3 rounded-lg overflow-x-auto">
                           {JSON.stringify(mergedView.aiResult, null, 2)}
@@ -2768,7 +2770,7 @@ export default function ProcessorPage() {
                     disabled={mergedView.isSaving}
                     className="flex-1 bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 transition disabled:bg-gray-400"
                   >
-                    {mergedView.isSaving ? 'Đang lưu...' : '💾 Lưu thay đổi'}
+                    {mergedView.isSaving ? 'Đang lưu...' : ' Lưu thay đổi'}
                   </button>
                   <button
                     onClick={() => moveToStep(5)}
@@ -2894,25 +2896,25 @@ export default function ProcessorPage() {
                   )}
                   {mergedTtsStatus.status === 'completed' && (
                     <span className="px-3 py-1 rounded-full bg-green-200 text-green-700 text-sm font-medium">
-                      ✅ Hoàn thành
+                       Hoàn thành
                     </span>
                   )}
                   {mergedTtsStatus.status === 'failed' && (
                     <span className="px-3 py-1 rounded-full bg-red-200 text-red-700 text-sm font-medium">
-                      ❌ Thất bại
+                       Thất bại
                     </span>
                   )}
                 </div>
 
                 {/* Info */}
                 <div className="text-sm text-gray-600">
-                  📝 Số ký tự: {mergedTtsStatus.charCount?.toLocaleString() || mergedView.content?.length?.toLocaleString() || 0}
+                   Số ký tự: {mergedTtsStatus.charCount?.toLocaleString() || mergedView.content?.length?.toLocaleString() || 0}
                 </div>
 
                 {/* Audio File */}
                 {mergedTtsStatus.audioFile && (
                   <div className="text-sm text-green-700 bg-green-100 p-2 rounded">
-                    🎵 File: {mergedTtsStatus.audioFile.split('/').pop()}
+                     File: {mergedTtsStatus.audioFile.split('/').pop()}
                     {mergedTtsStatus.audioSize && (
                       <span className="ml-2">({(mergedTtsStatus.audioSize / 1024 / 1024).toFixed(2)} MB)</span>
                     )}
@@ -2922,7 +2924,7 @@ export default function ProcessorPage() {
                 {/* Error */}
                 {mergedTtsStatus.error && (
                   <div className="text-sm text-red-700 bg-red-100 p-2 rounded">
-                    ❌ Lỗi: {mergedTtsStatus.error}
+                     Lỗi: {mergedTtsStatus.error}
                   </div>
                 )}
               </div>
@@ -2932,7 +2934,7 @@ export default function ProcessorPage() {
             <div className="border rounded-md">
               <div className="bg-gray-100 px-4 py-2 border-b flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-700">
-                  📖 Nội dung đã chỉnh sửa ({mergedView.content?.length?.toLocaleString() || 0} ký tự)
+                   Nội dung đã chỉnh sửa ({mergedView.content?.length?.toLocaleString() || 0} ký tự)
                 </span>
               </div>
               <textarea
@@ -2965,7 +2967,7 @@ export default function ProcessorPage() {
                 onClick={() => moveToStep(7)}
                 className="w-full bg-green-500 text-white py-3 px-4 rounded-md hover:bg-green-600 transition font-semibold"
               >
-                ✅ TTS Hoàn thành - Tiếp tục
+                 TTS Hoàn thành - Tiếp tục
               </button>
             )}
           </div>
@@ -3008,7 +3010,7 @@ export default function ProcessorPage() {
         }
         const isProcessing = videoStatus.status === 'running' || videoStatus.status === 'queued'
         // Estimated final video duration (matches backend logic):
-        // = ceil(audio_duration / audio_speed / 60) * 60   (rounded up to next minute)
+        // = ceil(audio_duration / audio_speed / 60) * 60 (rounded up to next minute)
         const estimatedFinalDuration = audioDuration > 0
           ? Math.ceil((audioDuration / videoConfig.audio_speed) / 60) * 60
           : 0
@@ -3029,7 +3031,7 @@ export default function ProcessorPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-semibold text-primary-600">📋 Preset:</span>
+                <span className="text-sm font-semibold text-primary-600"> Preset:</span>
                 <select
                   value={selectedPresetId}
                   onChange={(e) => {
@@ -3055,7 +3057,7 @@ export default function ProcessorPage() {
                       className="text-xs px-2 py-1.5 bg-gray-100 hover:bg-primary-100 text-gray-700 hover:text-primary-700 rounded border disabled:opacity-50"
                       title="Cập nhật preset đã chọn với config hiện tại"
                     >
-                      🔄
+                      
                     </button>
                     <button
                       onClick={renamePreset}
@@ -3063,7 +3065,7 @@ export default function ProcessorPage() {
                       className="text-xs px-2 py-1.5 bg-gray-100 hover:bg-yellow-100 text-gray-700 hover:text-yellow-700 rounded border disabled:opacity-50"
                       title="Đổi tên preset đã chọn"
                     >
-                      ✏️
+                      
                     </button>
                     <button
                       onClick={() => {
@@ -3071,7 +3073,7 @@ export default function ProcessorPage() {
                         if (!cur) return
                         setConfirmDialog({
                           isOpen: true,
-                          title: '🗑️ Xoá preset',
+                          title: ' Xoá preset',
                           message: `Bạn có chắc muốn xoá preset "${cur.name}"? Thao tác này không thể hoàn tác.`,
                           confirmText: 'Xoá',
                           variant: 'danger',
@@ -3082,7 +3084,7 @@ export default function ProcessorPage() {
                       className="text-xs px-2 py-1.5 bg-gray-100 hover:bg-red-100 text-gray-600 hover:text-red-600 rounded border disabled:opacity-50"
                       title="Xoá preset đã chọn"
                     >
-                      🗑️
+                      
                     </button>
                   </>
                 )}
@@ -3091,13 +3093,13 @@ export default function ProcessorPage() {
                   disabled={isProcessing}
                   className="text-xs px-3 py-1.5 bg-primary-500 text-white rounded hover:bg-primary-600 disabled:opacity-50"
                 >
-                  💾 Lưu config hiện tại
+                   Lưu config hiện tại
                 </button>
                 <button
                   onClick={() => {
                     setConfirmDialog({
                       isOpen: true,
-                      title: '↺ Reset cài đặt video',
+                      title: ' Reset cài đặt video',
                       message: 'Reset TOÀN BỘ cài đặt video về mặc định (subtitle, watermark, banner config, fade, transitions, anti-detect, visualizer…)?\n\nFolder video, audio, ảnh banner & watermark đã chọn sẽ được giữ lại.',
                       confirmText: 'Reset',
                       variant: 'danger',
@@ -3114,7 +3116,7 @@ export default function ProcessorPage() {
                   className="text-xs px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 rounded border border-red-200 disabled:opacity-50"
                   title="Reset toàn bộ cài đặt video (giữ folder/audio/file đã chọn)"
                 >
-                  ↺ Reset
+                   Reset
                 </button>
               </div>
             </div>
@@ -3125,9 +3127,9 @@ export default function ProcessorPage() {
             {/* Video settings tabs */}
             <div className="flex border-b border-gray-200">
               {([
-                { key: 'basic', label: '📁 Cơ bản' },
-                { key: 'effects', label: '✨ Hiệu ứng' },
-                { key: 'antidetect', label: '🛡️ Bản quyền' },
+                { key: 'basic', label: ' Cơ bản' },
+                { key: 'effects', label: ' Hiệu ứng' },
+                { key: 'antidetect', label: ' Bản quyền' },
               ] as const).map(tab => (
                 <button
                   key={tab.key}
@@ -3148,7 +3150,7 @@ export default function ProcessorPage() {
             {videoTab === 'basic' && <div className="space-y-3 p-3">
                 {/* Inputs card */}
                 <div className="border rounded-lg p-4 bg-white space-y-3">
-                  <h4 className="font-semibold text-primary-600 text-sm">📁 Nguồn dữ liệu</h4>
+                  <h4 className="font-semibold text-primary-600 text-sm"> Nguồn dữ liệu</h4>
 
                   <div>
                     <label className="block text-xs font-medium mb-1 text-gray-600">Audio File Path</label>
@@ -3255,7 +3257,7 @@ export default function ProcessorPage() {
 
                 {/* Config card */}
                 <div className="border rounded-lg p-4 bg-white space-y-3">
-                  <h4 className="font-semibold text-primary-600 text-sm">⚙️ Cấu hình video</h4>
+                  <h4 className="font-semibold text-primary-600 text-sm"> Cấu hình video</h4>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium mb-1 text-gray-600">Audio Speed</label>
@@ -3294,7 +3296,7 @@ export default function ProcessorPage() {
                     </div>
                     <div className="col-span-2">
                       <label className="block text-xs font-medium mb-1 text-gray-600">
-                        🌑 Overlay tối: {Math.round(videoConfig.overlay_opacity * 100)}%
+                         Overlay tối: {Math.round(videoConfig.overlay_opacity * 100)}%
                       </label>
                       <input
                         type="range" min="0" max="0.8" step="0.05"
@@ -3313,7 +3315,7 @@ export default function ProcessorPage() {
                           onChange={(e) => setVideoConfig(prev => ({ ...prev, mute_source_videos: e.target.checked }))}
                           disabled={videoStatus.status === 'running'}
                         />
-                        🔇 Tắt âm video nền (chỉ giữ âm thanh chính)
+                         Tắt âm video nền (chỉ giữ âm thanh chính)
                       </label>
                       <p className="text-[11px] text-gray-400 mt-0.5 ml-5">Bỏ tích nếu muốn trộn cả tiếng từ video nguồn vào</p>
                     </div>
@@ -3333,7 +3335,7 @@ export default function ProcessorPage() {
                 className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-lg"
               >
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-primary-600 text-sm">🏷️ Watermark & 🌅 Fade</span>
+                  <span className="font-semibold text-primary-600 text-sm"> Watermark & Fade</span>
                   {(() => {
                     const active: string[] = []
                     if (videoConfig.watermarkImage) active.push('logo')
@@ -3354,7 +3356,7 @@ export default function ProcessorPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Watermark column */}
                 <div className="space-y-2">
-                  <div className="text-xs font-medium text-gray-700">🖼️ Watermark / Logo (image, optional)</div>
+                  <div className="text-xs font-medium text-gray-700"> Watermark / Logo (image, optional)</div>
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -3392,11 +3394,11 @@ export default function ProcessorPage() {
                         </label>
                         <div className="grid grid-cols-5 gap-1">
                           {([
-                            { lbl: '↖', x: 0.08, y: 0.08 },
-                            { lbl: '↗', x: 0.92, y: 0.08 },
-                            { lbl: '⊙', x: 0.5,  y: 0.5  },
-                            { lbl: '↙', x: 0.08, y: 0.92 },
-                            { lbl: '↘', x: 0.92, y: 0.92 },
+                            { lbl: '', x: 0.08, y: 0.08 },
+                            { lbl: '', x: 0.92, y: 0.08 },
+                            { lbl: '⊙', x: 0.5, y: 0.5 },
+                            { lbl: '', x: 0.08, y: 0.92 },
+                            { lbl: '', x: 0.92, y: 0.92 },
                           ]).map(({ lbl, x, y }) => {
                             const active = Math.abs(videoConfig.watermark_x - x) < 0.02 && Math.abs(videoConfig.watermark_y - y) < 0.02
                             return (
@@ -3457,11 +3459,11 @@ export default function ProcessorPage() {
                         <label className="block text-xs text-gray-600 mb-1">Cắt theo hình</label>
                         <div className="grid grid-cols-5 gap-1">
                           {([
-                            { v: 'none',    lbl: '▭', t: 'Mặc định (giữ nguyên)' },
-                            { v: 'circle',  lbl: '●', t: 'Bo tròn' },
+                            { v: 'none', lbl: '▭', t: 'Mặc định (giữ nguyên)' },
+                            { v: 'circle', lbl: '●', t: 'Bo tròn' },
                             { v: 'rounded', lbl: '▢', t: 'Bo ô vuông' },
-                            { v: 'star',    lbl: '★', t: 'Hình sao' },
-                            { v: 'sun',     lbl: '✸', t: 'Mặt trời' },
+                            { v: 'star', lbl: '', t: 'Hình sao' },
+                            { v: 'sun', lbl: '', t: 'Mặt trời' },
                           ]).map(({ v, lbl, t }) => {
                             const active = videoConfig.watermark_shape === v
                             return (
@@ -3506,7 +3508,7 @@ export default function ProcessorPage() {
 
                 {/* Text watermark column */}
                 <div className="space-y-2">
-                  <div className="text-xs font-medium text-gray-700">✏️ Watermark text (optional)</div>
+                  <div className="text-xs font-medium text-gray-700"> Watermark text (optional)</div>
                   <input
                     type="text"
                     value={videoConfig.watermark_text}
@@ -3573,11 +3575,11 @@ export default function ProcessorPage() {
                         </label>
                         <div className="grid grid-cols-5 gap-1">
                           {([
-                            { lbl: '↖', x: 0.08, y: 0.08 },
-                            { lbl: '↗', x: 0.92, y: 0.08 },
-                            { lbl: '⊙', x: 0.5,  y: 0.5  },
-                            { lbl: '↙', x: 0.08, y: 0.92 },
-                            { lbl: '↘', x: 0.92, y: 0.92 },
+                            { lbl: '', x: 0.08, y: 0.08 },
+                            { lbl: '', x: 0.92, y: 0.08 },
+                            { lbl: '⊙', x: 0.5, y: 0.5 },
+                            { lbl: '', x: 0.08, y: 0.92 },
+                            { lbl: '', x: 0.92, y: 0.92 },
                           ]).map(({ lbl, x, y }) => {
                             const active = Math.abs(videoConfig.watermark_text_x - x) < 0.02 && Math.abs(videoConfig.watermark_text_y - y) < 0.02
                             return (
@@ -3620,7 +3622,7 @@ export default function ProcessorPage() {
               <div className="border-t pt-3 mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">
-                    🌅 Fade in: {videoConfig.fade_in.toFixed(1)}s {videoConfig.fade_in === 0 && '(tắt)'}
+                     Fade in: {videoConfig.fade_in.toFixed(1)}s {videoConfig.fade_in === 0 && '(tắt)'}
                   </label>
                   <input
                     type="range" min="0" max="3" step="0.1"
@@ -3632,7 +3634,7 @@ export default function ProcessorPage() {
                 </div>
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">
-                    🌇 Fade out: {videoConfig.fade_out.toFixed(1)}s {videoConfig.fade_out === 0 && '(tắt)'}
+                     Fade out: {videoConfig.fade_out.toFixed(1)}s {videoConfig.fade_out === 0 && '(tắt)'}
                   </label>
                   <input
                     type="range" min="0" max="3" step="0.1"
@@ -3655,7 +3657,7 @@ export default function ProcessorPage() {
                 className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-lg"
               >
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-primary-600 text-sm">🎵 Audio Visualizer</span>
+                  <span className="font-semibold text-primary-600 text-sm"> Audio Visualizer</span>
                   {videoConfig.visualizer_enabled ? (
                     <span className="text-[11px] text-gray-500">
                       ({videoConfig.visualizer_style}
@@ -3687,10 +3689,10 @@ export default function ProcessorPage() {
                       <label className="block text-xs text-gray-600 mb-1">Kiểu hiển thị</label>
                       <div className="grid grid-cols-4 gap-1">
                         {([
-                          { v: 'bars',        lbl: '📊 Bars',     t: 'Cột tần số (showfreqs)' },
-                          { v: 'waveform',    lbl: '〰️ Wave',     t: 'Sóng (showwaves) — Smooth/Linear/Dots/Filled + Symmetrical' },
-                          { v: 'spectrum',    lbl: '🌈 Spectrum', t: 'Phổ tần số scrolling' },
-                          { v: 'cqt',         lbl: '🎼 CQT',      t: 'Music-aware bars (showcqt) — đẹp nhất' },
+                          { v: 'bars', lbl: ' Bars', t: 'Cột tần số (showfreqs)' },
+                          { v: 'waveform', lbl: '〰️ Wave', t: 'Sóng (showwaves) — Smooth/Linear/Dots/Filled + Symmetrical' },
+                          { v: 'spectrum', lbl: ' Spectrum', t: 'Phổ tần số scrolling' },
+                          { v: 'cqt', lbl: ' CQT', t: 'Music-aware bars (showcqt) — đẹp nhất' },
                         ] as const).map(({ v, lbl, t }) => {
                           const active = videoConfig.visualizer_style === v
                           return (
@@ -3718,9 +3720,9 @@ export default function ProcessorPage() {
                         <label className="block text-xs text-gray-600 mb-1">Bars mode</label>
                         <div className="grid grid-cols-3 gap-1">
                           {([
-                            { v: 'bar',  lbl: 'Bar',  t: 'Cột đặc (mặc định)' },
+                            { v: 'bar', lbl: 'Bar', t: 'Cột đặc (mặc định)' },
                             { v: 'line', lbl: 'Line', t: 'Đường nối đỉnh' },
-                            { v: 'dot',  lbl: 'Dot',  t: 'Chấm đỉnh' },
+                            { v: 'dot', lbl: 'Dot', t: 'Chấm đỉnh' },
                           ] as const).map(({ v, lbl, t }) => {
                             const active = videoConfig.visualizer_bars_mode === v
                             return (
@@ -3751,9 +3753,9 @@ export default function ProcessorPage() {
                           <div className="grid grid-cols-4 gap-1">
                             {([
                               { v: 'cline', lbl: 'Smooth', t: 'Đường centered, cong mượt (cline) — mặc định' },
-                              { v: 'line',  lbl: 'Linear', t: 'Đường line nối thẳng các sample' },
-                              { v: 'point', lbl: 'Dots',   t: 'Chỉ chấm điểm sample, không vẽ đường' },
-                              { v: 'p2p',   lbl: 'Filled', t: 'Lấp đầy giữa các sample (peer-to-peer fill)' },
+                              { v: 'line', lbl: 'Linear', t: 'Đường line nối thẳng các sample' },
+                              { v: 'point', lbl: 'Dots', t: 'Chỉ chấm điểm sample, không vẽ đường' },
+                              { v: 'p2p', lbl: 'Filled', t: 'Lấp đầy giữa các sample (peer-to-peer fill)' },
                             ] as const).map(({ v, lbl, t }) => {
                               const active = videoConfig.visualizer_waveform_mode === v
                               return (
@@ -3794,11 +3796,11 @@ export default function ProcessorPage() {
                       </label>
                       <div className="grid grid-cols-5 gap-1">
                         {([
-                          { lbl: '↖', x: 0.08, y: 0.08 },
-                          { lbl: '↑', x: 0.5,  y: 0.08 },
-                          { lbl: '⊙', x: 0.5,  y: 0.5  },
-                          { lbl: '↓', x: 0.5,  y: 0.85 },
-                          { lbl: '↘', x: 0.92, y: 0.92 },
+                          { lbl: '', x: 0.08, y: 0.08 },
+                          { lbl: '', x: 0.5, y: 0.08 },
+                          { lbl: '⊙', x: 0.5, y: 0.5 },
+                          { lbl: '', x: 0.5, y: 0.85 },
+                          { lbl: '', x: 0.92, y: 0.92 },
                         ]).map(({ lbl, x, y }) => {
                           const active = Math.abs(videoConfig.visualizer_x - x) < 0.02 && Math.abs(videoConfig.visualizer_y - y) < 0.02
                           return (
@@ -3920,7 +3922,7 @@ export default function ProcessorPage() {
                       <div className="flex gap-3 mb-2">
                         {([
                           { v: 'transparent', lbl: 'Trong suốt' },
-                          { v: 'solid',       lbl: 'Đặc' },
+                          { v: 'solid', lbl: 'Đặc' },
                         ] as const).map(({ v, lbl }) => (
                           <label key={v} className="flex items-center gap-1 text-sm cursor-pointer">
                             <input
@@ -3974,7 +3976,7 @@ export default function ProcessorPage() {
                 className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-lg"
               >
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-primary-600 text-sm">💬 Subtitle (SRT)</span>
+                  <span className="font-semibold text-primary-600 text-sm"> Subtitle (SRT)</span>
                   {videoConfig.subtitle_srt_path ? (
                     <span className="text-[11px] text-gray-500">({videoConfig.subtitle_animation})</span>
                   ) : (
@@ -4020,7 +4022,7 @@ export default function ProcessorPage() {
             {/* Transitions card (full width) */}
             <div className="border rounded-lg p-4 bg-white space-y-2">
               <div className="flex items-center justify-between">
-                <h4 className="font-semibold text-primary-600 text-sm">🎞️ Transitions Pool</h4>
+                <h4 className="font-semibold text-primary-600 text-sm"> Transitions Pool</h4>
                 <span className="text-xs text-gray-400">
                   {videoConfig.transitions_pool.length} chọn · random mỗi clip
                 </span>
@@ -4054,7 +4056,7 @@ export default function ProcessorPage() {
                 className="w-full flex items-center justify-between p-4 text-left hover:bg-gray-50 rounded-lg"
               >
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-primary-600 text-sm">🏷️ Stickers / Nhãn dán</span>
+                  <span className="font-semibold text-primary-600 text-sm"> Stickers / Nhãn dán</span>
                   <span className="text-[11px] text-gray-500">
                     {videoConfig.stickers.length > 0
                       ? `(${videoConfig.stickers.length} đang dùng)`
@@ -4104,7 +4106,7 @@ export default function ProcessorPage() {
                 className="flex items-center justify-between w-full text-left"
                 onClick={() => setAntiDetectionOpen(v => !v)}
               >
-                <h4 className="font-semibold text-primary-600 text-sm">🛡️ Chống quét bản quyền</h4>
+                <h4 className="font-semibold text-primary-600 text-sm"> Chống quét bản quyền</h4>
                 <span className="flex items-center gap-2 text-xs text-gray-400">
                   {!antiDetectionOpen && <span>tích option để bật</span>}
                   <span className="text-gray-500">{antiDetectionOpen ? '▲' : '▼'}</span>
@@ -4306,7 +4308,7 @@ export default function ProcessorPage() {
             {/* Preview */}
             <div className="border rounded-lg p-4 bg-gradient-to-br from-slate-50 to-slate-100 space-y-3">
               <div className="flex items-center justify-between">
-                <h4 className="font-semibold text-primary-600 text-sm">📺 Preview</h4>
+                <h4 className="font-semibold text-primary-600 text-sm"> Preview</h4>
                 {clipList.length > 0 && (
                   <span className="text-[11px] text-gray-400">{clipList.length} clip · cycle theo folder order</span>
                 )}
@@ -4387,7 +4389,7 @@ export default function ProcessorPage() {
                       onTimeUpdate={(e) => {
                         const a = e.target as HTMLAudioElement
                         const speed = Math.max(0.1, videoConfig.audio_speed)
-                        const vt = a.currentTime / speed  // real-time / video time
+                        const vt = a.currentTime / speed // real-time / video time
                         setPreviewCurrentTime(vt)
                         if (clipList.length === 0 || clipsTotalDur <= 0) return
                         const { idx, offset } = findClipForTime(vt)
@@ -4522,7 +4524,7 @@ export default function ProcessorPage() {
                           </div>
                         )}
                         {style === 'waveform' && (() => {
-                          // mirror = vstack with vflipped copy → render same wave at half-height
+                          // mirror = vstack with vflipped copy render same wave at half-height
                           const renderWave = (transform?: string) => (
                             <svg
                               className="absolute inset-x-0"
@@ -4610,7 +4612,7 @@ export default function ProcessorPage() {
                           className="absolute top-0 left-1 text-[9px] text-white/70 pointer-events-none"
                           style={{ textShadow: '0 1px 2px rgba(0,0,0,0.7)' }}
                         >
-                          🎵 viz · {style}
+                           viz · {style}
                           {style === 'bars' && barsMode !== 'bar' ? `:${barsMode}` : ''}
                           {style === 'waveform' ? `:${waveformMode}${waveformMirror ? '+mirror' : ''}` : ''}
                         </div>
@@ -4874,17 +4876,17 @@ export default function ProcessorPage() {
                   {(videoConfig.fade_in > 0 || videoConfig.fade_out > 0) && ` · fade ${videoConfig.fade_in.toFixed(1)}/${videoConfig.fade_out.toFixed(1)}s`}
                 </p>
                 <div className="text-[11px] text-gray-400 mt-1 text-center space-x-2">
-                  <span>🔊 audio×{videoConfig.audio_speed}</span>
+                  <span> audio×{videoConfig.audio_speed}</span>
                   <span>·</span>
-                  <span>🎞️ {videoConfig.transitions_pool.length || 1} transition</span>
+                  <span> {videoConfig.transitions_pool.length || 1} transition</span>
                   <span>·</span>
                   <span>⏱️ {videoConfig.transition_duration}s</span>
                   {audioDuration > 0 && (
                     <>
                       <span>·</span>
-                      <span>🎙️ audio {formatTime(audioDuration)}</span>
-                      <span>→</span>
-                      <span>📹 video ~{formatTime(estimatedFinalDuration)}</span>
+                      <span> audio {formatTime(audioDuration)}</span>
+                      <span></span>
+                      <span> video ~{formatTime(estimatedFinalDuration)}</span>
                     </>
                   )}
                 </div>
@@ -4896,8 +4898,8 @@ export default function ProcessorPage() {
                   title="Render khoảng 60s preview thực tế bằng ffmpeg, khớp 100% với output cuối"
                 >
                   {exactPreview.status === 'queued' || exactPreview.status === 'running'
-                    ? `🎬 Đang render… ${exactPreview.progress}%`
-                    : '🎬 Render exact preview (60s)'}
+                    ? ` Đang render… ${exactPreview.progress}%`
+                    : ' Render exact preview (60s)'}
                 </button>
               </div>
             </div>
@@ -4908,7 +4910,7 @@ export default function ProcessorPage() {
               disabled={!videoConfig.folder.trim() || !videoConfig.audioPath.trim() || isProcessing}
               className="w-full bg-purple-600 text-white py-3 px-4 rounded-md hover:bg-purple-700 disabled:opacity-50 transition font-semibold"
             >
-              {isProcessing ? 'Processing...' : '🎬 Start Video Processing'}
+              {isProcessing ? 'Processing...' : ' Start Video Processing'}
             </button>
 
             {/* Progress */}
@@ -4977,15 +4979,17 @@ export default function ProcessorPage() {
 
       case 8:
         return (
-          <div className="space-y-4 text-center">
-            <div className="text-6xl mb-4">🎉</div>
-            <h3 className="text-2xl font-bold mb-4">Processing Complete!</h3>
-            <p className="text-gray-600 mb-6">
-              Your audiobook has been successfully created and is ready for download.
+          <div className="space-y-4 text-center py-4">
+            <div className="mx-auto mb-2 w-16 h-16 rounded-full grid place-items-center" style={{ background: 'rgba(31,157,107,0.14)', color: '#1F9D6B' }}>
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            </div>
+            <h3 className="text-2xl font-bold tracking-tight">Hoàn tất!</h3>
+            <p className="text-dim mb-6">
+              Audiobook của bạn đã được tạo thành công và sẵn sàng để tải về.
             </p>
             <div className="space-y-3">
-              <button className="w-full bg-green-500 text-white py-3 px-4 rounded-md hover:bg-green-600 transition font-semibold">
-                📥 Download Final Audio
+              <button className="btn btn-primary w-full justify-center py-3 text-base">
+                Tải audio hoàn chỉnh
               </button>
               <button
                 onClick={() => {
@@ -4993,9 +4997,9 @@ export default function ProcessorPage() {
                   setStoryData({ url: '', title: '', start_chapter: 1, end_chapter: 10 })
                   setError(null)
                 }}
-                className="w-full bg-gray-500 text-white py-2 px-4 rounded-md hover:bg-gray-600 transition"
+                className="btn btn-secondary w-full justify-center"
               >
-                Process Another Story
+                Xử lý truyện khác
               </button>
             </div>
           </div>
@@ -5172,8 +5176,8 @@ export default function ProcessorPage() {
                             : 'text-gray-600 bg-gray-50 border border-gray-200'
                         }`}>
                           {editDialog.matchCount > 0
-                            ? `✅ Tìm thấy ${editDialog.matchCount} kết quả`
-                            : '❌ Không tìm thấy kết quả'}
+                            ? ` Tìm thấy ${editDialog.matchCount} kết quả`
+                            : ' Không tìm thấy kết quả'}
                         </div>
                       )}
 
@@ -5184,7 +5188,7 @@ export default function ProcessorPage() {
                           className="px-3 py-1.5 text-sm bg-primary-500 text-white rounded hover:bg-primary-600 transition"
                           disabled={!editDialog.findText}
                         >
-                          🔍 Tìm
+                           Tìm
                         </button>
                         <button
                           onClick={handleReplaceFirst}
@@ -5210,7 +5214,7 @@ export default function ProcessorPage() {
                             })}
                             className="px-3 py-1.5 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 transition"
                           >
-                            🗑️ Xóa
+                             Xóa
                           </button>
                         )}
                       </div>
@@ -5248,7 +5252,7 @@ export default function ProcessorPage() {
                         className="w-full px-3 py-1.5 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 transition disabled:bg-gray-400"
                         disabled={loading || !editDialog.quickBannedWord || !editDialog.quickReplacementWord}
                       >
-                        ➕ Thêm vào danh sách
+                         Thêm vào danh sách
                       </button>
                     </div>
                   </div>
@@ -5348,7 +5352,7 @@ export default function ProcessorPage() {
                   className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600 transition disabled:bg-gray-400"
                   disabled={loading}
                 >
-                  {loading ? 'Checking...' : '🔍 Check Grammar'}
+                  {loading ? 'Checking...' : ' Check Grammar'}
                 </button>
                 <button
                   onClick={handleSaveEditedChapter}
@@ -5451,7 +5455,7 @@ export default function ProcessorPage() {
           <div className="bg-white rounded-lg w-full max-w-3xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="p-4 border-b flex items-center justify-between">
               <h3 className="text-lg font-semibold">
-                🎬 Exact Preview
+                 Exact Preview
                 {exactPreview.cached && <span className="ml-2 text-xs text-green-600 font-normal">(cache)</span>}
               </h3>
               <button onClick={closeExactPreview} className="text-gray-500 hover:text-gray-800 text-2xl leading-none">×</button>
@@ -5476,7 +5480,7 @@ export default function ProcessorPage() {
               )}
               {exactPreview.status === 'failed' && (
                 <div className="bg-red-50 text-red-700 p-3 rounded text-sm space-y-2">
-                  <div className="font-semibold">❌ Render failed</div>
+                  <div className="font-semibold"> Render failed</div>
                   <div className="font-mono text-xs whitespace-pre-wrap">{exactPreview.error || 'Unknown error'}</div>
                   <button
                     onClick={startExactPreview}
@@ -5500,7 +5504,7 @@ export default function ProcessorPage() {
                       href={`/api/v1/video/preview-file?hash=${exactPreview.hash}`}
                       download={`preview_${exactPreview.hash}.mp4`}
                       className="bg-slate-800 text-white px-3 py-1.5 rounded hover:bg-slate-700"
-                    >⬇ Download</a>
+                    > Download</a>
                   </div>
                 </div>
               )}
@@ -5791,7 +5795,7 @@ export default function ProcessorPage() {
           <div className="bg-white rounded-lg w-full max-w-md flex flex-col">
             <div className="p-4 border-b flex items-center justify-between">
               <h3 className="text-lg font-semibold">
-                {presetModal.mode === 'rename' ? '✏️ Đổi tên preset' : '💾 Lưu config hiện tại'}
+                {presetModal.mode === 'rename' ? ' Đổi tên preset' : ' Lưu config hiện tại'}
               </h3>
               <button
                 onClick={() => setPresetModal({ isOpen: false, mode: 'create', name: '', presetId: null })}

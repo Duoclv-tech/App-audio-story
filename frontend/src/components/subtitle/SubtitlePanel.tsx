@@ -20,12 +20,12 @@ interface UploadResponse {
 interface PanelProps {
   storyId: string
   audioPath: string
-  audioDuration: number  // seconds (post-speedup not necessary; warning is informational)
-  audioSpeed: number     // for warning calculation
+  audioDuration: number // seconds (post-speedup not necessary; warning is informational)
+  audioSpeed: number // for warning calculation
   style: SubtitleStyle
   onChange: (patch: Partial<SubtitleStyle>) => void
   // Position is part of style but driven externally via the preview-frame drag.
-  srtPath: string | null  // currently uploaded SRT path (server-side)
+  srtPath: string | null // currently uploaded SRT path (server-side)
   onSrtUploaded: (info: UploadResponse | null, segments: SubtitleSegment[] | null) => void
   availableFonts: string[]
 }
@@ -159,7 +159,7 @@ export function SubtitlePanel({
             <div className="font-mono break-all mb-1 text-green-700">{filename ?? srtPath.split(/[\\/]/).pop()}</div>
             {uploadInfo && (
               <div className="text-gray-500">
-                {uploadInfo.segment_count} dòng · {uploadInfo.first_start.toFixed(1)}s → {uploadInfo.last_end.toFixed(1)}s
+                {uploadInfo.segment_count} dòng · {uploadInfo.first_start.toFixed(1)}s {uploadInfo.last_end.toFixed(1)}s
               </div>
             )}
             <button
@@ -190,7 +190,7 @@ export function SubtitlePanel({
 
       {warning && (
         <div className="text-xs text-yellow-800 bg-yellow-50 border border-yellow-200 rounded px-2 py-1.5">
-          ⚠ {warning}
+           {warning}
         </div>
       )}
 
@@ -299,7 +299,7 @@ export function SubtitlePanel({
               onClick={() => onChange({ subtitle_align: a })}
               className={`px-2 py-0.5 ${style.subtitle_align === a ? 'bg-primary-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
               title={`Căn ${a}`}
-            >{a === 'left' ? '⇤' : a === 'right' ? '⇥' : '⇔'}</button>
+            >{a === 'left' ? '' : a === 'right' ? '' : ''}</button>
           ))}
         </div>
       </div>

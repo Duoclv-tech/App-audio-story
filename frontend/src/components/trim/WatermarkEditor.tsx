@@ -9,15 +9,15 @@ interface Props {
 }
 
 const POSITIONS: { value: WatermarkPosition; label: string; title: string }[] = [
-  { value: 'top-left', label: '↖', title: 'Trên trái' },
-  { value: 'top-center', label: '↑', title: 'Trên giữa' },
-  { value: 'top-right', label: '↗', title: 'Trên phải' },
-  { value: 'middle-left', label: '←', title: 'Giữa trái' },
+  { value: 'top-left', label: '', title: 'Trên trái' },
+  { value: 'top-center', label: '', title: 'Trên giữa' },
+  { value: 'top-right', label: '', title: 'Trên phải' },
+  { value: 'middle-left', label: '', title: 'Giữa trái' },
   { value: 'center', label: '●', title: 'Chính giữa' },
-  { value: 'middle-right', label: '→', title: 'Giữa phải' },
-  { value: 'bottom-left', label: '↙', title: 'Dưới trái' },
-  { value: 'bottom-center', label: '↓', title: 'Dưới giữa' },
-  { value: 'bottom-right', label: '↘', title: 'Dưới phải' },
+  { value: 'middle-right', label: '', title: 'Giữa phải' },
+  { value: 'bottom-left', label: '', title: 'Dưới trái' },
+  { value: 'bottom-center', label: '', title: 'Dưới giữa' },
+  { value: 'bottom-right', label: '', title: 'Dưới phải' },
 ]
 
 export default function WatermarkEditor({ value, onChange, previewAspect = 16 / 9 }: Props) {
@@ -132,7 +132,7 @@ export default function WatermarkEditor({ value, onChange, previewAspect = 16 / 
             }`}
             title="Kéo watermark trong khung xem trước để đặt vị trí tự do"
           >
-            ✋ Kéo tự do
+             Kéo tự do
           </button>
           {isCustom && (
             <p className="text-xs text-gray-500 mt-1 font-mono">
@@ -289,15 +289,15 @@ function WatermarkPreview({ wm, aspect, onDrag }: PreviewProps) {
   const rotExpr = rot ? `rotate(${rot}deg)` : ''
 
   const presetStyles: Record<Exclude<WatermarkPosition, 'custom'>, CSSProperties> = {
-    'top-left':      { top: margin, left: margin, transform: rotExpr, transformOrigin: 'top left' },
-    'top-center':    { top: margin, left: '50%', transform: `translateX(-50%) ${rotExpr}`, transformOrigin: 'top center' },
-    'top-right':     { top: margin, right: margin, transform: rotExpr, transformOrigin: 'top right' },
-    'middle-left':   { top: '50%', left: margin, transform: `translateY(-50%) ${rotExpr}`, transformOrigin: 'center left' },
-    'center':        { top: '50%', left: '50%', transform: `translate(-50%,-50%) ${rotExpr}`, transformOrigin: 'center' },
-    'middle-right':  { top: '50%', right: margin, transform: `translateY(-50%) ${rotExpr}`, transformOrigin: 'center right' },
-    'bottom-left':   { bottom: margin, left: margin, transform: rotExpr, transformOrigin: 'bottom left' },
+    'top-left': { top: margin, left: margin, transform: rotExpr, transformOrigin: 'top left' },
+    'top-center': { top: margin, left: '50%', transform: `translateX(-50%) ${rotExpr}`, transformOrigin: 'top center' },
+    'top-right': { top: margin, right: margin, transform: rotExpr, transformOrigin: 'top right' },
+    'middle-left': { top: '50%', left: margin, transform: `translateY(-50%) ${rotExpr}`, transformOrigin: 'center left' },
+    'center': { top: '50%', left: '50%', transform: `translate(-50%,-50%) ${rotExpr}`, transformOrigin: 'center' },
+    'middle-right': { top: '50%', right: margin, transform: `translateY(-50%) ${rotExpr}`, transformOrigin: 'center right' },
+    'bottom-left': { bottom: margin, left: margin, transform: rotExpr, transformOrigin: 'bottom left' },
     'bottom-center': { bottom: margin, left: '50%', transform: `translateX(-50%) ${rotExpr}`, transformOrigin: 'bottom center' },
-    'bottom-right':  { bottom: margin, right: margin, transform: rotExpr, transformOrigin: 'bottom right' },
+    'bottom-right': { bottom: margin, right: margin, transform: rotExpr, transformOrigin: 'bottom right' },
   }
 
   // Match FFmpeg semantics `x=(w-text_w)*cx`: element's right edge touches parent's

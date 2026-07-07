@@ -579,7 +579,7 @@ export default function VideoTrimmerPage() {
                   >
                     <span className="text-primary-400 font-mono text-xs w-4 text-right">{idx + 1}</span>
                     <span className="font-mono text-gray-800">
-                      {fmtSec(seg.start)} → {fmtSec(seg.end)}
+                      {fmtSec(seg.start)} {fmtSec(seg.end)}
                     </span>
                     <span className="text-gray-400">({(seg.end - seg.start).toFixed(2)}s)</span>
                     <button
@@ -594,7 +594,7 @@ export default function VideoTrimmerPage() {
                 <div className="text-xs text-gray-500 pt-1">
                   Tổng: {totalTrimDuration.toFixed(2)}s
                   {speed !== 1.0 && (
-                    <> → sau tốc độ {speed}x: <b>{outputDuration.toFixed(2)}s</b></>
+                    <> sau tốc độ {speed}x: <b>{outputDuration.toFixed(2)}s</b></>
                   )}
                 </div>
               </div>
@@ -626,7 +626,7 @@ export default function VideoTrimmerPage() {
 
             {showStreamCopyWarning && (
               <div className="bg-yellow-50 border border-yellow-300 text-yellow-900 text-sm p-3 rounded">
-                ⚠️ <b>Stream copy</b> — điểm cắt có thể lệch ±2s do keyframe. Tick "Cắt chính xác
+                 <b>Stream copy</b> — điểm cắt có thể lệch ±2s do keyframe. Tick "Cắt chính xác
                 theo frame" để frame-accurate.
               </div>
             )}
@@ -637,7 +637,7 @@ export default function VideoTrimmerPage() {
                 <span className="font-semibold text-gray-800">~{formatBytes(estimatedBytes)}</span>
                 {speed !== 1.0 && (
                   <span className="text-gray-400 ml-2">
-                    (sau {speed}x tốc độ → {outputDuration.toFixed(1)}s)
+                    (sau {speed}x tốc độ {outputDuration.toFixed(1)}s)
                   </span>
                 )}
               </div>
@@ -671,8 +671,8 @@ export default function VideoTrimmerPage() {
                 </div>
                 <p className="text-sm text-gray-600 mt-2">
                   {processStatus === 'running' && `Đang xử lý… ${processProgress.toFixed(1)}%`}
-                  {processStatus === 'completed' && '✅ Xong — file đang tải về trình duyệt'}
-                  {processStatus === 'failed' && `❌ Lỗi: ${processError || 'Không xác định'}`}
+                  {processStatus === 'completed' && ' Xong — file đang tải về trình duyệt'}
+                  {processStatus === 'failed' && ` Lỗi: ${processError || 'Không xác định'}`}
                 </p>
                 {processStatus === 'completed' && jobId && (
                   <a

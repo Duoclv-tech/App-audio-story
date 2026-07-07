@@ -82,7 +82,7 @@ export default function TimeInput({ label, valueSec, maxSec, onChange, onSetFrom
             className="ml-2 text-xs px-2 py-1 border rounded hover:bg-gray-50"
             title="Lấy từ vị trí video đang xem"
           >
-            ↙ lấy vị trí hiện tại
+             lấy vị trí hiện tại
           </button>
         )}
       </div>

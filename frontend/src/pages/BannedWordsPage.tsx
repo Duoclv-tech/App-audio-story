@@ -587,7 +587,7 @@ export default function BannedWordsPage() {
                 )}
 
                 <p className="text-sm text-red-600 font-medium">
-                  ⚠️ Hành động này không thể hoàn tác!
+                   Hành động này không thể hoàn tác!
                 </p>
               </div>
 

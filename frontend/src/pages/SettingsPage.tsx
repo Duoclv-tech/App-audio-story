@@ -75,7 +75,7 @@ export default function SettingsPage() {
       {/* VBEE API Configuration */}
       <div className="mb-8">
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <span className="text-primary-600">🔑</span>
+          <span className="text-primary-600"></span>
           Cấu Hình VBEE API
         </h3>
 
@@ -141,7 +141,7 @@ export default function SettingsPage() {
       {/* Gemini AI Configuration */}
       <div className="mb-8">
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <span className="text-purple-600">🤖</span>
+          <span className="text-purple-600"></span>
           Cấu Hình Gemini AI (Grammar Check)
         </h3>
 

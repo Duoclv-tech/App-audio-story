@@ -6,6 +6,7 @@
    Surfaces/neutrals live as CSS variables so the whole shell shares one source
    of truth (and dark mode is a small follow-up: redefine these under .dark). */
 :root {
+  color-scheme: light;
   --bg: #EDEEF2;          /* app background — cool indigo-slate */
   --surface: #FFFFFF;
   --surface-2: #F5F6F9;
@@ -22,6 +23,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --bg: #0E0F16;
   --surface: #181A23;
   --surface-2: #1E212C;
@@ -43,6 +45,25 @@
     color: var(--text);
     font-family: theme('fontFamily.sans');
   }
+
+  /* Form controls default to theme tokens so an input with no explicit bg is
+     readable in dark mode (was falling back to the browser white). Any bg or
+     text utility still wins — utilities layer beats base layer. */
+  input, textarea, select {
+    background-color: var(--surface);
+    color: var(--text);
+  }
+  input[type='checkbox'], input[type='radio'], input[type='range'],
+  input[type='color'], input[type='file'], input[type='submit'],
+  input[type='button'], input[type='reset'] {
+    background-color: initial;
+    color: initial;
+  }
+  ::placeholder { color: var(--text-faint); opacity: 1; }
+
+  /* Default border color follows the theme (overrides Tailwind gray-200 default
+     so bare "border" utilities are not light lines in dark mode). */
+  *, ::before, ::after { border-color: var(--border); }
 }
 
 @layer components {

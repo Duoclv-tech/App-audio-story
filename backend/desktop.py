@@ -22,6 +22,7 @@ os.environ.setdefault("DEBUG", "release")
 
 from app import paths
 paths.setup_ffmpeg_path()
+paths.hide_subprocess_windows()  # no console-window flashes from ffmpeg/ffprobe
 
 # A windowed PyInstaller build has NO console: sys.stdout/stderr are None.
 # Any library that writes there (loguru, uvicorn, print) would crash with

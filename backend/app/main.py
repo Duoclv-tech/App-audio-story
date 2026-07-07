@@ -11,6 +11,8 @@ from app import paths
 # the many literal 'ffmpeg'/'ffprobe' subprocess calls. No-op if the dir is
 # absent (dev without bundled binaries -> falls back to system PATH).
 paths.setup_ffmpeg_path()
+# Stop ffmpeg/ffprobe from flashing console windows in the windowed build.
+paths.hide_subprocess_windows()
 
 from app.config import settings
 from app.database import test_connection, init_db

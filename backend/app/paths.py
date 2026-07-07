@@ -118,5 +118,31 @@ def setup_ffmpeg_path() -> None:
         os.environ["PATH"] = str(FFMPEG_BIN_DIR) + os.pathsep + os.environ.get("PATH", "")
 
 
+def hide_subprocess_windows() -> None:
+    """
+    On Windows, make every subprocess (ffmpeg/ffprobe) run WITHOUT popping a
+    console window. In the windowed (no-console) frozen build, each of the ~28
+    ffmpeg/ffprobe calls would otherwise flash a terminal — e.g. scanning a
+    folder of clips runs ffprobe per file => hundreds of windows.
+
+    Patches subprocess.Popen once so run()/check_output()/call() are all covered.
+    """
+    if sys.platform != "win32":
+        return
+    import subprocess
+    if getattr(subprocess, "_no_window_patched", False):
+        return
+    _CREATE_NO_WINDOW = 0x08000000
+    _OrigPopen = subprocess.Popen
+
+    class _NoWindowPopen(_OrigPopen):
+        def __init__(self, *args, **kwargs):
+            kwargs["creationflags"] = kwargs.get("creationflags", 0) | _CREATE_NO_WINDOW
+            super().__init__(*args, **kwargs)
+
+    subprocess.Popen = _NoWindowPopen
+    subprocess._no_window_patched = True
+
+
 # Create writable dirs on import so any module can rely on them existing.
 ensure_data_dirs()

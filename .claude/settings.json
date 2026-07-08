@@ -59,7 +59,32 @@
       "Bash(where ISCC)",
       "Read(//c/Program Files/**)",
       "PowerShell(winget install --id JRSoftware.InnoSetup -e --accept-source-agreements --accept-package-agreements --silent 2>&1)",
-      "PowerShell(winget install --id JRSoftware.InnoSetup -e --source winget --accept-source-agreements --accept-package-agreements --silent 2>&1)"
+      "PowerShell(winget install --id JRSoftware.InnoSetup -e --source winget --accept-source-agreements --accept-package-agreements --silent 2>&1)",
+      "Bash(git commit -m ' *)",
+      "Bash(cd \"d:/Project/web_app/frontend/src\" && echo \"=== pages ===\" && ls pages/ && echo \"=== components ===\" && ls -R components/ | head -40 && echo \"=== css head ===\" && head -60 index.css && echo \"=== tailwind config? ===\" && ls ../tailwind.config.* ../postcss.config.* 2>/dev/null)",
+      "Read(//d/Project/**)",
+      "Skill(artifact-design)",
+      "Skill(artifact-design:*)",
+      "Bash(git add *)",
+      "Bash(xargs -0 sed -i -E 's/-\\(blue|indigo|sky|cyan\\)-\\([0-9]\\)/-primary-\\\\2/g')",
+      "Bash(xargs -0 sed -i -E 's/#3[bB]82[fF]6/#C67E15/g; s/#2563[eE][bB]/#AC6D12/g')",
+      "Bash(\"d:/Project/web_app/backend/venv/Scripts/python.exe\" -)",
+      "Bash(git commit -q -m ' *)",
+      "Bash(bc)",
+      "Bash(grep -rhnoE \"\\(background|backgroundColor|color|borderColor\\): *'#[0-9a-fA-F]{3,6}'\" pages components)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
+      "Bash(PYTHONIOENCODING=utf-8 DEBUG=release python -m uvicorn app.main:app --host 127.0.0.1 --port 8137 --log-level warning)",
+      "Bash(curl -s http://127.0.0.1:8137/health)",
+      "Bash(kill %1)",
+      "Bash(pkill -f \"uvicorn app.main:app --host 127.0.0.1 --port 8137\")",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(ls .claude/skills/*/SKILL.md)",
+      "Bash(node -e \"try{require\\('playwright'\\);console.log\\('playwright OK'\\)}catch{try{require\\('puppeteer'\\);console.log\\('puppeteer OK'\\)}catch{console.log\\('no pw/puppeteer'\\)}}\")",
+      "Bash(which chromium-cli *)",
+      "Bash(PYTHONIOENCODING=utf-8 DEBUG=release python -m uvicorn app.main:app --host 127.0.0.1 --port 8142 --log-level warning)",
+      "Bash(pkill -f \"uvicorn app.main:app\")",
+      "Bash(PYTHONIOENCODING=utf-8 DEBUG=release python -m uvicorn app.main:app --host 127.0.0.1 --port 8143 --log-level warning)"
     ]
   }
 }

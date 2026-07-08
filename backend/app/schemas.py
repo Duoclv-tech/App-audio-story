@@ -56,6 +56,20 @@ class ChapterUpdate(BaseModel):
     content: Optional[str] = None
     status: Optional[str] = None
 
+# --- Import chapters (paste / file / folder), replaces the scraper flow -------
+class ImportChapterItem(BaseModel):
+    chapter_number: int
+    title: Optional[str] = None
+    content: Optional[str] = None
+
+class ImportChaptersRequest(BaseModel):
+    title: Optional[str] = None            # optionally rename the story
+    chapters: List[ImportChapterItem]
+
+class ImportPathRequest(BaseModel):
+    path: str
+    title: Optional[str] = None
+
 class CheckGrammarRequest(BaseModel):
     content: str
 

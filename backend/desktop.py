@@ -68,6 +68,10 @@ class NativeApi:
         "Image Files (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif)",
         "All files (*.*)",
     )
+    _TEXT_TYPES = (
+        "Text / Document (*.txt;*.docx)",
+        "All files (*.*)",
+    )
 
     def _window(self):
         import webview
@@ -87,6 +91,9 @@ class NativeApi:
 
     def pick_image_file(self, start: str = ""):
         return self._pick_file(start, self._IMAGE_TYPES)
+
+    def pick_text_file(self, start: str = ""):
+        return self._pick_file(start, self._TEXT_TYPES)
 
     def _pick_file(self, start: str, file_types):
         import webview

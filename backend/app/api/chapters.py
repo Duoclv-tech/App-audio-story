@@ -8,6 +8,11 @@ from app.database import get_db
 from app import models, schemas
 from app.services.text_checker import TextChecker
 from app.services.gemini_service import GeminiService
+from app.services.chapter_splitter import (
+    split_chapters,
+    read_text_from_file,
+    read_folder_as_chapters,
+)
 
 router = APIRouter()
 text_checker = TextChecker()
@@ -496,6 +501,120 @@ async def create_chapter_zero(story_id: str, db: Session = Depends(get_db)):
         db.rollback()
         logger.error(f"Failed to create Chapter 0 for story {story_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to create Chapter 0")
+
+
+# --- Import content (paste / file / folder) — replaces the scraper flow ------
+
+def _persist_imported_chapters(db, story, chapters, title=None):
+    """Replace a story's chapters with imported ones and advance it to Edit.
+
+    ``chapters`` is a list of dicts: {chapter_number, title, content}. Mirrors
+    what the download worker did on a successful scrape (status/current_step).
+    """
+    chapters = [c for c in chapters if (c.get("content") or "").strip() or c.get("chapter_number") == 0]
+    if not chapters:
+        raise HTTPException(status_code=400, detail="Không tìm thấy nội dung chương nào để nhập")
+
+    # Fresh import replaces any previous chapters (cascade removes their audio).
+    db.query(models.Chapter).filter(models.Chapter.story_id == story.id).delete()
+
+    for ch in chapters:
+        content = (ch.get("content") or "")
+        db.add(models.Chapter(
+            story_id=story.id,
+            chapter_number=ch.get("chapter_number", 1),
+            title=(ch.get("title") or None),
+            content=content,
+            char_count=len(content),
+            has_censored_words=False,
+            censored_count=0,
+            status="pending",
+        ))
+
+    if title:
+        story.title = title
+    story.status = "downloaded"
+    story.current_step = 3  # move to the Edit step
+    db.commit()
+    return len(chapters)
+
+
+def _get_story_or_404(db, story_id):
+    story = db.query(models.Story).filter(models.Story.id == story_id).first()
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+    return story
+
+
+@router.post("/story/{story_id}/import")
+async def import_chapters(story_id: str, req: schemas.ImportChaptersRequest, db: Session = Depends(get_db)):
+    """Import already-split chapters (from pasted text split on the client)."""
+    story = _get_story_or_404(db, story_id)
+    chapters = [
+        {"chapter_number": c.chapter_number, "title": c.title, "content": c.content}
+        for c in req.chapters
+    ]
+    try:
+        count = _persist_imported_chapters(db, story, chapters, req.title)
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Import chapters failed for story {story_id}: {e}")
+        raise HTTPException(status_code=500, detail="Nhập nội dung thất bại")
+    return {"success": True, "count": count}
+
+
+@router.post("/story/{story_id}/import-file")
+async def import_from_file(story_id: str, req: schemas.ImportPathRequest, db: Session = Depends(get_db)):
+    """Read a .txt/.docx file, split it into chapters, and import."""
+    story = _get_story_or_404(db, story_id)
+    try:
+        text = read_text_from_file(req.path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=400, detail="Không tìm thấy file")
+    except Exception as e:
+        logger.error(f"Read file failed ({req.path}): {e}")
+        raise HTTPException(status_code=400, detail="Không đọc được file (chỉ hỗ trợ .txt, .docx)")
+
+    chapters = split_chapters(text)
+    try:
+        count = _persist_imported_chapters(db, story, chapters, req.title)
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Import file failed for story {story_id}: {e}")
+        raise HTTPException(status_code=500, detail="Nhập nội dung thất bại")
+    return {"success": True, "count": count}
+
+
+@router.post("/story/{story_id}/import-folder")
+async def import_from_folder(story_id: str, req: schemas.ImportPathRequest, db: Session = Depends(get_db)):
+    """Read a folder where each .txt/.docx file is one chapter, and import."""
+    story = _get_story_or_404(db, story_id)
+    try:
+        chapters = read_folder_as_chapters(req.path)
+    except NotADirectoryError:
+        raise HTTPException(status_code=400, detail="Không tìm thấy thư mục")
+    except Exception as e:
+        logger.error(f"Read folder failed ({req.path}): {e}")
+        raise HTTPException(status_code=400, detail="Không đọc được thư mục")
+
+    if not chapters:
+        raise HTTPException(status_code=400, detail="Thư mục không có file .txt hoặc .docx nào")
+    try:
+        count = _persist_imported_chapters(db, story, chapters, req.title)
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Import folder failed for story {story_id}: {e}")
+        raise HTTPException(status_code=500, detail="Nhập nội dung thất bại")
+    return {"success": True, "count": count}
 
 
 @router.post("/censored-word/{censored_word_id}/accept")

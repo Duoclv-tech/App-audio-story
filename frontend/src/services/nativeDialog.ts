@@ -7,6 +7,7 @@ interface PywebviewApi {
   pick_folder: (start?: string) => Promise<string | null>
   pick_audio_file: (start?: string) => Promise<string | null>
   pick_image_file: (start?: string) => Promise<string | null>
+  pick_text_file: (start?: string) => Promise<string | null>
 }
 
 declare global {
@@ -33,3 +34,4 @@ async function call(
 export const pickFolderNative = (start?: string) => call('pick_folder', start)
 export const pickAudioFileNative = (start?: string) => call('pick_audio_file', start)
 export const pickImageFileNative = (start?: string) => call('pick_image_file', start)
+export const pickTextFileNative = (start?: string) => call('pick_text_file', start)

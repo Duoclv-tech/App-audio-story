@@ -7,7 +7,8 @@ import { SubtitleSegment, DEFAULT_SUBTITLE_STYLE } from '../components/subtitle/
 import { StickerPanel } from '../components/sticker/StickerPanel'
 import { StickerOverlay } from '../components/sticker/StickerOverlay'
 import { Sticker, toBackendSticker } from '../components/sticker/sticker'
-import { hasNativeDialogs, pickFolderNative, pickAudioFileNative, pickImageFileNative } from '../services/nativeDialog'
+import { hasNativeDialogs, pickFolderNative, pickAudioFileNative, pickImageFileNative, pickTextFileNative } from '../services/nativeDialog'
+import { splitChapters } from '../services/chapterSplitter'
 
 // Define workflow steps
 const WORKFLOW_STEPS = [
@@ -160,6 +161,11 @@ export default function ProcessorPage() {
     isOpen: false,
     urlsText: ''
   })
+  // Step 1 content-import (paste / file / folder), replaces the scraper UI.
+  const [inputMode, setInputMode] = useState<'paste' | 'file' | 'folder'>('paste')
+  const [pasteText, setPasteText] = useState('')
+  const [agreedRights, setAgreedRights] = useState(false)
+  const pastePreview = useMemo(() => splitChapters(pasteText), [pasteText])
 
   // Merged content state for Step 3
   const [mergedView, setMergedView] = useState({
@@ -1435,6 +1441,80 @@ export default function ProcessorPage() {
   }, [videoPollingInterval])
 
   // Step 1: Update story info and start download
+  // Ensure a story row exists (the route normally already created one) and
+  // return its id. Used by the content-import handlers below.
+  const ensureStoryId = async (): Promise<string> => {
+    if (storyData.id) return storyData.id
+    const resp = await axios.post('/api/v1/stories', {
+      title: storyData.title || 'Truyện mới',
+      url: '',
+      start_chapter: 1,
+      end_chapter: 1,
+    })
+    const id = resp.data.id
+    setStoryData({ ...storyData, id })
+    return id
+  }
+
+  const afterImport = async (id: string) => {
+    await fetchChapters(id)
+    await fetchChapterStats(id)
+    moveToStep(3)
+  }
+
+  // Mode A — split the pasted text on the client and import the chapters.
+  const handlePasteImport = async () => {
+    if (!agreedRights) {
+      setError('Vui lòng xác nhận bạn có quyền sử dụng nội dung này.')
+      return
+    }
+    if (pastePreview.length === 0) {
+      setError('Chưa có nội dung để nhập.')
+      return
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      const id = await ensureStoryId()
+      await axios.post(`/api/v1/chapters/story/${id}/import`, {
+        title: storyData.title || undefined,
+        chapters: pastePreview,
+      })
+      await afterImport(id)
+    } catch (err: any) {
+      const detail = err.response?.data?.detail
+      setError(typeof detail === 'string' ? detail : 'Nhập nội dung thất bại.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Mode B/C — pick a file/folder via the native dialog; the backend reads it.
+  const handlePathImport = async (mode: 'file' | 'folder') => {
+    if (!agreedRights) {
+      setError('Vui lòng xác nhận bạn có quyền sử dụng nội dung này.')
+      return
+    }
+    const path = mode === 'file' ? await pickTextFileNative() : await pickFolderNative()
+    if (!path) return
+    setLoading(true)
+    setError(null)
+    try {
+      const id = await ensureStoryId()
+      const endpoint = mode === 'file' ? 'import-file' : 'import-folder'
+      await axios.post(`/api/v1/chapters/story/${id}/${endpoint}`, {
+        path,
+        title: storyData.title || undefined,
+      })
+      await afterImport(id)
+    } catch (err: any) {
+      const detail = err.response?.data?.detail
+      setError(typeof detail === 'string' ? detail : 'Nhập nội dung thất bại.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleSubmitURL = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -2242,138 +2322,158 @@ export default function ProcessorPage() {
     switch (currentStep) {
       case 1:
         return (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between gap-3 mb-4">
-              <h3 className="text-xl font-semibold tracking-tight">Nhập thông tin truyện</h3>
+          <div className="space-y-5">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-xl font-semibold tracking-tight">Nhập nội dung truyện</h3>
               <span className="step-badge">BƯỚC 1/7</span>
             </div>
-            <form onSubmit={handleSubmitURL} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">TruyenFull URL</label>
-                <input
-                  type="url"
-                  value={storyData.url}
-                  onChange={(e) => setStoryData({ ...storyData, url: e.target.value })}
-                  placeholder="https://truyenfull.vision/story-name"
-                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  required
-                  disabled={loading}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Story Title</label>
-                <input
-                  type="text"
-                  value={storyData.title}
-                  onChange={(e) => setStoryData({ ...storyData, title: e.target.value })}
-                  placeholder="Enter story title"
-                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  required
-                  disabled={loading}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Start Chapter</label>
-                  <input
-                    type="number"
-                    value={storyData.start_chapter}
-                    onChange={(e) => setStoryData({ ...storyData, start_chapter: parseInt(e.target.value) })}
-                    min="1"
-                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    required
-                    disabled={loading || (storyData.custom_chapter_urls && storyData.custom_chapter_urls.length > 0)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">End Chapter</label>
-                  <input
-                    type="number"
-                    value={storyData.end_chapter}
-                    onChange={(e) => setStoryData({ ...storyData, end_chapter: parseInt(e.target.value) })}
-                    min="1"
-                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    required
-                    disabled={loading || (storyData.custom_chapter_urls && storyData.custom_chapter_urls.length > 0)}
-                  />
-                </div>
-              </div>
 
-              {/* Custom URLs Section */}
-              <div className="border-t pt-4 mt-4">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-dim">
-                    Link thủ công (nếu URL không theo quy tắc)
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setCustomUrlsDialog({ isOpen: true, urlsText: storyData.custom_chapter_urls?.join('\n') || '' })}
-                    className="text-sm bg-purple-500 text-white px-3 py-1 rounded hover:bg-purple-600 transition"
-                    disabled={loading}
-                  >
-                    {storyData.custom_chapter_urls && storyData.custom_chapter_urls.length > 0
-                      ? `Sửa (${storyData.custom_chapter_urls.length} links)`
-                      : 'Nhập link thủ công'}
-                  </button>
-                </div>
-                {storyData.custom_chapter_urls && storyData.custom_chapter_urls.length > 0 && (
-                  <div className="bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/30 rounded-md p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-purple-700 dark:text-purple-400 font-medium">
-                        ✓ Đã nhập {storyData.custom_chapter_urls.length} link chương
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setStoryData({ ...storyData, custom_chapter_urls: undefined })}
-                        className="text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-400"
-                      >
-                        Xóa tất cả
-                      </button>
+            {/* Story title */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Tên truyện</label>
+              <input
+                type="text"
+                value={storyData.title}
+                onChange={(e) => setStoryData({ ...storyData, title: e.target.value })}
+                placeholder="Nhập tên truyện"
+                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                disabled={loading}
+              />
+            </div>
+
+            {/* Input mode tabs */}
+            <div className="inline-flex gap-1 p-1 rounded-lg bg-surface-2 border border-token">
+              {([
+                { k: 'paste', label: 'Dán văn bản' },
+                { k: 'file', label: 'Nhập file' },
+                { k: 'folder', label: 'Nhập thư mục' },
+              ] as const).map((t) => (
+                <button
+                  key={t.k}
+                  type="button"
+                  onClick={() => { setInputMode(t.k); setError(null) }}
+                  disabled={loading}
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    inputMode === t.k
+                      ? 'bg-surface text-strong shadow-sm'
+                      : 'text-dim hover:text-strong'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Mode A — paste */}
+            {inputMode === 'paste' && (
+              <div className="space-y-3">
+                <textarea
+                  value={pasteText}
+                  onChange={(e) => setPasteText(e.target.value)}
+                  placeholder="Dán toàn bộ nội dung truyện vào đây. Ứng dụng sẽ tự nhận diện các mốc &quot;Chương 1&quot;, &quot;Chương 2&quot;... để tách chương."
+                  rows={10}
+                  className="w-full px-3 py-2 border rounded-md text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  disabled={loading}
+                />
+                <p className="text-xs text-faint -mt-1">
+                  Mẹo: mỗi chương nên bắt đầu bằng một dòng &quot;Chương 1&quot;, &quot;Chương 2&quot;... để tách tự động.
+                </p>
+                {pasteText.trim() && (
+                  <div className="rounded-lg border border-token bg-surface-2 p-3">
+                    <div className="text-sm font-medium mb-1.5">
+                      Đã nhận diện{' '}
+                      <span className="text-primary-600 dark:text-primary-400 font-semibold">
+                        {pastePreview.length}
+                      </span>{' '}
+                      chương
                     </div>
-                    <div className="text-xs text-dim max-h-20 overflow-y-auto">
-                      {storyData.custom_chapter_urls.slice(0, 3).map((url, i) => (
-                        <div key={i} className="truncate">Chương {i + 1}: {url}</div>
+                    <div className="text-xs text-dim max-h-28 overflow-y-auto space-y-0.5">
+                      {pastePreview.slice(0, 8).map((c, i) => (
+                        <div key={i} className="truncate">
+                          {c.chapter_number === 0 ? 'Giới thiệu' : `Chương ${c.chapter_number}`}
+                          <span className="text-faint"> — {c.content.replace(/\n/g, '').length.toLocaleString()} ký tự</span>
+                        </div>
                       ))}
-                      {storyData.custom_chapter_urls.length > 3 && (
-                        <div className="text-purple-600 dark:text-purple-400">...và {storyData.custom_chapter_urls.length - 3} link khác</div>
+                      {pastePreview.length > 8 && (
+                        <div className="text-faint">...và {pastePreview.length - 8} chương khác</div>
                       )}
                     </div>
                   </div>
                 )}
               </div>
-              {error && (
-                <div className={`p-4 rounded-md ${duplicateStory ? 'bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30' : 'bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30'}`}>
-                  <div className={`text-sm font-medium ${duplicateStory ? 'text-orange-800 dark:text-orange-300' : 'text-red-800 dark:text-red-300'} mb-2`}>
-                    {duplicateStory ? ' Truyện đã tồn tại' : ' Lỗi'}
-                  </div>
-                  <div className={`text-sm ${duplicateStory ? 'text-orange-700 dark:text-orange-400' : 'text-red-700 dark:text-red-400'} mb-3`}>
-                    {error}
-                  </div>
-                  {duplicateStory && (
-                    <div className="space-y-2">
-                      <div className="text-sm text-dim bg-surface p-3 rounded border border-orange-100">
-                        <div className="font-medium mb-1">Thông tin truyện đã tồn tại:</div>
-                        <div><strong>ID:</strong> <code className="bg-surface-3 px-2 py-0.5 rounded text-xs">{duplicateStory.id}</code></div>
-                        <div><strong>Tên:</strong> {duplicateStory.title}</div>
-                      </div>
-                      <button
-                        onClick={() => navigate(`/processor/${duplicateStory.id}`)}
-                        className="w-full bg-orange-500 text-white py-2 px-4 rounded-md hover:bg-orange-600 transition text-sm font-medium"
-                      >
-                        Mở truyện đã tồn tại
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
+            )}
+
+            {/* Mode B — file */}
+            {inputMode === 'file' && (
+              <div className="rounded-lg border border-dashed border-token-strong p-6 text-center bg-surface-2">
+                <p className="text-sm text-dim mb-3">
+                  Chọn một file <strong>.txt</strong> hoặc <strong>.docx</strong>. Ứng dụng sẽ tự tách chương theo mốc &quot;Chương N&quot;.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => handlePathImport('file')}
+                  disabled={loading || !agreedRights}
+                  className="btn btn-secondary mx-auto disabled:opacity-60"
+                >
+                  {loading ? 'Đang nhập...' : 'Chọn file...'}
+                </button>
+                {!hasNativeDialogs() && (
+                  <p className="text-xs text-faint mt-2">Chức năng này chỉ khả dụng trong ứng dụng desktop.</p>
+                )}
+              </div>
+            )}
+
+            {/* Mode C — folder */}
+            {inputMode === 'folder' && (
+              <div className="rounded-lg border border-dashed border-token-strong p-6 text-center bg-surface-2">
+                <p className="text-sm text-dim mb-3">
+                  Chọn thư mục chứa các file chương — mỗi file <strong>.txt</strong>/<strong>.docx</strong> là 1 chương, sắp theo tên file.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => handlePathImport('folder')}
+                  disabled={loading || !agreedRights}
+                  className="btn btn-secondary mx-auto disabled:opacity-60"
+                >
+                  {loading ? 'Đang nhập...' : 'Chọn thư mục...'}
+                </button>
+                {!hasNativeDialogs() && (
+                  <p className="text-xs text-faint mt-2">Chức năng này chỉ khả dụng trong ứng dụng desktop.</p>
+                )}
+              </div>
+            )}
+
+            {/* Rights disclaimer */}
+            <label className="flex items-start gap-2.5 text-sm text-dim cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={agreedRights}
+                onChange={(e) => setAgreedRights(e.target.checked)}
+                className="mt-0.5 shrink-0"
+              />
+              <span>
+                Tôi xác nhận có quyền sử dụng nội dung này (tự sáng tác, thuộc phạm vi công cộng, hoặc đã được cấp phép).
+              </span>
+            </label>
+
+            {error && (
+              <div className="p-4 rounded-md bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 text-sm text-red-700 dark:text-red-300">
+                {error}
+              </div>
+            )}
+
+            {inputMode === 'paste' && (
               <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-primary-500 text-white py-2 px-4 rounded-md hover:bg-primary-600 transition disabled:bg-gray-400"
+                type="button"
+                onClick={handlePasteImport}
+                disabled={loading || !agreedRights || !pasteText.trim()}
+                className="btn btn-primary w-full justify-center disabled:opacity-60"
               >
-                {loading ? 'Downloading chapters...' : 'Start Download'}
+                {loading
+                  ? 'Đang nhập...'
+                  : `Nhập ${pastePreview.length || ''} chương & tiếp tục`}
               </button>
-            </form>
+            )}
           </div>
         )
 

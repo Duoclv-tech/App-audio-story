@@ -136,7 +136,7 @@ export default function HistoryPage() {
       'created': 'bg-primary-100 dark:bg-primary-500/20 text-primary-800 dark:text-primary-300',
       'downloading': 'bg-yellow-100 dark:bg-yellow-500/20 text-yellow-800 dark:text-yellow-300',
       'downloaded': 'bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300',
-      'ready_for_tts': 'bg-purple-100 dark:bg-purple-500/20 text-purple-800 dark:text-purple-300',
+      'ready_for_tts': 'bg-primary-100 dark:bg-primary-500/20 text-primary-800 dark:text-primary-300',
       'tts_processing': 'bg-orange-100 dark:bg-orange-500/20 text-orange-800 dark:text-orange-300',
       'tts_completed': 'bg-teal-100 dark:bg-teal-500/20 text-teal-800 dark:text-teal-300',
       'completed': 'bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300'
@@ -255,8 +255,8 @@ export default function HistoryPage() {
             </div>
             <div className="text-sm text-dim">Đang xử lý (trang này)</div>
           </div>
-          <div className="bg-purple-50 dark:bg-purple-500/10 p-4 rounded-lg">
-            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+          <div className="bg-primary-50 dark:bg-primary-500/10 p-4 rounded-lg">
+            <div className="text-2xl font-bold text-primary-600 dark:text-primary-400">
               {stories.filter(s => s.has_merged_audio).length}
             </div>
             <div className="text-sm text-dim">Có file merge (trang này)</div>
@@ -364,7 +364,7 @@ export default function HistoryPage() {
 
                       {story.has_merged_audio && (
                         <div className="flex items-center gap-2">
-                          <svg className="w-4 h-4 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                           </svg>
                           <span className="text-dim">

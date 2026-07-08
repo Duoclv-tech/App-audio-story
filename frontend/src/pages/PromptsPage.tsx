@@ -320,11 +320,11 @@ export default function PromptsPage() {
                 </span>
               )}
               {categoryFilter && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 dark:bg-purple-500/20 text-purple-800 dark:text-purple-300 rounded">
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 dark:bg-primary-500/20 text-primary-800 dark:text-primary-300 rounded">
                   Danh mục: {categoryFilter}
                   <button
                     onClick={() => handleCategoryFilterChange('')}
-                    className="hover:text-purple-900"
+                    className="hover:text-primary-900"
                   >
                     ×
                   </button>
@@ -454,7 +454,7 @@ export default function PromptsPage() {
                     <div className="flex items-center gap-2 mb-2">
                       <h3 className="text-lg font-semibold text-strong">{prompt.title}</h3>
                       {prompt.category && (
-                        <span className="px-2 py-0.5 text-xs bg-purple-100 dark:bg-purple-500/20 text-purple-800 dark:text-purple-300 rounded">
+                        <span className="px-2 py-0.5 text-xs bg-primary-100 dark:bg-primary-500/20 text-primary-800 dark:text-primary-300 rounded">
                           {prompt.category}
                         </span>
                       )}

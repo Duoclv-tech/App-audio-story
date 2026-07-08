@@ -2496,7 +2496,7 @@ export default function ProcessorPage() {
             )}
 
             {chapterStats && !checkingGrammar && (
-              <div className="bg-gradient-to-r from-primary-50 to-purple-50 border border-primary-200 dark:border-primary-500/30 rounded-lg p-4">
+              <div className="bg-gradient-to-r from-primary-50 to-primary-50 border border-primary-200 dark:border-primary-500/30 rounded-lg p-4">
                 <h4 className="font-semibold text-strong mb-3">Thống kê</h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div className="bg-surface rounded-lg p-3 shadow-sm">
@@ -2532,7 +2532,7 @@ export default function ProcessorPage() {
               {chapters.length > 0 ? (
                 <div className="space-y-2">
                   {chapters.map((chapter) => (
-                    <div key={chapter.id} className={`p-3 border rounded hover:bg-surface-2 transition-colors ${chapter.chapter_number === 0 ? 'border-purple-300 dark:border-purple-500/30 bg-purple-50 dark:bg-purple-500/10' : ''}`}>
+                    <div key={chapter.id} className={`p-3 border rounded hover:bg-surface-2 transition-colors ${chapter.chapter_number === 0 ? 'border-primary-300 dark:border-primary-500/30 bg-primary-50 dark:bg-primary-500/10' : ''}`}>
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
@@ -2546,7 +2546,7 @@ export default function ProcessorPage() {
                           <div className="flex items-center gap-4 mt-1">
                             <span className="text-sm text-dim">{chapter.char_count.toLocaleString()} ký tự</span>
                             {chapter.chapter_number === 0 && chapter.char_count === 0 && (
-                              <span className="text-sm text-purple-600 dark:text-purple-400 italic">
+                              <span className="text-sm text-primary-600 dark:text-primary-400 italic">
                                  Thêm nội dung giới thiệu (hoặc để trống để bỏ qua)
                               </span>
                             )}
@@ -2618,7 +2618,7 @@ export default function ProcessorPage() {
               <div className="text-center py-8">
                 <button
                   onClick={loadMergedContent}
-                  className="bg-purple-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-purple-600 transition"
+                  className="bg-primary-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-600 transition"
                 >
                    Tải nội dung để kiểm tra
                 </button>
@@ -2672,7 +2672,7 @@ export default function ProcessorPage() {
                     <button
                       onClick={checkMergedGrammar}
                       disabled={mergedView.isChecking || !mergedView.content}
-                      className="bg-purple-500 text-white px-3 py-1 rounded text-sm font-medium hover:bg-purple-600 disabled:bg-gray-400 transition flex items-center gap-1"
+                      className="bg-primary-500 text-white px-3 py-1 rounded text-sm font-medium hover:bg-primary-600 disabled:bg-gray-400 transition flex items-center gap-1"
                     >
                       {mergedView.isChecking ? (
                         <><div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div> Đang kiểm tra...</>
@@ -2727,14 +2727,14 @@ export default function ProcessorPage() {
                 {mergedView.aiResult && (
                   <div className="fixed top-0 right-0 h-full w-[500px] bg-surface shadow-2xl border-l z-50 flex flex-col">
                     {/* Header */}
-                    <div className="bg-purple-600 text-white px-4 py-3 flex items-center justify-between">
+                    <div className="bg-primary-600 text-white px-4 py-3 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="text-lg"></span>
                         <span className="font-semibold">Kết quả AI Check</span>
                       </div>
                       <button
                         onClick={() => setMergedView(prev => ({ ...prev, aiResult: null }))}
-                        className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-purple-700 transition"
+                        className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-primary-700 transition"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -2881,7 +2881,7 @@ export default function ProcessorPage() {
                   </button>
                   <button
                     onClick={() => moveToStep(7)}
-                    className="flex-1 bg-purple-500 text-white py-2 px-4 rounded-md hover:bg-purple-600 transition"
+                    className="flex-1 bg-primary-500 text-white py-2 px-4 rounded-md hover:bg-primary-600 transition"
                   >
                     Bỏ qua sang Video
                   </button>
@@ -3834,8 +3834,8 @@ export default function ProcessorPage() {
                                 title={t}
                                 className={`text-xs px-2 py-1 rounded border ${
                                   active
-                                    ? 'bg-purple-500 text-white border-purple-500'
-                                    : 'bg-surface text-dim border-token hover:border-purple-400'
+                                    ? 'bg-primary-500 text-white border-primary-500'
+                                    : 'bg-surface text-dim border-token hover:border-primary-400'
                                 }`}
                               >
                                 {lbl}
@@ -3867,8 +3867,8 @@ export default function ProcessorPage() {
                                   title={t}
                                   className={`text-xs px-2 py-1 rounded border ${
                                     active
-                                      ? 'bg-purple-500 text-white border-purple-500'
-                                      : 'bg-surface text-dim border-token hover:border-purple-400'
+                                      ? 'bg-primary-500 text-white border-primary-500'
+                                      : 'bg-surface text-dim border-token hover:border-primary-400'
                                   }`}
                                 >
                                   {lbl}
@@ -5009,7 +5009,7 @@ export default function ProcessorPage() {
             <button
               onClick={startVideoProcessing}
               disabled={!videoConfig.folder.trim() || !videoConfig.audioPath.trim() || isProcessing}
-              className="w-full bg-purple-600 text-white py-3 px-4 rounded-md hover:bg-purple-700 disabled:opacity-50 transition font-semibold"
+              className="w-full bg-primary-600 text-white py-3 px-4 rounded-md hover:bg-primary-700 disabled:opacity-50 transition font-semibold"
             >
               {isProcessing ? 'Processing...' : ' Start Video Processing'}
             </button>
@@ -5026,7 +5026,7 @@ export default function ProcessorPage() {
                 </div>
                 <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                   <div
-                    className="bg-purple-600 h-2 rounded-full transition-all"
+                    className="bg-primary-600 h-2 rounded-full transition-all"
                     style={{ width: `${videoStatus.progress}%` }}
                   ></div>
                 </div>
@@ -5323,8 +5323,8 @@ export default function ProcessorPage() {
                   </div>
 
                   {/* Quick Add Banned Word Section */}
-                  <div className="bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/30 rounded-lg p-4">
-                    <h4 className="text-sm font-semibold text-purple-900 dark:text-purple-300 mb-3">Thêm Từ Kiểm Duyệt Nhanh</h4>
+                  <div className="bg-primary-50 dark:bg-primary-500/10 border border-primary-200 dark:border-primary-500/30 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-primary-900 dark:text-primary-300 mb-3">Thêm Từ Kiểm Duyệt Nhanh</h4>
                     <div className="space-y-3">
                       <div>
                         <label className="block text-xs font-medium text-dim mb-1">Từ bị cấm</label>
@@ -5332,7 +5332,7 @@ export default function ProcessorPage() {
                           type="text"
                           value={editDialog.quickBannedWord}
                           onChange={(e) => setEditDialog({ ...editDialog, quickBannedWord: e.target.value })}
-                          className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                           placeholder="Nhập từ bị cấm..."
                           spellCheck={false}
                         />
@@ -5343,14 +5343,14 @@ export default function ProcessorPage() {
                           type="text"
                           value={editDialog.quickReplacementWord}
                           onChange={(e) => setEditDialog({ ...editDialog, quickReplacementWord: e.target.value })}
-                          className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                           placeholder="Nhập từ thay thế..."
                           spellCheck={false}
                         />
                       </div>
                       <button
                         onClick={handleQuickAddBannedWord}
-                        className="w-full px-3 py-1.5 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 transition disabled:bg-gray-400"
+                        className="w-full px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700 transition disabled:bg-gray-400"
                         disabled={loading || !editDialog.quickBannedWord || !editDialog.quickReplacementWord}
                       >
                          Thêm vào danh sách
@@ -5451,10 +5451,10 @@ export default function ProcessorPage() {
                 </button>
                 <button
                   onClick={handleCheckGrammar}
-                  className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600 transition disabled:bg-gray-400"
+                  className="px-4 py-2 rounded-md font-medium transition border border-primary-200 dark:border-primary-500/30 bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-300 hover:bg-primary-100 dark:hover:bg-primary-500/20 disabled:opacity-50"
                   disabled={loading}
                 >
-                  {loading ? 'Checking...' : ' Check Grammar'}
+                  {loading ? 'Checking...' : 'Check Grammar'}
                 </button>
                 <button
                   onClick={handleSaveEditedChapter}
@@ -5851,7 +5851,7 @@ export default function ProcessorPage() {
                 value={customUrlsDialog.urlsText}
                 onChange={(e) => setCustomUrlsDialog(prev => ({ ...prev, urlsText: e.target.value }))}
                 placeholder={`https://example.com/truyen/chuong-1\nhttps://example.com/truyen/chuong-2\nhttps://example.com/truyen/chuong-3`}
-                className="w-full h-80 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono text-sm"
+                className="w-full h-80 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
                 spellCheck={false}
               />
               <div className="mt-2 text-sm text-dim">
@@ -5882,7 +5882,7 @@ export default function ProcessorPage() {
                   }
                   setCustomUrlsDialog({ isOpen: false, urlsText: '' })
                 }}
-                className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600 transition"
+                className="px-4 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 transition"
               >
                 Lưu ({customUrlsDialog.urlsText.split('\n').filter(line => line.trim()).length} links)
               </button>

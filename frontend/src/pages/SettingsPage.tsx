@@ -141,15 +141,15 @@ export default function SettingsPage() {
       {/* Gemini AI Configuration */}
       <div className="mb-8">
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <span className="text-purple-600 dark:text-purple-400"></span>
+          <span className="text-primary-600 dark:text-primary-400"></span>
           Cấu Hình Gemini AI (Grammar Check)
         </h3>
 
-        <div className="bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/30 rounded-lg p-4 mb-4">
-          <div className="text-sm text-purple-800 dark:text-purple-300 mb-2 font-medium">
+        <div className="bg-primary-50 dark:bg-primary-500/10 border border-primary-200 dark:border-primary-500/30 rounded-lg p-4 mb-4">
+          <div className="text-sm text-primary-800 dark:text-primary-300 mb-2 font-medium">
             Hướng dẫn lấy API Key (miễn phí):
           </div>
-          <ol className="text-sm text-purple-700 dark:text-purple-400 space-y-1 list-decimal list-inside">
+          <ol className="text-sm text-primary-700 dark:text-primary-400 space-y-1 list-decimal list-inside">
             <li>Vào <a href="https://ai.google.dev" target="_blank" rel="noopener noreferrer" className="underline">https://ai.google.dev</a></li>
             <li>Đăng nhập bằng Gmail</li>
             <li>Click <strong>"Get API Key"</strong> (góc trái)</li>
@@ -167,12 +167,12 @@ export default function SettingsPage() {
               value={settings.GEMINI_API_KEY || ''}
               onChange={(e) => handleInputChange('GEMINI_API_KEY', e.target.value)}
               placeholder="AIza..."
-              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 pr-20 font-mono text-sm"
+              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 pr-20 font-mono text-sm"
             />
             <button
               type="button"
               onClick={() => setShowTokens(!showTokens)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300"
             >
               {showTokens ? 'Ẩn' : 'Hiện'}
             </button>

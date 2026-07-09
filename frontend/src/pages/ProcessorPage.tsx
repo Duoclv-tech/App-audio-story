@@ -25,6 +25,26 @@ const WORKFLOW_STEPS = [
 // Visible steps for UI (filter out hidden ones)
 const VISIBLE_STEPS = WORKFLOW_STEPS.filter(step => !step.hidden)
 
+// Normalize a FastAPI error `detail` into a plain string. FastAPI 422 responses
+// return `detail` as an ARRAY of objects — rendering that directly as a React
+// child throws "Objects are not valid as a React child" and blanks the page.
+const toMessage = (detail: any, fallback: string): string => {
+  if (typeof detail === 'string' && detail.trim()) return detail
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((d: any) => (typeof d === 'string' ? d : d?.msg))
+      .filter(Boolean)
+    if (parts.length) return parts.join(', ')
+  }
+  if (detail && typeof detail === 'object' && (detail.msg || detail.message)) {
+    return detail.msg || detail.message
+  }
+  return fallback
+}
+// Extract a safe string from an axios error (or anything).
+const errMessage = (err: any, fallback: string): string =>
+  toMessage(err?.response?.data?.detail, fallback)
+
 interface StoryData {
   id?: string
   url: string
@@ -146,6 +166,7 @@ export default function ProcessorPage() {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [downloadingAudio, setDownloadingAudio] = useState(false)
   const [duplicateStory, setDuplicateStory] = useState<{
     id: string
     title: string
@@ -164,7 +185,6 @@ export default function ProcessorPage() {
   // Step 1 content-import (paste / file / folder), replaces the scraper UI.
   const [inputMode, setInputMode] = useState<'paste' | 'file' | 'folder'>('paste')
   const [pasteText, setPasteText] = useState('')
-  const [agreedRights, setAgreedRights] = useState(false)
   const pastePreview = useMemo(() => splitChapters(pasteText), [pasteText])
 
   // Merged content state for Step 3
@@ -621,7 +641,7 @@ export default function ProcessorPage() {
     } catch (e: any) {
       setExactPreview({
         open: true, hash: null, status: 'failed', progress: 0,
-        error: e?.response?.data?.detail || e?.message || 'Render failed',
+        error: errMessage(e, e?.message || 'Render failed'),
         cached: false,
       })
     }
@@ -800,6 +820,44 @@ export default function ProcessorPage() {
     setTimeout(() => {
       setToast(prev => ({ ...prev, isVisible: false }))
     }, 3000)
+  }
+
+  // Download the finished merged audio (the wizard's final deliverable).
+  const handleDownloadAudio = async () => {
+    const id = storyData.id
+    if (!id) {
+      showToast('Không tìm thấy truyện để tải audio.', 'error')
+      return
+    }
+    setDownloadingAudio(true)
+    try {
+      const resp = await axios.get(`/api/v1/video/download-audio/${id}`, { responseType: 'blob' })
+      const disposition: string = resp.headers['content-disposition'] || ''
+      const match = /filename\*?=(?:UTF-8'')?["']?([^"';\n]+)/i.exec(disposition)
+      const filename = match ? decodeURIComponent(match[1]) : `audiobook_${id}.mp3`
+      const url = window.URL.createObjectURL(resp.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err: any) {
+      // With responseType 'blob', an error body is a Blob — read it back to text
+      // so a real backend message (e.g. 404 "chưa có audio") still surfaces.
+      let msg = 'Không tải được audio hoàn chỉnh.'
+      try {
+        const blob = err?.response?.data
+        if (blob && typeof blob.text === 'function') {
+          const parsed = JSON.parse(await blob.text())
+          msg = toMessage(parsed?.detail, msg)
+        }
+      } catch { /* keep default message */ }
+      showToast(msg, 'error')
+    } finally {
+      setDownloadingAudio(false)
+    }
   }
 
   // Refs for line numbers and highlight sync
@@ -1039,7 +1097,7 @@ export default function ProcessorPage() {
       }
     } catch (err: any) {
       setFolderValidation({ valid: false, videoCount: 0, totalDuration: '', checked: true })
-      showToast(err.response?.data?.detail || 'Failed to validate folder', 'error')
+      showToast(errMessage(err, 'Không kiểm tra được thư mục'), 'error')
     }
   }
 
@@ -1112,7 +1170,7 @@ export default function ProcessorPage() {
       setVideoStatus(prev => ({
         ...prev,
         status: 'failed',
-        error: err.response?.data?.detail || 'Failed to start video processing'
+        error: errMessage(err, 'Không bắt đầu được xử lý video')
       }))
     }
   }
@@ -1189,7 +1247,7 @@ export default function ProcessorPage() {
       })
     } catch (err: any) {
       setFolderBrowser(prev => ({ ...prev, loading: false }))
-      showToast(err.response?.data?.detail || 'Failed to browse folder', 'error')
+      showToast(errMessage(err, 'Không duyệt được thư mục'), 'error')
     }
   }
 
@@ -1235,7 +1293,7 @@ export default function ProcessorPage() {
       })
     } catch (err: any) {
       setAudioBrowser(prev => ({ ...prev, loading: false }))
-      showToast(err.response?.data?.detail || 'Failed to browse files', 'error')
+      showToast(errMessage(err, 'Không duyệt được tệp'), 'error')
     }
   }
 
@@ -1287,7 +1345,7 @@ export default function ProcessorPage() {
       })
     } catch (err: any) {
       setImageBrowser(prev => ({ ...prev, loading: false }))
-      showToast(err.response?.data?.detail || 'Failed to browse images', 'error')
+      showToast(errMessage(err, 'Không duyệt được ảnh'), 'error')
     }
   }
 
@@ -1371,7 +1429,7 @@ export default function ProcessorPage() {
         showToast(`Đã đổi tên preset thành "${name}"`, 'success')
       }
     } catch (err: any) {
-      const msg = err?.response?.data?.detail || 'Lỗi không xác định'
+      const msg = errMessage(err, 'Lỗi không xác định')
       showToast(msg, 'error')
     }
   }
@@ -1403,7 +1461,7 @@ export default function ProcessorPage() {
           setVideoPresets(prev => prev.map(p => (p.id === res.data.id ? res.data : p)))
           showToast(`Đã cập nhật preset "${cur.name}"`, 'success')
         } catch (err: any) {
-          const msg = err?.response?.data?.detail || 'Lỗi không xác định'
+          const msg = errMessage(err, 'Lỗi không xác định')
           showToast(msg, 'error')
         }
       },
@@ -1419,7 +1477,7 @@ export default function ProcessorPage() {
       setSelectedPresetId(prev => (prev === id ? '' : prev))
       showToast(`Đã xoá preset "${cur.name}"`, 'success')
     } catch (err: any) {
-      const msg = err?.response?.data?.detail || 'Lỗi không xác định'
+      const msg = errMessage(err, 'Lỗi không xác định')
       showToast(msg, 'error')
     }
   }
@@ -1464,10 +1522,6 @@ export default function ProcessorPage() {
 
   // Mode A — split the pasted text on the client and import the chapters.
   const handlePasteImport = async () => {
-    if (!agreedRights) {
-      setError('Vui lòng xác nhận bạn có quyền sử dụng nội dung này.')
-      return
-    }
     if (pastePreview.length === 0) {
       setError('Chưa có nội dung để nhập.')
       return
@@ -1491,10 +1545,6 @@ export default function ProcessorPage() {
 
   // Mode B/C — pick a file/folder via the native dialog; the backend reads it.
   const handlePathImport = async (mode: 'file' | 'folder') => {
-    if (!agreedRights) {
-      setError('Vui lòng xác nhận bạn có quyền sử dụng nội dung này.')
-      return
-    }
     const path = mode === 'file' ? await pickTextFileNative() : await pickFolderNative()
     if (!path) return
     setLoading(true)
@@ -1650,8 +1700,8 @@ export default function ProcessorPage() {
 
     } catch (error: any) {
       console.error('Error during TTS:', error)
-      setError(error.response?.data?.detail || 'Failed to process TTS')
-      showToast(error.response?.data?.detail || 'Lỗi khi xử lý TTS', 'error')
+      setError(errMessage(error, 'Lỗi khi xử lý TTS'))
+      showToast(errMessage(error, 'Lỗi khi xử lý TTS'), 'error')
     } finally {
       setLoading(false)
     }
@@ -1810,7 +1860,7 @@ export default function ProcessorPage() {
       setError(null)
     } catch (error: any) {
       console.error('Error retrying chapter:', error)
-      setError(error.response?.data?.detail || 'Failed to retry chapter')
+      setError(errMessage(error, 'Không thử lại được chương'))
     } finally {
       setLoading(false)
     }
@@ -1861,7 +1911,7 @@ export default function ProcessorPage() {
       console.error('=== Error fetching chapter ===')
       console.error('Error:', error)
       console.error('Error response:', error.response?.data)
-      setError(error.response?.data?.detail || 'Failed to load chapter')
+      setError(errMessage(error, 'Không tải được chương'))
     }
   }
 
@@ -1972,7 +2022,7 @@ export default function ProcessorPage() {
       console.log(response.data.message)
     } catch (error: any) {
       console.error('Error accepting replacement:', error)
-      setError(error.response?.data?.detail || 'Failed to accept replacement')
+      setError(errMessage(error, 'Không áp dụng được thay thế'))
     } finally {
       setLoading(false)
     }
@@ -2015,7 +2065,7 @@ export default function ProcessorPage() {
       console.log(`Added banned word: ${editDialog.quickBannedWord} -> ${editDialog.quickReplacementWord}`)
     } catch (error: any) {
       console.error('Error adding banned word:', error)
-      setError(error.response?.data?.detail || 'Failed to add banned word')
+      setError(errMessage(error, 'Không thêm được từ cấm'))
     } finally {
       setLoading(false)
     }
@@ -2054,7 +2104,7 @@ export default function ProcessorPage() {
 
     } catch (error: any) {
       console.error('Error checking grammar:', error)
-      setError(error.response?.data?.detail || 'Failed to check grammar')
+      setError(errMessage(error, 'Không kiểm tra được ngữ pháp'))
     } finally {
       setLoading(false)
     }
@@ -2116,7 +2166,7 @@ export default function ProcessorPage() {
       console.log(`Chapter saved. Found ${grammarResponse.data.censored_count} grammar errors.`)
     } catch (error: any) {
       console.error('Error updating chapter:', error)
-      setError(error.response?.data?.detail || 'Failed to update chapter')
+      setError(errMessage(error, 'Không cập nhật được chương'))
     } finally {
       setLoading(false)
     }
@@ -2149,7 +2199,7 @@ export default function ProcessorPage() {
       })
     } catch (error: any) {
       console.error('Error deleting chapter:', error)
-      setError(error.response?.data?.detail || 'Failed to delete chapter')
+      setError(errMessage(error, 'Không xoá được chương'))
     } finally {
       setLoading(false)
     }
@@ -2312,7 +2362,7 @@ export default function ProcessorPage() {
       }
     } catch (error: any) {
       console.error('AI grammar check error:', error)
-      showToast(error.response?.data?.detail || 'Lỗi khi kiểm tra ngữ pháp', 'error')
+      showToast(errMessage(error, 'Lỗi khi kiểm tra ngữ pháp'), 'error')
       setMergedView(prev => ({ ...prev, isChecking: false }))
     }
   }
@@ -2412,7 +2462,7 @@ export default function ProcessorPage() {
                 <button
                   type="button"
                   onClick={() => handlePathImport('file')}
-                  disabled={loading || !agreedRights}
+                  disabled={loading}
                   className="btn btn-secondary mx-auto disabled:opacity-60"
                 >
                   {loading ? 'Đang nhập...' : 'Chọn file...'}
@@ -2432,7 +2482,7 @@ export default function ProcessorPage() {
                 <button
                   type="button"
                   onClick={() => handlePathImport('folder')}
-                  disabled={loading || !agreedRights}
+                  disabled={loading}
                   className="btn btn-secondary mx-auto disabled:opacity-60"
                 >
                   {loading ? 'Đang nhập...' : 'Chọn thư mục...'}
@@ -2442,19 +2492,6 @@ export default function ProcessorPage() {
                 )}
               </div>
             )}
-
-            {/* Rights disclaimer */}
-            <label className="flex items-start gap-2.5 text-sm text-dim cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={agreedRights}
-                onChange={(e) => setAgreedRights(e.target.checked)}
-                className="mt-0.5 shrink-0"
-              />
-              <span>
-                Tôi xác nhận có quyền sử dụng nội dung này (tự sáng tác, thuộc phạm vi công cộng, hoặc đã được cấp phép).
-              </span>
-            </label>
 
             {error && (
               <div className="p-4 rounded-md bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 text-sm text-red-700 dark:text-red-300">
@@ -2466,7 +2503,7 @@ export default function ProcessorPage() {
               <button
                 type="button"
                 onClick={handlePasteImport}
-                disabled={loading || !agreedRights || !pasteText.trim()}
+                disabled={loading || !pasteText.trim()}
                 className="btn btn-primary w-full justify-center disabled:opacity-60"
               >
                 {loading
@@ -5089,8 +5126,12 @@ export default function ProcessorPage() {
               Audiobook của bạn đã được tạo thành công và sẵn sàng để tải về.
             </p>
             <div className="space-y-3">
-              <button className="btn btn-primary w-full justify-center py-3 text-base">
-                Tải audio hoàn chỉnh
+              <button
+                onClick={handleDownloadAudio}
+                disabled={downloadingAudio}
+                className="btn btn-primary w-full justify-center py-3 text-base disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {downloadingAudio ? 'Đang tải...' : 'Tải audio hoàn chỉnh'}
               </button>
               <button
                 onClick={() => {

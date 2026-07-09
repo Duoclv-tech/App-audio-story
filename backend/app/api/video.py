@@ -193,6 +193,32 @@ async def get_audio_path(story_id: str, db: Session = Depends(get_db)):
     return {"audio_path": None, "found": False}
 
 
+def _safe_filename(name: str, fallback: str) -> str:
+    """Strip characters Windows/most OSes reject in a filename."""
+    cleaned = "".join(c for c in (name or "") if c not in '\\/:*?"<>|').strip()
+    return cleaned or fallback
+
+
+@router.get("/download-audio/{story_id}")
+async def download_merged_audio(story_id: str, db: Session = Depends(get_db)):
+    """Serve the finished merged audio as a downloadable attachment (final deliverable)."""
+    merged_audio = db.query(models.MergedAudio).filter(
+        models.MergedAudio.story_id == story_id
+    ).order_by(models.MergedAudio.created_at.desc()).first()
+
+    if not merged_audio or not merged_audio.file_path or not os.path.exists(merged_audio.file_path):
+        raise HTTPException(status_code=404, detail="Chưa có audio hoàn chỉnh cho truyện này.")
+
+    story = db.query(models.Story).filter(models.Story.id == story_id).first()
+    ext = (merged_audio.format or os.path.splitext(merged_audio.file_path)[1].lstrip('.') or 'mp3')
+    filename = f"{_safe_filename(story.title if story else '', 'audiobook')}.{ext}"
+    return FileResponse(
+        path=merged_audio.file_path,
+        filename=filename,
+        media_type='application/octet-stream',
+    )
+
+
 @router.post("/validate-folder", response_model=schemas.VideoFolderValidateResponse)
 async def validate_video_folder(request: schemas.VideoFolderValidateRequest):
     """Validate a folder containing background videos"""

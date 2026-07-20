@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 
 interface BannedWord {
@@ -36,6 +36,7 @@ interface DeleteDialogState {
 }
 
 export default function BannedWordsPage() {
+  const listRef = useRef<HTMLDivElement>(null)
   const [bannedWords, setBannedWords] = useState<BannedWord[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -177,7 +178,7 @@ export default function BannedWordsPage() {
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= paginationMeta.total_pages) {
       setCurrentPage(newPage)
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      listRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }
 
@@ -194,8 +195,8 @@ export default function BannedWordsPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="bg-surface rounded-lg shadow-sm p-6">
+    <div className="max-w-screen-2xl mx-auto p-6 h-[calc(100vh-3rem)]">
+      <div className="bg-surface rounded-lg shadow-sm p-6 h-full flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -366,10 +367,17 @@ export default function BannedWordsPage() {
           </div>
         )}
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-surface-2 border-b">
+        {/* Table — chỉ vùng này cuộn */}
+        <div ref={listRef} className="flex-1 min-h-0 overflow-auto -mx-6 px-6">
+          <table className="w-full table-fixed">
+            <colgroup>
+              <col className="w-[26%]" />
+              <col className="w-[20%]" />
+              <col className="w-[30%]" />
+              <col className="w-[12%]" />
+              <col className="w-[12%]" />
+            </colgroup>
+            <thead className="bg-surface-2 border-b sticky top-0 z-10">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-dim uppercase tracking-wider">
                   Từ bị cấm
@@ -383,7 +391,7 @@ export default function BannedWordsPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-dim uppercase tracking-wider">
                   Trạng thái
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-dim uppercase tracking-wider">
+                <th className="px-4 py-3 text-right text-xs font-medium text-dim uppercase tracking-wider whitespace-nowrap">
                   Thao tác
                 </th>
               </tr>
@@ -399,16 +407,16 @@ export default function BannedWordsPage() {
                 bannedWords.map((word) => (
                   <tr key={word.id} className="hover:bg-surface-2">
                     <td className="px-4 py-3">
-                      <span className="font-mono bg-red-100 dark:bg-red-500/20 text-red-800 dark:text-red-300 px-2 py-1 rounded text-sm">
+                      <span className="font-mono bg-red-100 dark:bg-red-500/20 text-red-800 dark:text-red-300 px-2 py-1 rounded text-sm break-words">
                         {word.banned_word}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="font-mono bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300 px-2 py-1 rounded text-sm">
+                      <span className="font-mono bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300 px-2 py-1 rounded text-sm break-words">
                         {word.replacement_word}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-dim">
+                    <td className="px-4 py-3 text-sm text-dim break-words">
                       {word.description || '-'}
                     </td>
                     <td className="px-4 py-3">
@@ -422,27 +430,29 @@ export default function BannedWordsPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => handleEdit(word)}
-                        className="text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300 mr-3"
-                        title="Chỉnh sửa"
-                      >
-                        <svg className="w-5 h-5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => handleDelete(word)}
-                        className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
-                        title="Xóa"
-                      >
-                        <svg className="w-5 h-5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-3">
+                        <button
+                          onClick={() => handleEdit(word)}
+                          className="text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300"
+                          title="Chỉnh sửa"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => handleDelete(word)}
+                          className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
+                          title="Xóa"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

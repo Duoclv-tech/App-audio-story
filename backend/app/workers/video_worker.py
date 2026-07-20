@@ -41,6 +41,10 @@ async def process_video_task(
         resolution = config.get("resolution", "1920x1080")
         banner_image = config.get("banner_image")
         banner_video_scale = config.get("banner_video_scale", 1.0)
+        banner_video_offset_x = config.get("banner_video_offset_x", 0.0)
+        banner_video_offset_y = config.get("banner_video_offset_y", 0.0)
+        banner_video_scale_x = config.get("banner_video_scale_x")
+        banner_video_scale_y = config.get("banner_video_scale_y")
         overlay_opacity = config.get("overlay_opacity", 0.0)
         watermark_image = config.get("watermark_image")
         watermark_x = config.get("watermark_x", 0.92)
@@ -130,6 +134,10 @@ async def process_video_task(
             resolution=resolution,
             banner_image=banner_image,
             banner_video_scale=banner_video_scale,
+            banner_video_offset_x=banner_video_offset_x,
+            banner_video_offset_y=banner_video_offset_y,
+            banner_video_scale_x=banner_video_scale_x,
+            banner_video_scale_y=banner_video_scale_y,
             overlay_opacity=overlay_opacity,
             watermark_image=watermark_image,
             watermark_x=watermark_x,

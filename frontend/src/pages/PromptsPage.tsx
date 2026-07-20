@@ -43,6 +43,7 @@ interface ActionMenuState {
 }
 
 export default function PromptsPage() {
+  const listRef = useRef<HTMLDivElement>(null)
   const [prompts, setPrompts] = useState<Prompt[]>([])
   const [categories, setCategories] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
@@ -214,7 +215,7 @@ export default function PromptsPage() {
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= paginationMeta.total_pages) {
       setCurrentPage(newPage)
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      listRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }
 
@@ -251,8 +252,8 @@ export default function PromptsPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="bg-surface rounded-lg shadow-sm p-6">
+    <div className="max-w-screen-2xl mx-auto p-6 h-[calc(100vh-3rem)]">
+      <div className="bg-surface rounded-lg shadow-sm p-6 h-full flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -440,7 +441,8 @@ export default function PromptsPage() {
           </div>
         )}
 
-        {/* Prompts List */}
+        {/* Prompts List — chỉ vùng này cuộn */}
+        <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto -mx-6 px-6">
         <div className="space-y-4">
           {prompts.length === 0 ? (
             <div className="text-center py-8 text-dim">
@@ -539,6 +541,7 @@ export default function PromptsPage() {
               </div>
             ))
           )}
+        </div>
         </div>
 
         {/* Footer info */}

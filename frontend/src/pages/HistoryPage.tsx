@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 
@@ -33,6 +33,7 @@ interface PaginatedResponse {
 
 export default function HistoryPage() {
   const navigate = useNavigate()
+  const listRef = useRef<HTMLDivElement>(null)
   const [stories, setStories] = useState<Story[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -106,7 +107,7 @@ export default function HistoryPage() {
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= paginationMeta.total_pages) {
       setCurrentPage(newPage)
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      listRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }
 
@@ -188,8 +189,8 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="bg-surface rounded-lg shadow-sm p-8">
+    <div className="h-[calc(100vh-3rem)]">
+      <div className="bg-surface rounded-lg shadow-sm p-8 h-full flex flex-col">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold">Lịch Sử</h2>
           <button
@@ -263,7 +264,8 @@ export default function HistoryPage() {
           </div>
         </div>
 
-        {/* Story List */}
+        {/* Story List — chỉ vùng này cuộn, phần đầu & phân trang cố định */}
+        <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto -mx-8 px-8">
         {filteredStories.length === 0 ? (
           <div className="text-center text-dim py-12">
             {searchTerm ? 'Không tìm thấy truyện nào' : 'Chưa có truyện nào'}
@@ -422,6 +424,7 @@ export default function HistoryPage() {
             ))}
           </div>
         )}
+        </div>
 
         {/* Pagination */}
         {paginationMeta.total_pages > 1 && (

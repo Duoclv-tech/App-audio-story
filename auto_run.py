@@ -72,18 +72,12 @@ TTS_CONFIG = {
     "speed": 1.0,
 }
 
-# VBEE credentials, tried in order. If the first set fails (auth/quota/etc.)
-# the script falls back to the next set automatically. Edit/extend as needed.
-VBEE_CREDENTIALS = [
-    {
-        "app_id": "c1c5c478-719d-4ec6-b665-58ed39484375",
-        "bearer_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzAzMDEzOTZ9.YPNV8aEATsETyhBljAHfizZw-t5Y2bQ4R57JGaYfKpQ",
-    },
-    {
-        "app_id": "29dd75a1-9ce5-4c06-a5ea-af0aace2f9c0",
-        "bearer_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzEzMDI5MTF9.vR73yQRZ68ZckTzoMwJkrIl0LyhShzGY7svjmMFYvyM",
-    },
-]
+# VBEE credentials are read from backend/.env (NEVER hardcoded here).
+# Set VBEE_APP_ID / VBEE_BEARER_TOKEN in .env. An optional second fallback
+# set can be supplied via VBEE_APP_ID_2 / VBEE_BEARER_TOKEN_2 — if the first
+# set fails (auth/quota/etc.) the script tries the next one automatically.
+# Populated by _load_vbee_credentials() at run time (see below).
+VBEE_CREDENTIALS: list[dict] = []
 
 # Ollama AI spell-check toggle
 ENABLE_SPELLCHECK_STEP = True
@@ -109,6 +103,30 @@ DOCKER_DIR = SCRIPT_DIR / "docker"
 # Make `from app...` imports work, and ensure config.py reads backend/.env
 sys.path.insert(0, str(BACKEND_DIR))
 os.chdir(BACKEND_DIR)
+
+
+def _load_vbee_credentials() -> list[dict]:
+    """Load VBEE credentials from backend/.env (never hardcoded in this file).
+
+    Reads VBEE_APP_ID / VBEE_BEARER_TOKEN as the primary set, plus an optional
+    fallback set from VBEE_APP_ID_2 / VBEE_BEARER_TOKEN_2. Returns them in the
+    order they should be tried.
+    """
+    from dotenv import load_dotenv  # bundled dependency (see requirements.txt)
+
+    # .env lives in backend/ (same file config.py reads).
+    load_dotenv(BACKEND_DIR / ".env")
+
+    creds: list[dict] = []
+    for id_key, token_key in (
+        ("VBEE_APP_ID", "VBEE_BEARER_TOKEN"),
+        ("VBEE_APP_ID_2", "VBEE_BEARER_TOKEN_2"),
+    ):
+        app_id = os.getenv(id_key)
+        token = os.getenv(token_key)
+        if app_id and token:
+            creds.append({"app_id": app_id, "bearer_token": token})
+    return creds
 
 
 def _silence_sqlalchemy() -> None:
@@ -1237,7 +1255,14 @@ async def main_async(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    global VBEE_CREDENTIALS
     args = parse_args()
+    VBEE_CREDENTIALS = _load_vbee_credentials()
+    if not VBEE_CREDENTIALS:
+        print("[boot] ERROR: no VBEE credentials found. Set VBEE_APP_ID and "
+              "VBEE_BEARER_TOKEN in backend/.env (optional fallback: "
+              "VBEE_APP_ID_2 / VBEE_BEARER_TOKEN_2).")
+        sys.exit(1)
     ensure_mysql_running()
     try:
         asyncio.run(main_async(args))

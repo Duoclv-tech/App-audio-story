@@ -670,20 +670,43 @@ class VideoProcessor:
         output_path: str,
         resolution: str = "1920x1080",
         duration: float = 0,
-        video_scale: float = 0.85
+        video_scale: float = 0.85,
+        offset_x: float = 0.0,
+        offset_y: float = 0.0,
+        scale_x: Optional[float] = None,
+        scale_y: Optional[float] = None
     ) -> Dict:
         """Overlay video on top of a banner image background.
-        Banner scales to full resolution, video keeps its aspect ratio
-        and scales to fit within video_scale of the frame, centered."""
+        Banner scales to full resolution. The video is scaled to
+        scale_x * frame_width by scale_y * frame_height — independent per
+        axis, so the clip can be stretched (aspect-distorted) to any size.
+        When scale_x/scale_y are omitted both fall back to video_scale
+        (uniform). It is centered by default; offset_x/offset_y (fraction of
+        frame, 0 = centered) shift it horizontally/vertically."""
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         width, height = resolution.split('x')
-        max_vid_w = int(int(width) * video_scale)
-        max_vid_h = int(int(height) * video_scale)
+        # Independent per-axis scale; fall back to the uniform video_scale.
+        sx = video_scale if scale_x is None else scale_x
+        sy = video_scale if scale_y is None else scale_y
+        sx = max(0.1, min(3.0, sx))
+        sy = max(0.1, min(3.0, sy))
+        # Even dimensions keep yuv420 encoders happy.
+        vid_w = max(2, int(int(width) * sx) & ~1)
+        vid_h = max(2, int(int(height) * sy) & ~1)
+        # Position = centered + offset (offset as a fraction of the full frame).
+        # W/H are the banner (background) dimensions in the overlay filter.
+        # Clamp defensively: the -0.5..0.5 bound is otherwise enforced only by the
+        # frontend drag handler, so a stale/hand-edited config or a direct API
+        # caller could otherwise push the clip entirely off-frame.
+        offset_x = max(-0.5, min(0.5, offset_x))
+        offset_y = max(-0.5, min(0.5, offset_y))
+        pos_x = f"(W-w)/2+({offset_x:.5f})*W"
+        pos_y = f"(H-h)/2+({offset_y:.5f})*H"
 
         filter_complex = (
             f"[0:v]scale={width}:{height},setsar=1[bg];"
-            f"[1:v]scale={max_vid_w}:{max_vid_h}:force_original_aspect_ratio=decrease,setsar=1[vid];"
-            f"[bg][vid]overlay=(W-w)/2:(H-h)/2:shortest=1[outv]"
+            f"[1:v]scale={vid_w}:{vid_h},setsar=1[vid];"
+            f"[bg][vid]overlay={pos_x}:{pos_y}:shortest=1[outv]"
         )
 
         cmd = ['ffmpeg', '-y', '-loop', '1', '-i', banner_path]
@@ -1429,6 +1452,10 @@ class VideoProcessor:
         db: Session,
         banner_image: Optional[str] = None,
         banner_video_scale: float = 1.0,
+        banner_video_offset_x: float = 0.0,
+        banner_video_offset_y: float = 0.0,
+        banner_video_scale_x: Optional[float] = None,
+        banner_video_scale_y: Optional[float] = None,
         overlay_opacity: float = 0.0,
         watermark_image: Optional[str] = None,
         watermark_x: float = 0.92,
@@ -1569,7 +1596,9 @@ class VideoProcessor:
             logger.info(f"Overlaying video on banner: {banner_image}")
             overlay_result = self.overlay_on_banner(
                 concat_path, banner_image, composite_path,
-                resolution, sped_audio_duration, banner_video_scale
+                resolution, sped_audio_duration, banner_video_scale,
+                banner_video_offset_x, banner_video_offset_y,
+                scale_x=banner_video_scale_x, scale_y=banner_video_scale_y
             )
             if not overlay_result["success"]:
                 raise RuntimeError(f"Banner overlay failed: {overlay_result.get('error')}")
@@ -1751,6 +1780,10 @@ class VideoProcessor:
         resolution: str = "1920x1080",
         banner_image: Optional[str] = None,
         banner_video_scale: float = 1.0,
+        banner_video_offset_x: float = 0.0,
+        banner_video_offset_y: float = 0.0,
+        banner_video_scale_x: Optional[float] = None,
+        banner_video_scale_y: Optional[float] = None,
         overlay_opacity: float = 0.0,
         watermark_image: Optional[str] = None,
         watermark_x: float = 0.92,
@@ -1896,6 +1929,8 @@ class VideoProcessor:
                     result = self._run_merge_pipeline(
                         video_paths, audio_path, output_dir, story_folder,
                         audio_speed, resolution, task, db, banner_image, banner_video_scale,
+                        banner_video_offset_x, banner_video_offset_y,
+                        banner_video_scale_x, banner_video_scale_y,
                         overlay_opacity,
                         watermark_image, watermark_x, watermark_y,
                         watermark_w, watermark_h, watermark_shape, watermark_opacity,
@@ -2038,6 +2073,10 @@ class VideoProcessor:
         resolution: str = "1920x1080",
         banner_image: Optional[str] = None,
         banner_video_scale: float = 1.0,
+        banner_video_offset_x: float = 0.0,
+        banner_video_offset_y: float = 0.0,
+        banner_video_scale_x: Optional[float] = None,
+        banner_video_scale_y: Optional[float] = None,
         overlay_opacity: float = 0.0,
         watermark_image: Optional[str] = None,
         watermark_x: float = 0.92,
@@ -2206,6 +2245,8 @@ class VideoProcessor:
                 overlay_res = self.overlay_on_banner(
                     concat_path, banner_image, composite,
                     resolution, sped_dur, banner_video_scale,
+                    banner_video_offset_x, banner_video_offset_y,
+                    scale_x=banner_video_scale_x, scale_y=banner_video_scale_y,
                 )
                 if not overlay_res["success"]:
                     return overlay_res

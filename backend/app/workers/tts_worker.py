@@ -289,18 +289,21 @@ async def validate_tts_credentials():
     Returns:
         True if credentials are valid, False otherwise
     """
+    db = SessionLocal()
     try:
-        # Check if credentials are configured
-        if not settings.VBEE_APP_ID:
+        # Create processor loading credentials from DB first, then .env fallback
+        processor = VbeeTTSProcessor(db=db)
+
+        # Check if credentials are configured (resolved from DB or .env)
+        if not processor.app_id:
             logger.warning("VBEE_APP_ID not configured")
             return False
 
-        if not settings.VBEE_BEARER_TOKEN:
+        if not processor.bearer_token:
             logger.warning("VBEE_BEARER_TOKEN not configured")
             return False
 
-        # Create processor and test with small text
-        processor = VbeeTTSProcessor()
+        # Test with small text
         result = await processor.text_to_speech(
             text="Test",
             voice_code="hn_female_ngochuyen_full_48k-fhg"
@@ -316,3 +319,6 @@ async def validate_tts_credentials():
     except Exception as e:
         logger.error(f"Error validating TTS credentials: {e}")
         return False
+
+    finally:
+        db.close()

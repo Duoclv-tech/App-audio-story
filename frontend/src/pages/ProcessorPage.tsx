@@ -9,6 +9,7 @@ import { StickerOverlay } from '../components/sticker/StickerOverlay'
 import { Sticker, toBackendSticker } from '../components/sticker/sticker'
 import { hasNativeDialogs, pickFolderNative, pickAudioFileNative, pickImageFileNative, pickTextFileNative } from '../services/nativeDialog'
 import { splitChapters } from '../services/chapterSplitter'
+import VideoTrimmerPage from './VideoTrimmerPage'
 
 // Define workflow steps
 const WORKFLOW_STEPS = [
@@ -219,7 +220,9 @@ export default function ProcessorPage() {
   ]
 
   type VideoConfig = {
-    folder: string; audioPath: string; bannerImage: string; bannerVideoScale: number;
+    folder: string; audioPath: string; bannerImage: string;
+    bannerVideoScaleX: number; bannerVideoScaleY: number;
+    bannerVideoOffsetX: number; bannerVideoOffsetY: number;
     watermarkImage: string;
     audio_speed: number; transitions_pool: string[]; transition_duration: number;
     resolution: string; overlay_opacity: number;
@@ -263,7 +266,7 @@ export default function ProcessorPage() {
     stickers: Sticker[];
   }
 
-  type VideoCfgPreset = Omit<VideoConfig, 'folder'|'audioPath'|'bannerImage'|'bannerVideoScale'|'watermarkImage'>
+  type VideoCfgPreset = Omit<VideoConfig, 'folder'|'audioPath'|'bannerImage'|'bannerVideoScaleX'|'bannerVideoScaleY'|'bannerVideoOffsetX'|'bannerVideoOffsetY'|'watermarkImage'>
 
   const DEFAULT_VIDEO_CFG: VideoCfgPreset = {
     audio_speed: 1.0,
@@ -351,13 +354,24 @@ export default function ProcessorPage() {
     const savedFolder = localStorage.getItem('videoConfig_folder') || ''
     const savedBanner = localStorage.getItem('videoConfig_bannerImage') || ''
     const savedWatermark = localStorage.getItem('videoConfig_watermarkImage') || ''
+    // Legacy single scale → migrate to per-axis when the new keys are absent.
     const savedScale = parseFloat(localStorage.getItem('videoConfig_bannerVideoScale') || '1.0')
+    const legacyScale = isNaN(savedScale) ? 1.0 : savedScale
+    const rawSX = localStorage.getItem('videoConfig_bannerVideoScaleX')
+    const rawSY = localStorage.getItem('videoConfig_bannerVideoScaleY')
+    const savedSX = rawSX === null ? legacyScale : parseFloat(rawSX)
+    const savedSY = rawSY === null ? legacyScale : parseFloat(rawSY)
+    const savedOffX = parseFloat(localStorage.getItem('videoConfig_bannerVideoOffsetX') || '0')
+    const savedOffY = parseFloat(localStorage.getItem('videoConfig_bannerVideoOffsetY') || '0')
     const savedCfg = (() => { try { return JSON.parse(localStorage.getItem('videoConfig_cfg') || '{}') } catch { return {} } })()
     return {
       folder: savedFolder,
       audioPath: '',
       bannerImage: savedBanner,
-      bannerVideoScale: isNaN(savedScale) ? 1.0 : savedScale,
+      bannerVideoScaleX: isNaN(savedSX) ? 1.0 : Math.max(0.5, Math.min(3, savedSX)),
+      bannerVideoScaleY: isNaN(savedSY) ? 1.0 : Math.max(0.5, Math.min(3, savedSY)),
+      bannerVideoOffsetX: isNaN(savedOffX) ? 0 : Math.max(-0.5, Math.min(0.5, savedOffX)),
+      bannerVideoOffsetY: isNaN(savedOffY) ? 0 : Math.max(-0.5, Math.min(0.5, savedOffY)),
       watermarkImage: savedWatermark,
       ...DEFAULT_VIDEO_CFG,
       ...migrateOldCfg(savedCfg),
@@ -541,7 +555,11 @@ export default function ProcessorPage() {
       transition_duration: videoConfig.transition_duration,
       resolution: videoConfig.resolution,
       banner_image: videoConfig.bannerImage,
-      banner_video_scale: videoConfig.bannerVideoScale,
+      banner_video_scale: videoConfig.bannerVideoScaleX,
+      banner_video_scale_x: videoConfig.bannerVideoScaleX,
+      banner_video_scale_y: videoConfig.bannerVideoScaleY,
+      banner_video_offset_x: videoConfig.bannerVideoOffsetX,
+      banner_video_offset_y: videoConfig.bannerVideoOffsetY,
       overlay_opacity: videoConfig.overlay_opacity,
       watermark_image: videoConfig.watermarkImage,
       watermark_x: videoConfig.watermark_x,
@@ -667,12 +685,33 @@ export default function ProcessorPage() {
     return `${m}:${ss.toString().padStart(2, '0')}`
   }
 
+  // Shared pointer-drag lifecycle for all preview overlays (watermark, banner
+  // video move/resize). Captures the pointer to the grabbed element so the drag
+  // keeps tracking even when the cursor leaves the window, and tears down on
+  // BOTH pointerup and pointercancel so an interrupted gesture can't leave a
+  // dangling "video follows the cursor" listener.
+  const beginPointerDrag = (e: React.PointerEvent, update: (cx: number, cy: number) => void) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const el = e.currentTarget as HTMLElement
+    const pointerId = e.pointerId
+    try { el.setPointerCapture(pointerId) } catch { /* capture unsupported — fall back to listeners */ }
+    const onMove = (ev: PointerEvent) => update(ev.clientX, ev.clientY)
+    const end = () => {
+      el.removeEventListener('pointermove', onMove)
+      el.removeEventListener('pointerup', end)
+      el.removeEventListener('pointercancel', end)
+      try { el.releasePointerCapture(pointerId) } catch { /* already released */ }
+    }
+    el.addEventListener('pointermove', onMove)
+    el.addEventListener('pointerup', end)
+    el.addEventListener('pointercancel', end)
+  }
+
   // Watermark drag handler factory: drags watermark to any (x, y) in 0..1 within frame.
   // Preserves grab-offset so cursor stays at the same relative spot on the watermark
   // (no jarring "snap-to-cursor" on initial click).
   const startWatermarkDrag = (target: 'image' | 'text' | 'subtitle' | 'viz') => (e: React.PointerEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
     const frame = previewFrameRef.current
     if (!frame) return
     const rect = frame.getBoundingClientRect()
@@ -689,19 +728,59 @@ export default function ProcessorPage() {
     // Offset (in fraction of frame) between cursor and current overlay center
     const grabOffsetX = (e.clientX - rect.left) / rect.width - startCenterX
     const grabOffsetY = (e.clientY - rect.top) / rect.height - startCenterY
-    const update = (clientX: number, clientY: number) => {
+    beginPointerDrag(e, (clientX, clientY) => {
       const r = frame.getBoundingClientRect()
       const x = Math.max(0, Math.min(1, (clientX - r.left) / r.width - grabOffsetX))
       const y = Math.max(0, Math.min(1, (clientY - r.top) / r.height - grabOffsetY))
       setVideoConfig(prev => ({ ...prev, [xKey]: x, [yKey]: y }) as typeof prev)
-    }
-    const onMove = (ev: PointerEvent) => update(ev.clientX, ev.clientY)
-    const onUp = () => {
-      document.removeEventListener('pointermove', onMove)
-      document.removeEventListener('pointerup', onUp)
-    }
-    document.addEventListener('pointermove', onMove)
-    document.addEventListener('pointerup', onUp)
+    })
+  }
+
+  // Banner video drag = MOVE. Stores offset as a fraction of the frame from
+  // center (0 = centered), matching the backend overlay position expression.
+  // The offset/scale is a single shared transform, so moving the sample clip
+  // moves EVERY clip in the folder the same way.
+  const startBannerVideoMove = (e: React.PointerEvent) => {
+    const frame = previewFrameRef.current
+    if (!frame) return
+    const startOffX = videoConfig.bannerVideoOffsetX
+    const startOffY = videoConfig.bannerVideoOffsetY
+    const startClientX = e.clientX
+    const startClientY = e.clientY
+    beginPointerDrag(e, (cx, cy) => {
+      const r = frame.getBoundingClientRect()
+      const dx = (cx - startClientX) / r.width
+      const dy = (cy - startClientY) / r.height
+      const nx = Math.max(-0.5, Math.min(0.5, startOffX + dx))
+      const ny = Math.max(-0.5, Math.min(0.5, startOffY + dy))
+      setVideoConfig(prev => ({ ...prev, bannerVideoOffsetX: nx, bannerVideoOffsetY: ny }))
+    })
+  }
+
+  // Banner video RESIZE — factory parameterised by which edge/corner is grabbed.
+  // dirX/dirY ∈ {-1,0,+1}: a non-zero axis is resized, 0 is left untouched
+  // (so edge handles change only width OR height → aspect can be distorted, and
+  // corner handles change both). The video box always fills scale*frame exactly
+  // (object-fill), so a handle sits on the box edge and the scale reads directly
+  // off the cursor distance to center — no grab snap. The sign keeps a drag past
+  // the center clamped at the minimum instead of inverting and re-growing.
+  const startBannerVideoResize = (dirX: number, dirY: number) => (e: React.PointerEvent) => {
+    const frame = previewFrameRef.current
+    if (!frame) return
+    const offX = videoConfig.bannerVideoOffsetX
+    const offY = videoConfig.bannerVideoOffsetY
+    beginPointerDrag(e, (cx, cy) => {
+      const r = frame.getBoundingClientRect()
+      const centerX = r.left + (0.5 + offX) * r.width
+      const centerY = r.top + (0.5 + offY) * r.height
+      setVideoConfig(prev => {
+        let sx = prev.bannerVideoScaleX
+        let sy = prev.bannerVideoScaleY
+        if (dirX !== 0) sx = Math.max(0.5, Math.min(3, (2 * (cx - centerX) * dirX) / r.width))
+        if (dirY !== 0) sy = Math.max(0.5, Math.min(3, (2 * (cy - centerY) * dirY) / r.height))
+        return { ...prev, bannerVideoScaleX: sx, bannerVideoScaleY: sy }
+      })
+    })
   }
   const [availableFonts, setAvailableFonts] = useState<string[]>(['DejaVu Sans (system default)'])
   const [wmCardOpen, setWmCardOpen] = useState<boolean>(() => localStorage.getItem('wmCardOpen') === 'true')
@@ -1114,7 +1193,11 @@ export default function ProcessorPage() {
         transition_duration: videoConfig.transition_duration,
         resolution: videoConfig.resolution,
         banner_image: videoConfig.bannerImage || undefined,
-        banner_video_scale: videoConfig.bannerImage ? videoConfig.bannerVideoScale : undefined,
+        banner_video_scale: videoConfig.bannerImage ? videoConfig.bannerVideoScaleX : undefined,
+        banner_video_scale_x: videoConfig.bannerImage ? videoConfig.bannerVideoScaleX : undefined,
+        banner_video_scale_y: videoConfig.bannerImage ? videoConfig.bannerVideoScaleY : undefined,
+        banner_video_offset_x: videoConfig.bannerImage ? videoConfig.bannerVideoOffsetX : undefined,
+        banner_video_offset_y: videoConfig.bannerImage ? videoConfig.bannerVideoOffsetY : undefined,
         overlay_opacity: videoConfig.overlay_opacity,
         watermark_image: videoConfig.watermarkImage || undefined,
         watermark_x: videoConfig.watermark_x,
@@ -1371,9 +1454,12 @@ export default function ProcessorPage() {
   useEffect(() => {
     localStorage.setItem('videoConfig_folder', videoConfig.folder)
     localStorage.setItem('videoConfig_bannerImage', videoConfig.bannerImage)
-    localStorage.setItem('videoConfig_bannerVideoScale', String(videoConfig.bannerVideoScale))
+    localStorage.setItem('videoConfig_bannerVideoScaleX', String(videoConfig.bannerVideoScaleX))
+    localStorage.setItem('videoConfig_bannerVideoScaleY', String(videoConfig.bannerVideoScaleY))
+    localStorage.setItem('videoConfig_bannerVideoOffsetX', String(videoConfig.bannerVideoOffsetX))
+    localStorage.setItem('videoConfig_bannerVideoOffsetY', String(videoConfig.bannerVideoOffsetY))
     localStorage.setItem('videoConfig_watermarkImage', videoConfig.watermarkImage)
-    const { folder, audioPath, bannerImage, bannerVideoScale, watermarkImage, ...cfg } = videoConfig
+    const { folder, audioPath, bannerImage, bannerVideoScaleX, bannerVideoScaleY, bannerVideoOffsetX, bannerVideoOffsetY, watermarkImage, ...cfg } = videoConfig
     localStorage.setItem('videoConfig_cfg', JSON.stringify(cfg))
   }, [videoConfig])
 
@@ -1388,7 +1474,7 @@ export default function ProcessorPage() {
   }, [])
 
   const extractCfgFromConfig = () => {
-    const { folder, audioPath, bannerImage, bannerVideoScale, watermarkImage, ...cfg } = videoConfig
+    const { folder, audioPath, bannerImage, bannerVideoScaleX, bannerVideoScaleY, bannerVideoOffsetX, bannerVideoOffsetY, watermarkImage, ...cfg } = videoConfig
     return cfg
   }
 
@@ -3117,7 +3203,8 @@ export default function ProcessorPage() {
         const maxW = 720, maxH = 540
         const previewW = ratio >= 1 ? maxW : Math.round(maxH * ratio)
         const previewH = ratio >= 1 ? Math.round(maxW / ratio) : maxH
-        const previewScale = videoConfig.bannerImage ? videoConfig.bannerVideoScale : 1
+        const previewScaleX = videoConfig.bannerImage ? videoConfig.bannerVideoScaleX : 1
+        const previewScaleY = videoConfig.bannerImage ? videoConfig.bannerVideoScaleY : 1
         const currentClip = clipList[currentClipIdx] || null
         const clipUrl = currentClip
           ? `/api/v1/video/preview-video?path=${encodeURIComponent(currentClip.path)}`
@@ -3379,16 +3466,51 @@ export default function ProcessorPage() {
                       )}
                     </div>
                     {videoConfig.bannerImage && (
-                      <div className="mt-2 flex items-center gap-2">
-                        <label className="text-xs text-dim whitespace-nowrap">Video scale: {Math.round(videoConfig.bannerVideoScale * 100)}%</label>
-                        <input
-                          type="range" min="0.5" max="3" step="0.05"
-                          value={videoConfig.bannerVideoScale}
-                          onChange={(e) => setVideoConfig(prev => ({ ...prev, bannerVideoScale: parseFloat(e.target.value) }))}
-                          className="flex-1"
-                          disabled={isProcessing}
-                        />
-                      </div>
+                      <>
+                        <div className="mt-2 flex items-center gap-2">
+                          <label className="text-xs text-dim whitespace-nowrap w-20">Rộng: {Math.round(videoConfig.bannerVideoScaleX * 100)}%</label>
+                          <input
+                            type="range" min="0.5" max="3" step="0.05"
+                            value={videoConfig.bannerVideoScaleX}
+                            onChange={(e) => setVideoConfig(prev => ({ ...prev, bannerVideoScaleX: parseFloat(e.target.value) }))}
+                            className="flex-1"
+                            disabled={isProcessing}
+                          />
+                        </div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <label className="text-xs text-dim whitespace-nowrap w-20">Cao: {Math.round(videoConfig.bannerVideoScaleY * 100)}%</label>
+                          <input
+                            type="range" min="0.5" max="3" step="0.05"
+                            value={videoConfig.bannerVideoScaleY}
+                            onChange={(e) => setVideoConfig(prev => ({ ...prev, bannerVideoScaleY: parseFloat(e.target.value) }))}
+                            className="flex-1"
+                            disabled={isProcessing}
+                          />
+                          <button
+                            onClick={() => setVideoConfig(prev => ({ ...prev, bannerVideoScaleY: prev.bannerVideoScaleX }))}
+                            disabled={isProcessing}
+                            className="text-[11px] text-primary-600 dark:text-primary-400 hover:underline disabled:opacity-50 whitespace-nowrap"
+                            title="Đặt chiều cao bằng chiều rộng (khôi phục tỉ lệ vuông theo cạnh rộng)"
+                          >
+                            = Rộng
+                          </button>
+                        </div>
+                        <div className="mt-1 flex items-center justify-between">
+                          <span className="text-[11px] text-faint">
+                            💡 Kéo thân để di chuyển · kéo góc/cạnh để resize (cạnh = riêng rộng/cao). Áp cho mọi clip.
+                          </span>
+                          {(Math.abs(videoConfig.bannerVideoOffsetX) > 0.001 || Math.abs(videoConfig.bannerVideoOffsetY) > 0.001) && (
+                            <button
+                              onClick={() => setVideoConfig(prev => ({ ...prev, bannerVideoOffsetX: 0, bannerVideoOffsetY: 0 }))}
+                              disabled={isProcessing}
+                              className="text-[11px] text-primary-600 dark:text-primary-400 hover:underline disabled:opacity-50 whitespace-nowrap ml-2"
+                              title="Đưa video về giữa khung"
+                            >
+                              Về giữa
+                            </button>
+                          )}
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
@@ -4468,15 +4590,23 @@ export default function ProcessorPage() {
                     <img
                       src={`/api/v1/video/preview-image?path=${encodeURIComponent(videoConfig.bannerImage)}`}
                       alt="banner bg"
-                      className="absolute inset-0 w-full h-full object-cover"
+                      // object-fill (stretch to exact frame) mirrors the backend's
+                      // ffmpeg `scale={width}:{height}` so the position the user sets
+                      // against the banner matches the rendered output.
+                      className="absolute inset-0 w-full h-full object-fill"
                       onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                     />
                   ) : (
                     <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-900" />
                   )}
                   {/* Video clip layer */}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    {clipUrl ? (
+                  {(() => {
+                    const clipPlaceholder = (
+                      <div className="w-full h-full border-2 border-dashed border-token flex items-center justify-center text-faint text-xs text-center px-2">
+                        {videoConfig.folder.trim() ? 'Đang tải clip mẫu...' : 'Chọn folder để xem clip mẫu'}
+                      </div>
+                    )
+                    const clipVideo = clipUrl ? (
                       <video
                         key={clipUrl}
                         ref={previewVideoRef}
@@ -4501,17 +4631,84 @@ export default function ProcessorPage() {
                           pendingClipOffsetRef.current = 0
                           setCurrentClipIdx(next)
                         }}
-                        style={{ maxWidth: `${previewScale * 100}%`, maxHeight: `${previewScale * 100}%`, objectFit: 'contain', ...adVideoStyle }}
+                        style={videoConfig.bannerImage
+                          // object-fill so the clip stretches to exactly fill the
+                          // scaleX×scaleY box, matching the backend's per-axis scale.
+                          ? { width: '100%', height: '100%', objectFit: 'fill', display: 'block', pointerEvents: 'none', ...adVideoStyle }
+                          : { maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', ...adVideoStyle }}
                       />
-                    ) : (
+                    ) : null
+
+                    if (!videoConfig.bannerImage) {
+                      // No banner: video fills the frame (not movable/resizable).
+                      return (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          {clipVideo || clipPlaceholder}
+                        </div>
+                      )
+                    }
+
+                    // Banner mode: video is a movable + resizable box on top of the
+                    // banner. Offset + per-axis scale are a single shared transform,
+                    // so adjusting this sample clip adjusts EVERY clip. The box is
+                    // exactly scaleX×scaleY of the frame and the video fills it
+                    // (object-fill), matching the backend — so the handles sit right
+                    // on the visible video edges.
+                    const boxW = previewScaleX * previewW
+                    const boxH = previewScaleY * previewH
+                    // dx/dy pick which axis a handle resizes (0 = leave that axis).
+                    // Corners resize both; edges resize one → independent width/height.
+                    const handles = [
+                      { k: 'nw', dx: -1, dy: -1, style: { left: -6, top: -6, cursor: 'nwse-resize' } },
+                      { k: 'ne', dx: 1, dy: -1, style: { right: -6, top: -6, cursor: 'nesw-resize' } },
+                      { k: 'sw', dx: -1, dy: 1, style: { left: -6, bottom: -6, cursor: 'nesw-resize' } },
+                      { k: 'se', dx: 1, dy: 1, style: { right: -6, bottom: -6, cursor: 'nwse-resize' } },
+                      { k: 'n', dx: 0, dy: -1, style: { left: '50%', top: -6, marginLeft: -6, cursor: 'ns-resize' } },
+                      { k: 's', dx: 0, dy: 1, style: { left: '50%', bottom: -6, marginLeft: -6, cursor: 'ns-resize' } },
+                      { k: 'w', dx: -1, dy: 0, style: { top: '50%', left: -6, marginTop: -6, cursor: 'ew-resize' } },
+                      { k: 'e', dx: 1, dy: 0, style: { top: '50%', right: -6, marginTop: -6, cursor: 'ew-resize' } },
+                    ] as const
+                    return (
                       <div
-                        className="border-2 border-dashed border-token flex items-center justify-center text-faint text-xs text-center px-2"
-                        style={{ width: `${previewScale * 100}%`, height: `${previewScale * 100}%` }}
+                        className="absolute"
+                        style={{
+                          left: `${(0.5 + videoConfig.bannerVideoOffsetX) * 100}%`,
+                          top: `${(0.5 + videoConfig.bannerVideoOffsetY) * 100}%`,
+                          width: `${boxW}px`,
+                          height: `${boxH}px`,
+                          transform: 'translate(-50%, -50%)',
+                          cursor: isProcessing ? 'default' : 'move',
+                          touchAction: 'none',
+                        }}
+                        onPointerDown={isProcessing ? undefined : startBannerVideoMove}
                       >
-                        {videoConfig.folder.trim() ? 'Đang tải clip mẫu...' : 'Chọn folder để xem clip mẫu'}
+                        {clipVideo || clipPlaceholder}
+                        {!isProcessing && (
+                          <>
+                            {/* selection outline */}
+                            <div className="absolute inset-0 pointer-events-none" style={{ outline: '1.5px solid rgba(56,189,248,0.9)', outlineOffset: -1 }} />
+                            {/* resize handles: 4 corners (both axes) + 4 edges (one axis) */}
+                            {handles.map(h => (
+                              <div
+                                key={h.k}
+                                onPointerDown={startBannerVideoResize(h.dx, h.dy)}
+                                style={{
+                                  position: 'absolute',
+                                  width: 12, height: 12,
+                                  background: '#38bdf8',
+                                  border: '1.5px solid #fff',
+                                  borderRadius: 2,
+                                  touchAction: 'none',
+                                  boxShadow: '0 0 2px rgba(0,0,0,0.5)',
+                                  ...h.style,
+                                }}
+                              />
+                            ))}
+                          </>
+                        )}
                       </div>
-                    )}
-                  </div>
+                    )
+                  })()}
                   {/* Hidden master audio element (drives playback time + sync) */}
                   {audioUrl && (
                     <audio
@@ -5006,7 +5203,10 @@ export default function ProcessorPage() {
                 </div>
                 <p className="text-xs text-dim mt-3 text-center max-w-md">
                   {videoConfig.bannerImage
-                    ? `Banner nền · video canh giữa ${Math.round(previewScale * 100)}%`
+                    ? `Banner nền · video ${Math.round(previewScaleX * 100)}×${Math.round(previewScaleY * 100)}%${
+                        (Math.abs(videoConfig.bannerVideoOffsetX) > 0.001 || Math.abs(videoConfig.bannerVideoOffsetY) > 0.001)
+                          ? ` @ ${Math.round(videoConfig.bannerVideoOffsetX * 100)},${Math.round(videoConfig.bannerVideoOffsetY * 100)}`
+                          : ' · canh giữa'} · kéo thân/góc/cạnh`
                     : 'Không banner · video full khung'}
                   {videoConfig.overlay_opacity > 0 && ` · overlay tối ${Math.round(videoConfig.overlay_opacity * 100)}%`}
                   {videoConfig.watermarkImage && ` · logo @${Math.round(videoConfig.watermark_x*100)},${Math.round(videoConfig.watermark_y*100)}`}
@@ -5092,6 +5292,11 @@ export default function ProcessorPage() {
             {error && (
               <div className="text-red-600 dark:text-red-400 text-sm bg-red-50 dark:bg-red-500/10 p-3 rounded-md">{error}</div>
             )}
+
+            {/* ── Cắt video thành phẩm (clone từ tab Cắt video) ── */}
+            <div className="border-t border-token pt-6 mt-2">
+              <VideoTrimmerPage />
+            </div>
 
             {/* Action Buttons */}
             <div className="flex gap-3">

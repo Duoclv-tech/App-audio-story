@@ -318,6 +318,10 @@ class VideoProcessRequest(BaseModel):
     resolution: str = "1920x1080"
     banner_image: Optional[str] = None  # Optional banner image as background
     banner_video_scale: float = 1.0  # Video size relative to banner (0.5 ~ 1.0)
+    banner_video_offset_x: float = 0.0  # Horizontal offset from center, fraction of frame width (-0.5..0.5)
+    banner_video_offset_y: float = 0.0  # Vertical offset from center, fraction of frame height (-0.5..0.5)
+    banner_video_scale_x: Optional[float] = None  # Video width as fraction of frame; falls back to banner_video_scale
+    banner_video_scale_y: Optional[float] = None  # Video height as fraction of frame; falls back to banner_video_scale
     overlay_opacity: float = 0.0  # Black overlay on top of composed video (0.0 = none, 0.8 = heavy)
     watermark_image: Optional[str] = None  # Optional watermark/logo image
     watermark_x: float = 0.92  # Center x in 0..1 (relative to frame)

@@ -93,6 +93,11 @@ export async function uploadVideo(
   return data
 }
 
+export async function importVideoFromPath(path: string): Promise<TrimUploadResponse> {
+  const { data } = await axios.post<TrimUploadResponse>(`${BASE}/import`, { path })
+  return data
+}
+
 export async function fetchWaveform(fileId: string): Promise<number[]> {
   const { data } = await axios.get<{ waveform: number[] }>(`${BASE}/waveform/${fileId}`)
   return data.waveform

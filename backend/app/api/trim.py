@@ -3,6 +3,7 @@ Video Trim API endpoints
 """
 import asyncio
 import json
+import os
 import shutil
 import uuid
 from pathlib import Path
@@ -133,6 +134,56 @@ async def upload_video(file: UploadFile = File(...)):
         video_codec=meta["video_codec"],
         audio_codec=meta.get("audio_codec"),
         original_filename=file.filename or "input.mp4",
+    )
+
+
+class TrimImportRequest(BaseModel):
+    path: str
+
+
+@router.post("/import", response_model=TrimUploadResponse)
+async def import_video(request: TrimImportRequest):
+    """Register an existing server-side video file into trim_temp (no re-upload).
+
+    Used to feed the long video produced by the pipeline directly into the
+    trimmer to cut a short clip for Shorts/TikTok.
+    """
+    src = Path(request.path)
+    if not src.exists() or not src.is_file():
+        raise HTTPException(status_code=404, detail=f"File not found: {request.path}")
+
+    file_id = str(uuid.uuid4())
+    dest_dir = TRIM_TEMP_DIR / file_id
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    suffix = src.suffix or ".mp4"
+    input_path = dest_dir / f"input{suffix}"
+
+    try:
+        # Hardlink is instant and space-free on the same volume; fall back to a
+        # copy across volumes or when the filesystem disallows it.
+        try:
+            os.link(str(src), str(input_path))
+        except OSError:
+            shutil.copy2(str(src), str(input_path))
+    except Exception as e:
+        shutil.rmtree(dest_dir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=f"Cannot import file: {e}")
+
+    try:
+        meta = probe(str(input_path))
+    except Exception as e:
+        shutil.rmtree(dest_dir, ignore_errors=True)
+        raise HTTPException(status_code=422, detail=f"Cannot probe video: {e}")
+
+    return TrimUploadResponse(
+        file_id=file_id,
+        duration=meta["duration"],
+        width=meta["width"],
+        height=meta["height"],
+        video_codec=meta["video_codec"],
+        audio_codec=meta.get("audio_codec"),
+        original_filename=src.name,
     )
 
 

@@ -5295,7 +5295,11 @@ export default function ProcessorPage() {
 
             {/* ── Cắt video thành phẩm (clone từ tab Cắt video) ── */}
             <div className="border-t border-token pt-6 mt-2">
-              <VideoTrimmerPage />
+              <VideoTrimmerPage
+                sourceVideoPath={
+                  videoStatus.status === 'completed' ? (videoStatus.outputPath || '') : ''
+                }
+              />
             </div>
 
             {/* Action Buttons */}

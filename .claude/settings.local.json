@@ -22,7 +22,8 @@
       "Bash(./venv/Scripts/python.exe -c \"from app.paths import DB_PATH; print\\(DB_PATH\\)\")",
       "Bash(./venv/Scripts/python.exe *)",
       "Skill(code-review)",
-      "Workflow(code-review)"
+      "Workflow(code-review)",
+      "Bash(grep -iE \"VideoTrimmer|trimApi|importVideo|sourceVideoPath|5[0-9]{3}|300,|301,\")"
     ],
     "deny": [],
     "ask": []

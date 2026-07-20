@@ -8,6 +8,7 @@ import TimeInput from '../components/trim/TimeInput'
 import ExportSettings from '../components/trim/ExportSettings'
 import {
   uploadVideo,
+  importVideoFromPath,
   fetchWaveform,
   startTrim,
   openProgressStream,
@@ -106,9 +107,19 @@ function clearPersisted() {
 
 // ─── component ───────────────────────────────────────────────────────────────
 
-export default function VideoTrimmerPage() {
+interface VideoTrimmerPageProps {
+  /** Server-side path of a video (e.g. the long video just produced by the
+   *  pipeline). When set, an "import from server" field appears at the top of
+   *  the upload section so the video can be trimmed without re-uploading. */
+  sourceVideoPath?: string
+}
+
+export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPageProps = {}) {
   const persistedInitial = useMemo(() => loadPersisted(), [])
   const skipFilenameEffectRef = useRef(!!persistedInitial)
+
+  // Import-from-server-path (long video produced upstream)
+  const [importPath, setImportPath] = useState(sourceVideoPath ?? '')
 
   // Upload state
   const [file, setFile] = useState<File | null>(null)
@@ -182,6 +193,11 @@ export default function VideoTrimmerPage() {
       cancelled = true
     }
   }, [persistedInitial])
+
+  // Keep the import field in sync with the upstream long-video path
+  useEffect(() => {
+    if (sourceVideoPath) setImportPath(sourceVideoPath)
+  }, [sourceVideoPath])
 
   // Auto-update default output filename when file first loads
   useEffect(() => {
@@ -341,6 +357,44 @@ export default function VideoTrimmerPage() {
     }
   }
 
+  const handleImportPath = async (path: string) => {
+    const p = path.trim()
+    if (!p) return
+    if (metadata) clearTemp(metadata.file_id).catch(() => {})
+    if (esRef.current) { esRef.current.close(); esRef.current = null }
+    if (fileUrl.startsWith('blob:')) URL.revokeObjectURL(fileUrl)
+    clearPersisted()
+
+    setFile(null)
+    setFileSizeBytes(null)
+    setMetadata(null)
+    setFileUrl('')
+    setWaveform([])
+    setStartSec(0)
+    setEndSec(0)
+    setSegments([])
+    setJobId(null)
+    setProcessProgress(0)
+    setProcessStatus('idle')
+    setProcessError(null)
+
+    setUploading(true)
+    setUploadProgress(0)
+    try {
+      const meta = await importVideoFromPath(p)
+      setMetadata(meta)
+      setFileUrl(getVideoUrl(meta.file_id))
+      setStartSec(0)
+      setEndSec(meta.duration)
+      fetchWaveform(meta.file_id).then(setWaveform).catch(() => setWaveform([]))
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      alert(`Nạp video thất bại: ${msg}`)
+    } finally {
+      setUploading(false)
+    }
+  }
+
   const addSegment = () => {
     if (!metadata || endSec - startSec < 0.1) return
     setSegments((prev) => [
@@ -472,6 +526,37 @@ export default function VideoTrimmerPage() {
       {/* Step 1: Upload */}
       <section className="bg-surface p-6 rounded-lg shadow">
         <h2 className="text-lg font-semibold mb-4">1. Tải video lên</h2>
+
+        {/* Import long video produced upstream (Shorts/TikTok workflow) */}
+        {sourceVideoPath && (
+          <div className="mb-4 p-3 rounded-md border border-primary-300 dark:border-primary-500/30 bg-primary-50 dark:bg-primary-500/10 space-y-2">
+            <div className="text-sm font-medium text-strong">
+              Nạp video dài vừa tạo (cắt ra clip ngắn cho Short/TikTok)
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={importPath}
+                onChange={(e) => setImportPath(e.target.value)}
+                placeholder="Đường dẫn video trên máy (điền sẵn từ video dài vừa tạo)"
+                className="flex-1 px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                disabled={uploading}
+              />
+              <button
+                type="button"
+                onClick={() => handleImportPath(importPath)}
+                disabled={!importPath.trim() || uploading}
+                className="px-4 py-2 bg-primary-600 text-white rounded-md text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition whitespace-nowrap"
+              >
+                Nạp video này
+              </button>
+            </div>
+            <p className="text-xs text-dim">
+              Cắt trực tiếp video dài — khỏi phải tải file lên lại. Hoặc kéo thả file khác bên dưới.
+            </p>
+          </div>
+        )}
+
         <UploadZone
           onFileSelected={handleFileSelected}
           uploading={uploading}

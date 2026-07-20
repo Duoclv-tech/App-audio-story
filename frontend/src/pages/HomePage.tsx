@@ -1,23 +1,15 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, History, BookOpen, Download, ScanText, PenLine, Mic, Combine, Activity, ArrowRight } from 'lucide-react'
+import { Plus, History, BookOpen, FileText, ScanText, PenLine, Mic, Combine, Activity, ArrowRight } from 'lucide-react'
 import { useState } from 'react'
 import axios from 'axios'
 
 const FEATURES = [
-  { icon: Download, title: 'Tải truyện tự động', desc: 'Tải nhiều chương cùng lúc từ TruyenFull' },
-  { icon: ScanText, title: 'Kiểm tra nội dung', desc: 'Phát hiện từ bị che và thống kê' },
+  { icon: FileText, title: 'Nhập nội dung linh hoạt', desc: 'Dán văn bản, tải file hoặc chọn thư mục .txt' },
+  { icon: ScanText, title: 'Tự động tách chương', desc: 'Nhận diện chương và thống kê nội dung' },
   { icon: PenLine, title: 'Chỉnh sửa trực tiếp', desc: 'Editor tích hợp chỉnh sửa nội dung' },
   { icon: Mic, title: 'TTS VBEE', desc: 'Chuyển văn bản thành giọng nói' },
   { icon: Combine, title: 'Nối audio', desc: 'Gộp tất cả chương thành một file' },
   { icon: Activity, title: 'Theo dõi tiến độ', desc: 'Cập nhật trạng thái theo thời gian thực' },
-]
-
-const HOSTS = [
-  { name: 'TruyenFull.vision', note: 'Nguồn mặc định', primary: true },
-  { name: 'TruyenMoiii.org', note: 'Hỗ trợ đầy đủ', primary: false },
-  { name: 'TruyenHay.blog', note: 'Nền tảng WordPress', primary: false },
-  { name: 'NguyetTruyen.net', note: 'Hỗ trợ đầy đủ', primary: false },
-  { name: 'MeTruyen.mobi', note: 'Chống chặn bằng CSS', primary: false },
 ]
 
 export default function HomePage() {
@@ -48,7 +40,7 @@ export default function HomePage() {
           Chào mừng đến với Audio Story
         </h2>
         <p className="text-dim text-lg max-w-2xl">
-          Tải truyện, biên tập, chuyển thành giọng đọc và dựng video — tất cả trong một quy trình.
+          Nhập nội dung, biên tập, chuyển thành giọng đọc và dựng video — tất cả trong một quy trình.
         </p>
       </div>
 
@@ -70,7 +62,7 @@ export default function HomePage() {
           <h3 className="text-xl font-semibold mb-1">
             {creating ? 'Đang tạo...' : 'Tạo dự án mới'}
           </h3>
-          <p className="text-white/80 text-sm">Bắt đầu tải và xử lý truyện mới</p>
+          <p className="text-white/80 text-sm">Bắt đầu nhập và xử lý truyện mới</p>
         </button>
 
         <Link to="/history" className="card p-6 hover:-translate-y-0.5 transition-transform group">
@@ -111,26 +103,6 @@ export default function HomePage() {
             </div>
           ))}
         </div>
-      </div>
-
-      {/* Supported hosts */}
-      <div className="card p-6">
-        <h3 className="text-base font-bold mb-4">Nguồn được hỗ trợ</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {HOSTS.map((h) => (
-            <div key={h.name} className="rounded-lg border border-token p-4 bg-surface-2">
-              <div className="flex items-center gap-2 mb-1">
-                <span
-                  className="w-2 h-2 rounded-full"
-                  style={{ background: h.primary ? 'var(--accent)' : '#1F9D6B' }}
-                />
-                <span className="font-semibold text-sm">{h.name}</span>
-              </div>
-              <p className="text-xs text-dim ml-4">{h.note}</p>
-            </div>
-          ))}
-        </div>
-        <p className="text-xs text-faint mt-4">Tự động phát hiện domain và áp dụng bộ selector phù hợp.</p>
       </div>
     </div>
   )

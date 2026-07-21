@@ -35,7 +35,19 @@
       "Bash(git -C /d/Project/web_app status --short omivoice-tts)",
       "Bash(git -C /d/Project/web_app check-ignore omivoice-tts)",
       "Bash(git rm *)",
-      "Bash(git -C /d/Project/web_app status --short)"
+      "Bash(git -C /d/Project/web_app status --short)",
+      "Bash(npm -v)",
+      "Bash(python -m uvicorn app.main:app --host 127.0.0.1 --port 8000)",
+      "Bash(echo \"started pid $!\")",
+      "Bash(mkdir -p \"/d/Project/web_app/scratch_bg\")",
+      "Bash(ffmpeg -y -f lavfi -i \"color=c=0x1a2a4a:s=1280x720:d=10\" -f lavfi -i \"color=c=0x4a2a1a:s=1280x720:d=10\" -filter_complex \"[0][1]xfade=transition=fade:duration=1:offset=4\" -pix_fmt yuv420p -t 10 bg_clip.mp4)",
+      "Bash(ls -la bg_clip.mp4)",
+      "Bash(echo \"WINPATH: D:\\\\\\\\Project\\\\\\\\web_app\\\\\\\\scratch_bg\")",
+      "Read(//c/Users/Van Duoc/Downloads/**)",
+      "Bash(ffprobe -v error -show_entries format=duration,size -show_entries stream=codec_name,width,height -of default=noprint_wrappers=1 \"/c/Users/Van Duoc/Downloads/Story_20260721_211230_final.mp4\")",
+      "Bash(ls app/services/gemini_service.py)",
+      "Bash(grep -rln -i \"gemini\" app/)",
+      "Bash(nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv)"
     ],
     "deny": [],
     "ask": []

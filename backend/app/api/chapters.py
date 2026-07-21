@@ -8,6 +8,7 @@ from app.database import get_db
 from app import models, schemas
 from app.services.text_checker import TextChecker
 from app.services.gemini_service import GeminiService
+from app.services.openai_spellcheck import OpenAISpellChecker
 from app.services.chapter_splitter import (
     split_chapters,
     read_text_from_file,
@@ -679,7 +680,49 @@ async def accept_replacement(censored_word_id: str, db: Session = Depends(get_db
         raise HTTPException(status_code=500, detail="Failed to accept replacement")
 
 
-# ============== AI Grammar Check (Gemini) ==============
+# ============== AI Grammar Check (OpenAI / Gemini) ==============
+
+def _get_setting_value(db: Session, key: str):
+    """Read a raw setting value from the DB (unwrapping JSON-quoted strings)."""
+    setting = db.query(models.Setting).filter(models.Setting.setting_key == key).first()
+    if setting and setting.setting_value:
+        value = setting.setting_value
+        if isinstance(value, str) and value.startswith('"') and value.endswith('"'):
+            value = value[1:-1]
+        return value
+    return None
+
+
+async def run_ai_grammar_check(text: str, db: Session) -> Dict:
+    """Run AI grammar/spell check using the configured provider.
+
+    Provider is chosen by the ``AI_GRAMMAR_PROVIDER`` setting (default
+    ``openai``). We prefer that provider but fall back to the other one when its
+    key is missing, so a single configured key always works. Both providers
+    return the same result shape (see ``OpenAISpellChecker.check_grammar``).
+    """
+    from app.config import settings as cfg
+
+    provider = (_get_setting_value(db, "AI_GRAMMAR_PROVIDER") or "openai").lower()
+    openai_key = _get_setting_value(db, "OPENAI_API_KEY") or cfg.OPENAI_API_KEY
+    gemini_key = _get_setting_value(db, "GEMINI_API_KEY") or cfg.GEMINI_API_KEY
+
+    # Priority order: selected provider first, the other as fallback.
+    order = ["gemini", "openai"] if provider == "gemini" else ["openai", "gemini"]
+
+    for name in order:
+        if name == "openai" and openai_key:
+            checker = OpenAISpellChecker(api_key=openai_key)
+            return checker.check_grammar(text)
+        if name == "gemini" and gemini_key:
+            gemini = GeminiService(api_key=gemini_key, db=db)
+            return await gemini.check_grammar(text)
+
+    return {
+        "success": False,
+        "error": "Chưa cấu hình OPENAI_API_KEY hoặc GEMINI_API_KEY. Vào Cài đặt để nhập key.",
+    }
+
 
 @router.post("/{chapter_id}/ai-grammar-check")
 async def ai_grammar_check(
@@ -687,7 +730,7 @@ async def ai_grammar_check(
     request: schemas.CheckGrammarRequest,
     db: Session = Depends(get_db)
 ):
-    """Check grammar using Gemini AI"""
+    """Check grammar using the configured AI provider (OpenAI or Gemini)"""
     logger.info(f"AI grammar check for chapter {chapter_id}")
 
     # Verify chapter exists
@@ -696,8 +739,7 @@ async def ai_grammar_check(
         raise HTTPException(status_code=404, detail="Chapter not found")
 
     try:
-        gemini = GeminiService(db=db)
-        result = await gemini.check_grammar(request.content)
+        result = await run_ai_grammar_check(request.content, db)
 
         return {
             "chapter_id": chapter_id,
@@ -756,13 +798,12 @@ async def ai_grammar_check_story(
         raise HTTPException(status_code=404, detail="No chapters found")
 
     try:
-        gemini = GeminiService(db=db)
         results = []
         total_issues = 0
 
         for chapter in chapters:
             if chapter.content and chapter.content.strip():
-                result = await gemini.check_grammar(chapter.content)
+                result = await run_ai_grammar_check(chapter.content, db)
                 chapter_result = {
                     "chapter_id": chapter.id,
                     "chapter_number": chapter.chapter_number,

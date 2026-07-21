@@ -214,6 +214,72 @@ class OpenAISpellChecker:
         deduped.sort(key=lambda r: r["wrong"])
         return deduped
 
+    def check_grammar(self, text: str) -> Dict:
+        """Spell-check ``text`` and return a result in the SAME shape as
+        ``GeminiService.check_grammar`` so both providers can feed the exact
+        same UI panel (fields: success, total_issues, spelling_errors[{original,
+        suggestion, context}], watermarks, total_watermarks, summary).
+
+        Unlike ``find_misspelled_words`` (which swallows API errors and returns
+        an empty list for batch robustness), this surfaces auth/rate errors so
+        the interactive Grammar-Check panel can show a real message instead of a
+        misleading "0 lỗi".
+        """
+        if not self.api_key:
+            return {"success": False, "error": "OPENAI_API_KEY not configured"}
+        if not text or not text.strip():
+            return {
+                "success": True, "provider": "openai", "total_issues": 0,
+                "spelling_errors": [], "watermarks": [], "total_watermarks": 0,
+                "summary": "Không có nội dung để kiểm tra.",
+            }
+
+        user_prompt = USER_PROMPT_TEMPLATE.format(text=text[:DEFAULT_CHUNK_CHARS])
+        try:
+            raw = self._call_api(user_prompt)
+        except requests.RequestException as e:
+            detail = None
+            resp = getattr(e, "response", None)
+            if resp is not None:
+                try:
+                    detail = resp.json()
+                except Exception:
+                    detail = resp.text
+            logger.error(f"OpenAI grammar check failed: {detail or e}")
+            return {"success": False, "error": f"OpenAI API error: {detail or e}"}
+
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.warning(f"OpenAI returned invalid JSON: {raw[:200]}")
+            return {"success": False, "error": "OpenAI trả về JSON không hợp lệ"}
+
+        items = parsed.get("misspelled", [])
+        spelling_errors: List[Dict] = []
+        if isinstance(items, list):
+            for it in items:
+                if not isinstance(it, dict):
+                    continue
+                wrong = str(it.get("wrong", "")).strip()
+                correct = str(it.get("correct", "")).strip()
+                if not wrong or not correct or wrong == correct:
+                    continue
+                spelling_errors.append({
+                    "original": wrong,
+                    "suggestion": correct,
+                    "context": str(it.get("explanation", "")).strip(),
+                })
+
+        return {
+            "success": True,
+            "provider": "openai",
+            "total_issues": len(spelling_errors),
+            "spelling_errors": spelling_errors,
+            "watermarks": [],
+            "total_watermarks": 0,
+            "summary": f"OpenAI ({self.model}): tìm thấy {len(spelling_errors)} lỗi chính tả.",
+        }
+
 
 def _split_text(text: str, chunk_chars: int) -> List[str]:
     if len(text) <= chunk_chars:

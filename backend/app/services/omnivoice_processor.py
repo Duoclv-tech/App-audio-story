@@ -60,27 +60,57 @@ def _model_available(key: str) -> bool:
     return bool(path) and (Path(path) / "model.safetensors").exists()
 
 
-def _read_cpu_setting(db) -> bool:
-    """Whether the user opted into CPU mode (DB setting OMNIVOICE_USE_CPU)."""
-    if db is None:
-        return False
+def _gpu_available() -> bool:
+    """Whether a CUDA (NVIDIA) GPU is usable. Safe when torch is missing."""
     try:
-        s = db.query(models.Setting).filter(
-            models.Setting.setting_key == "OMNIVOICE_USE_CPU"
-        ).first()
-        if s is None:
-            return False
-        v = s.setting_value
-        if isinstance(v, str):
-            return v.strip().lower() in ("true", "1", "yes", "on")
-        return bool(v)
+        import torch
+        return bool(torch.cuda.is_available())
     except Exception:
         return False
 
 
+def _explicit_cpu_setting(db) -> Optional[bool]:
+    """The user's explicit CPU-mode choice, or None if they never set it.
+
+    None means "auto" — the caller decides based on hardware. An empty-string
+    value is also treated as auto so clearing the field re-enables detection.
+    """
+    if db is None:
+        return None
+    try:
+        s = db.query(models.Setting).filter(
+            models.Setting.setting_key == "OMNIVOICE_USE_CPU"
+        ).first()
+        if s is None or s.setting_value is None:
+            return None
+        v = s.setting_value
+        if isinstance(v, str):
+            if v.strip() == "":
+                return None
+            return v.strip().lower() in ("true", "1", "yes", "on")
+        return bool(v)
+    except Exception:
+        return None
+
+
+def _read_cpu_setting(db) -> bool:
+    """Effective CPU-mode flag.
+
+    - If the user made an explicit choice, honour it.
+    - Otherwise auto-detect: run on CPU when no NVIDIA GPU is available, so
+      OmniVoice works out of the box on GPU-less machines without the user
+      having to tick anything.
+    """
+    explicit = _explicit_cpu_setting(db)
+    if explicit is not None:
+        return explicit
+    return not _gpu_available()
+
+
 def effective_device(db=None) -> str:
-    """Device to run on: 'cpu' if the user enabled CPU mode, else the config
-    default (cuda:0). CPU works but is ~15-20x slower than realtime."""
+    """Device to run on: 'cpu' when CPU mode is on (explicit or auto-detected on
+    a GPU-less machine), else the config default (cuda:0). CPU works but is
+    ~15-20x slower than realtime."""
     if _read_cpu_setting(db):
         return "cpu"
     return settings.OMNIVOICE_DEVICE
@@ -99,6 +129,9 @@ def availability(db=None) -> Dict:
         "gpu_available": False,
         "device": device,
         "cpu_mode": device == "cpu",
+        # True when the user explicitly chose; False when the CPU/GPU default
+        # was auto-decided from detected hardware (lets the UI label it "auto").
+        "cpu_setting_explicit": _explicit_cpu_setting(db) is not None,
         "models": {
             key: _model_available(key) for key in MODEL_PATHS
         },
@@ -114,11 +147,7 @@ def availability(db=None) -> Dict:
     except Exception as e:
         info["reason"] = f"missing python deps (torch/omnivoice): {e}"
         return info
-    try:
-        import torch
-        info["gpu_available"] = bool(torch.cuda.is_available())
-    except Exception:
-        info["gpu_available"] = False
+    info["gpu_available"] = _gpu_available()
     # Only block on the GPU when actually targeting CUDA. In CPU mode we skip
     # the GPU check so a no-GPU machine can still run (slowly).
     if device.startswith("cuda") and not info["gpu_available"]:

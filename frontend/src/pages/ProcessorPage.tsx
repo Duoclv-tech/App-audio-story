@@ -1125,6 +1125,17 @@ export default function ProcessorPage() {
     }
   }
 
+  // Persist the OmniVoice device choice (CPU vs GPU) and refresh status so the
+  // availability/reason banners reflect it immediately.
+  const handleSetOmniCpu = async (useCpu: boolean) => {
+    try {
+      await axios.put('/api/v1/settings/', { OMNIVOICE_USE_CPU: useCpu })
+      await fetchOmniStatus()
+    } catch (error: any) {
+      showToast(errMessage(error, 'Lỗi khi đổi thiết bị chạy'), 'error')
+    }
+  }
+
   const handleCreatePreset = async () => {
     if (!newPreset.name.trim() || !newPreset.ref_text.trim() || !newPreset.file) {
       showToast('Cần nhập tên, transcript và chọn file audio mẫu', 'error')
@@ -3163,13 +3174,37 @@ export default function ProcessorPage() {
               {/* ---------- OmniVoice tab ---------- */}
               {ttsConfig.engine === 'omnivoice' && (
                 <div className="space-y-4">
-                  {/* CPU-mode warning (opted in via Settings) */}
-                  {omniStatus?.availability?.cpu_mode && (
-                    <div className="rounded-lg p-2.5 text-sm bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30">
-                      ⚠️ Đang chạy OmniVoice trên <span className="font-medium">CPU</span> — rất chậm
-                      (~15–20× thời gian thực). Tắt trong Cài đặt nếu máy có GPU.
-                    </div>
-                  )}
+                  {/* Device (GPU/CPU) selector — auto-detected default, overridable */}
+                  {omniStatus?.availability && (() => {
+                    const av = omniStatus.availability
+                    const noGpu = av.deps_installed && !av.gpu_available
+                    return (
+                      <div className="rounded-lg p-3 border border-token bg-surface-2 space-y-2">
+                        <div className="text-sm">
+                          {av.gpu_available
+                            ? '✓ Đã phát hiện GPU NVIDIA — mặc định chạy trên GPU (nhanh).'
+                            : '⚠️ Không phát hiện GPU NVIDIA — tự động chạy trên CPU (rất chậm).'}
+                        </div>
+                        <label className={`flex items-start gap-2 text-sm ${noGpu ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}>
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 h-4 w-4"
+                            checked={!!av.cpu_mode}
+                            disabled={noGpu}
+                            onChange={(e) => handleSetOmniCpu(e.target.checked)}
+                          />
+                          <span>
+                            <span className="font-medium">Chạy trên CPU thay vì GPU</span>
+                            <span className="block text-dim mt-0.5">
+                              {noGpu
+                                ? 'Máy không có GPU NVIDIA nên bắt buộc chạy CPU. ⚠️ Rất chậm (~15–20× thời gian thực) — hợp câu ngắn.'
+                                : 'Tích nếu muốn chạy bằng CPU. ⚠️ Chậm hơn GPU nhiều lần — bình thường nên để tắt.'}
+                            </span>
+                          </span>
+                        </label>
+                      </div>
+                    )
+                  })()}
 
                   {/* Model download status + progress */}
                   {omniStatus && (() => {
@@ -3178,22 +3213,6 @@ export default function ProcessorPage() {
                     const ready = av?.ready
                     const state = dl?.state
                     const mb = (b?: number) => ((b || 0) / 1048576).toFixed(0)
-                    // No CUDA GPU and CPU mode is OFF → OmniVoice can't run.
-                    // Don't offer the (pointless) model download; point the user
-                    // to VBEE or to enabling CPU mode in Settings.
-                    if (!av?.cpu_mode && av?.deps_installed && !av?.gpu_available) {
-                      return (
-                        <div className="rounded-lg p-3 text-sm bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30">
-                          <div className="font-medium mb-1">Máy này không có GPU NVIDIA</div>
-                          <div className="text-dim">
-                            OmniVoice cần GPU NVIDIA (CUDA) — card tích hợp (Intel/AMD) không hỗ trợ.
-                            Hãy dùng tab <span className="font-medium">VBEE</span>, hoặc bật
-                            {' '}<span className="font-medium">"Chạy OmniVoice trên CPU"</span> trong
-                            {' '}<span className="font-medium">Cài đặt</span> (chạy được nhưng rất chậm).
-                          </div>
-                        </div>
-                      )
-                    }
                     // Ready and not currently downloading → green confirmation
                     if (ready && state !== 'downloading') {
                       return (

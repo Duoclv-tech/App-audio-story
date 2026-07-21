@@ -5,9 +5,10 @@ import { hasNativeDialogs, pickFolderNative } from '../services/nativeDialog'
 interface Settings {
   VBEE_APP_ID?: string
   VBEE_BEARER_TOKEN?: string
+  AI_GRAMMAR_PROVIDER?: string
+  OPENAI_API_KEY?: string
   GEMINI_API_KEY?: string
   output_folder?: string
-  OMNIVOICE_USE_CPU?: boolean
 }
 
 export default function SettingsPage() {
@@ -131,20 +132,27 @@ export default function SettingsPage() {
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <span className="text-primary-600 dark:text-primary-400"></span>
           Cấu Hình VBEE API
+          <span className="relative group inline-flex">
+            <span
+              className="flex items-center justify-center w-5 h-5 rounded-full bg-primary-100 dark:bg-primary-500/20 text-primary-700 dark:text-primary-300 text-xs font-bold cursor-help select-none"
+              aria-label="Hướng dẫn lấy credentials"
+            >
+              ?
+            </span>
+            <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 w-80 -translate-x-1/2 rounded-lg border border-primary-200 dark:border-primary-500/30 bg-primary-50 dark:bg-primary-500/10 p-4 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-hover:pointer-events-auto">
+              <div className="text-sm text-primary-800 dark:text-primary-300 mb-2 font-medium">
+                Hướng dẫn lấy credentials:
+              </div>
+              <ol className="text-sm text-primary-700 dark:text-primary-400 space-y-1 list-decimal list-inside">
+                <li>Đăng nhập <a href="https://vbee.vn" target="_blank" rel="noopener noreferrer" className="underline">https://vbee.vn</a></li>
+                <li>Vào phần <strong>Quản lý ứng dụng</strong></li>
+                <li>Tạo app mới hoặc chọn app có sẵn</li>
+                <li>Copy <strong>ID ứng dụng</strong> (App ID)</li>
+                <li>Click vào app để lấy <strong>Bearer Token</strong></li>
+              </ol>
+            </div>
+          </span>
         </h3>
-
-        <div className="bg-primary-50 dark:bg-primary-500/10 border border-primary-200 dark:border-primary-500/30 rounded-lg p-4 mb-4">
-          <div className="text-sm text-primary-800 dark:text-primary-300 mb-2 font-medium">
-            Hướng dẫn lấy credentials:
-          </div>
-          <ol className="text-sm text-primary-700 dark:text-primary-400 space-y-1 list-decimal list-inside">
-            <li>Đăng nhập <a href="https://vbee.vn" target="_blank" rel="noopener noreferrer" className="underline">https://vbee.vn</a></li>
-            <li>Vào phần <strong>Quản lý ứng dụng</strong></li>
-            <li>Tạo app mới hoặc chọn app có sẵn</li>
-            <li>Copy <strong>ID ứng dụng</strong> (App ID)</li>
-            <li>Click vào app để lấy <strong>Bearer Token</strong></li>
-          </ol>
-        </div>
 
         <div className="space-y-4">
           <div>
@@ -192,25 +200,63 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Gemini AI Configuration */}
+      {/* AI Grammar Check Configuration (OpenAI / Gemini) */}
       <div className="mb-8">
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <span className="text-primary-600 dark:text-primary-400"></span>
-          Cấu Hình Gemini AI (Grammar Check)
+          Cấu Hình AI Kiểm Tra Chính Tả
         </h3>
 
-        <div className="bg-primary-50 dark:bg-primary-500/10 border border-primary-200 dark:border-primary-500/30 rounded-lg p-4 mb-4">
-          <div className="text-sm text-primary-800 dark:text-primary-300 mb-2 font-medium">
-            Hướng dẫn lấy API Key (miễn phí):
-          </div>
-          <ol className="text-sm text-primary-700 dark:text-primary-400 space-y-1 list-decimal list-inside">
-            <li>Vào <a href="https://ai.google.dev" target="_blank" rel="noopener noreferrer" className="underline">https://ai.google.dev</a></li>
-            <li>Đăng nhập bằng Gmail</li>
-            <li>Click <strong>"Get API Key"</strong> (góc trái)</li>
-            <li>Tạo API Key mới và copy</li>
-          </ol>
+        {/* Provider selector */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-1">
+            Nhà cung cấp AI
+          </label>
+          <select
+            value={settings.AI_GRAMMAR_PROVIDER || 'openai'}
+            onChange={(e) => handleInputChange('AI_GRAMMAR_PROVIDER', e.target.value)}
+            className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm bg-surface"
+          >
+            <option value="openai">OpenAI (ưu tiên)</option>
+            <option value="gemini">Gemini</option>
+          </select>
+          <p className="text-xs text-dim mt-1">
+            Chọn AI dùng để kiểm tra chính tả. Nếu key của nhà cung cấp được chọn
+            chưa nhập, hệ thống tự dùng nhà cung cấp còn lại.
+          </p>
         </div>
 
+        {/* OpenAI API Key */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-1">
+            OpenAI API Key
+          </label>
+          <div className="relative">
+            <input
+              type={showTokens ? "text" : "password"}
+              value={settings.OPENAI_API_KEY || ''}
+              onChange={(e) => handleInputChange('OPENAI_API_KEY', e.target.value)}
+              placeholder="sk-..."
+              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 pr-20 font-mono text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => setShowTokens(!showTokens)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300"
+            >
+              {showTokens ? 'Ẩn' : 'Hiện'}
+            </button>
+          </div>
+          <p className="text-xs text-dim mt-1">
+            Lấy tại{' '}
+            <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="underline">
+              platform.openai.com/api-keys
+            </a>{' '}
+            (dùng model gpt-4o-mini).
+          </p>
+        </div>
+
+        {/* Gemini API Key */}
         <div>
           <label className="block text-sm font-medium mb-1">
             Gemini API Key
@@ -232,30 +278,13 @@ export default function SettingsPage() {
             </button>
           </div>
           <p className="text-xs text-dim mt-1">
-            Dùng để kiểm tra ngữ pháp bằng AI (Gemini 2.0 Flash - miễn phí)
+            Lấy miễn phí tại{' '}
+            <a href="https://ai.google.dev" target="_blank" rel="noopener noreferrer" className="underline">
+              ai.google.dev
+            </a>{' '}
+            → "Get API Key".
           </p>
         </div>
-      </div>
-
-      {/* OmniVoice (local TTS) */}
-      <div className="mb-8">
-        <h3 className="text-lg font-semibold mb-4">OmniVoice (TTS cục bộ)</h3>
-        <label className="flex items-start gap-3 cursor-pointer p-4 rounded-lg border border-token bg-surface-2">
-          <input
-            type="checkbox"
-            checked={!!settings.OMNIVOICE_USE_CPU}
-            onChange={(e) => setSettings(prev => ({ ...prev, OMNIVOICE_USE_CPU: e.target.checked }))}
-            className="mt-0.5 h-4 w-4"
-          />
-          <span className="text-sm">
-            <span className="font-medium">Chạy OmniVoice trên CPU (khi máy không có GPU NVIDIA)</span>
-            <span className="block text-dim mt-1">
-              Cho phép dùng OmniVoice trên máy chỉ có card tích hợp. ⚠️ Rất chậm
-              (~15–20 lần so với thời gian thực) — hợp câu ngắn, không hợp truyện dài.
-              Máy có GPU thì để tắt để chạy nhanh.
-            </span>
-          </span>
-        </label>
       </div>
 
       {/* Message */}

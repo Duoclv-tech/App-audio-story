@@ -689,7 +689,7 @@ Ngoài chế độ web (Docker + MySQL) và batch CLI, dự án đã được đ
 | Hạng mục | Bản web | Bản desktop |
 |----------|---------|-------------|
 | Database | MySQL 8.0 (Docker, port 3307) | **SQLite** (`app.db`, không cần cài gì) |
-| Giao diện | Vite dev server `:5173` + backend `:8000` | **1 cửa sổ WebView2** (pywebview), FastAPI serve `dist` same-origin |
+| Giao diện | Vite dev server `:5173` + backend `:8000` *1 cửa sổ WebView2** (pywebview), FastAPI serve `dist` same-origin |
 | FFmpeg | cài sẵn trên máy | **bundled** trong app (`_internal/bin/`) |
 | Chạy | `start.bat` (nhiều terminal) | double-click app / `TruyenFullProcessor.exe` |
 | Đóng gói | — | PyInstaller onedir + Inno Setup → `Setup.exe` |

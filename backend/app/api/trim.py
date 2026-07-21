@@ -14,8 +14,9 @@ from fastapi.responses import FileResponse, StreamingResponse
 from loguru import logger
 from pydantic import BaseModel
 
+from app import paths
 from app.database import SessionLocal
-from app.services.output_delivery import deliver_final
+from app.services.output_delivery import deliver_final, get_output_folder
 from app.services.video_trimmer import (
     TRIM_TEMP_DIR,
     probe,
@@ -24,6 +25,33 @@ from app.services.video_trimmer import (
 )
 
 router = APIRouter()
+
+# Upload size ceiling (matches the 2 GB documented limit) so a stray/hostile
+# upload can't fill the disk.
+MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
+
+
+def _assert_import_allowed(src: Path) -> None:
+    """Confine /import to files the app itself produced.
+
+    Without this, ``path`` is an arbitrary absolute path → any file on disk
+    could be copied into trim_temp and downloaded back out. Allowed roots are
+    the app storage tree and the user's configured output folder.
+    """
+    allowed = [Path(paths.STORAGE_DIR).resolve(), Path(paths.DATA_DIR).resolve()]
+    db = SessionLocal()
+    try:
+        allowed.append(get_output_folder(db).resolve())
+    except Exception:
+        pass
+    finally:
+        db.close()
+    try:
+        real = src.resolve()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    if not any(real == root or root in real.parents for root in allowed):
+        raise HTTPException(status_code=403, detail="Path is outside allowed folders")
 
 # ---------------------------------------------------------------------------
 # In-memory job registry
@@ -115,12 +143,23 @@ async def upload_video(file: UploadFile = File(...)):
     input_path = dest_dir / f"input{suffix}"
 
     chunk_size = 1024 * 1024  # 1 MB
-    with open(input_path, "wb") as f:
-        while True:
-            chunk = await file.read(chunk_size)
-            if not chunk:
-                break
-            f.write(chunk)
+    total = 0
+    try:
+        with open(input_path, "wb") as f:
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > MAX_UPLOAD_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large (max {MAX_UPLOAD_BYTES // (1024**3)} GB)",
+                    )
+                f.write(chunk)
+    except Exception:
+        shutil.rmtree(dest_dir, ignore_errors=True)
+        raise
 
     try:
         meta = probe(str(input_path))
@@ -153,6 +192,7 @@ async def import_video(request: TrimImportRequest):
     src = Path(request.path)
     if not src.exists() or not src.is_file():
         raise HTTPException(status_code=404, detail=f"File not found: {request.path}")
+    _assert_import_allowed(src)
 
     file_id = str(uuid.uuid4())
     dest_dir = TRIM_TEMP_DIR / file_id

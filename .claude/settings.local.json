@@ -23,7 +23,19 @@
       "Bash(./venv/Scripts/python.exe *)",
       "Skill(code-review)",
       "Workflow(code-review)",
-      "Bash(grep -iE \"VideoTrimmer|trimApi|importVideo|sourceVideoPath|5[0-9]{3}|300,|301,\")"
+      "Bash(grep -iE \"VideoTrimmer|trimApi|importVideo|sourceVideoPath|5[0-9]{3}|300,|301,\")",
+      "Read(//tmp/**)",
+      "Read(//d/Project/web_app/**)",
+      "Bash(git reset *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git check-ignore *)",
+      "Bash(xargs wc -l)",
+      "Bash(git -C /d/Project/web_app diff HEAD -- backend/requirements.txt)",
+      "Bash(git -C /d/Project/web_app diff HEAD -- .gitignore)",
+      "Bash(git -C /d/Project/web_app status --short omivoice-tts)",
+      "Bash(git -C /d/Project/web_app check-ignore omivoice-tts)",
+      "Bash(git rm *)",
+      "Bash(git -C /d/Project/web_app status --short)"
     ],
     "deny": [],
     "ask": []

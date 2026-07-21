@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/layout/Layout'
 import HomePage from './pages/HomePage'
 import ProcessorPage from './pages/ProcessorPage'
@@ -11,6 +12,7 @@ import VideoTrimmerPage from './pages/VideoTrimmerPage'
 function App() {
   return (
     <BrowserRouter>
+      <ErrorBoundary>
       <Layout>
         <Routes>
           <Route path="/" element={<HomePage />} />
@@ -23,6 +25,7 @@ function App() {
           <Route path="/video-trimmer" element={<VideoTrimmerPage />} />
         </Routes>
       </Layout>
+      </ErrorBoundary>
     </BrowserRouter>
   )
 }

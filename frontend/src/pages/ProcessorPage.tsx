@@ -3166,9 +3166,23 @@ export default function ProcessorPage() {
                   {/* Model download status + progress */}
                   {omniStatus && (() => {
                     const dl = omniStatus.downloads?.base
-                    const ready = omniStatus.availability?.ready
+                    const av = omniStatus.availability
+                    const ready = av?.ready
                     const state = dl?.state
                     const mb = (b?: number) => ((b || 0) / 1048576).toFixed(0)
+                    // No CUDA GPU → OmniVoice can't run here. Don't offer the
+                    // (pointless) model download; steer the user to VBEE.
+                    if (av?.deps_installed && !av?.gpu_available) {
+                      return (
+                        <div className="rounded-lg p-3 text-sm bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30">
+                          <div className="font-medium mb-1">Máy này không có GPU NVIDIA</div>
+                          <div className="text-dim">
+                            OmniVoice cần GPU NVIDIA (CUDA) để chạy — card tích hợp (Intel/AMD) không hỗ trợ.
+                            Hãy dùng tab <span className="font-medium">VBEE</span> để tạo giọng đọc.
+                          </div>
+                        </div>
+                      )
+                    }
                     // Ready and not currently downloading → green confirmation
                     if (ready && state !== 'downloading') {
                       return (

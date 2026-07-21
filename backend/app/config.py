@@ -19,6 +19,17 @@ class Settings(BaseSettings):
     VBEE_API_URL: str = "https://vbee.vn/api/v1"
     VBEE_BEARER_TOKEN: str = ""  # optional .env fallback; primary source is DB
 
+    # OmniVoice local TTS (embedded engine, runs on GPU)
+    # Enabled by default; the engine self-disables at runtime if torch/omnivoice
+    # or a CUDA GPU or the downloaded model is missing (VBEE keeps working).
+    OMNIVOICE_ENABLED: bool = True
+    OMNIVOICE_DEVICE: str = "cuda:0"        # set to "cpu" to force CPU (slow)
+    OMNIVOICE_MODEL_PATH: str = str(paths.OMNIVOICE_MODEL_DIR)
+    OMNIVOICE_BASE_PATH: str = str(paths.OMNIVOICE_BASE_DIR)
+    # HuggingFace repos to pull at install / first run (see model download API)
+    OMNIVOICE_MODEL_REPO: str = "kjanh/KhanhTTS-OmniVoice"
+    OMNIVOICE_BASE_REPO: str = "k2-fsa/OmniVoice"
+
     # Gemini AI (for grammar checking) — configured via Settings UI (DB)
     GEMINI_API_KEY: str = ""  # optional .env fallback; primary source is DB
 
@@ -26,9 +37,13 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""  # set in .env if you use the CLI spellcheck step
 
     # Server
-    API_HOST: str = "0.0.0.0"
+    # Bind to loopback by default — the API has no authentication, so exposing
+    # it on 0.0.0.0 would hand the whole file-browse/read/upload surface to the
+    # LAN. Set API_HOST=0.0.0.0 explicitly in .env only when you intend that.
+    # (The desktop build binds 127.0.0.1 on a dynamic port regardless.)
+    API_HOST: str = "127.0.0.1"
     API_PORT: int = 8000
-    DEBUG: bool = True
+    DEBUG: bool = False
 
     # CORS — fixed list of local dev origins (5173/5174 = Vite, 3000 = CRA)
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:5174,http://localhost:3000"

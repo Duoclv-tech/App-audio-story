@@ -35,6 +35,9 @@ else:
 
 BUNDLED_FONTS_DIR = BUNDLE_DIR / "assets" / "fonts"
 FFMPEG_BIN_DIR = BUNDLE_DIR / "bin"
+# Default OmniVoice clone-voice presets shipped read-only with the app; seeded
+# into the writable CLONE_PRESETS_DIR on first run (see clone_preset_store).
+DEFAULT_CLONE_PRESETS_DIR = BUNDLE_DIR / "default_clone_presets"
 
 # The frontend build lives next to the app when frozen, but in dev it sits at
 # <repo>/frontend/dist (a sibling of backend/, i.e. BUNDLE_DIR.parent).
@@ -68,6 +71,14 @@ STICKER_UPLOAD_DIR = CACHE_DIR / "stickers_upload"
 STICKERS_DIR = DATA_DIR / "stickers"
 FONTS_DIR = DATA_DIR / "fonts"
 LOG_DIR = DATA_DIR / "logs"
+
+# OmniVoice local TTS: models are large (several GB) so they are NOT bundled in
+# the .exe — they get downloaded at install / first run into the writable data
+# dir. Clone presets (reference audio + transcript) also live under DATA_DIR.
+MODELS_DIR = DATA_DIR / "models"
+OMNIVOICE_MODEL_DIR = MODELS_DIR / "khanhtts"        # fine-tune VN+EN
+OMNIVOICE_BASE_DIR = MODELS_DIR / "omnivoice-base"   # base omnilingual
+CLONE_PRESETS_DIR = DATA_DIR / "clone_presets"
 
 DB_PATH = DATA_DIR / "app.db"
 
@@ -104,6 +115,7 @@ def ensure_data_dirs() -> None:
         STORAGE_DIR, STORIES_DIR, AUDIO_DIR, VIDEO_DIR, MERGED_DIR,
         EXPORTS_DIR, TRIM_TEMP_DIR, CACHE_DIR, MASK_DIR, PREVIEW_CACHE_DIR,
         SRT_CACHE_DIR, STICKER_UPLOAD_DIR, STICKERS_DIR, FONTS_DIR, LOG_DIR,
+        MODELS_DIR, CLONE_PRESETS_DIR,
     ):
         d.mkdir(parents=True, exist_ok=True)
 

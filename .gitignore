@@ -36,3 +36,11 @@ packaging/Output/
 # --- OS / editor ---
 .DS_Store
 Thumbs.db
+
+# OmniVoice models (downloaded at install, not committed)
+backend/models/
+backend/clone_presets/
+
+# Standalone OmniVoice reference repo (nested git repo + multi-GB weights) —
+# kept locally for reference, never part of this repo.
+omivoice-tts/

@@ -160,10 +160,24 @@ export default function ProcessorPage() {
     chapter: null
   })
   const [ttsConfig, setTtsConfig] = useState({
+    engine: 'vbee' as 'vbee' | 'omnivoice',
     voice_code: 'hn_female_ngochuyen_full_48k-fhg',
     speed: 1.0,
     bitrate: 128,
-    audio_type: 'mp3'
+    audio_type: 'mp3',
+    // OmniVoice-only
+    mode: 'auto' as 'auto' | 'clone' | 'design',
+    model_key: 'base' as 'base',
+    preset_id: '',
+    instruct: '',
+    language: 'Vietnamese',
+  })
+  // OmniVoice engine state (availability + clone presets)
+  const [omniStatus, setOmniStatus] = useState<any>(null)
+  const [omniPresets, setOmniPresets] = useState<any[]>([])
+  const [omniDownloading, setOmniDownloading] = useState(false)
+  const [newPreset, setNewPreset] = useState<{ name: string; ref_text: string; file: File | null }>({
+    name: '', ref_text: '', file: null,
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -173,7 +187,10 @@ export default function ProcessorPage() {
     title: string
   } | null>(null)
   const [audioRecords, setAudioRecords] = useState<AudioRecord[]>([])
-  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null)
+  // Interval handles live in refs, not state: a ref is stable across renders so
+  // unmount/story-change cleanup always sees the current timer (a state value
+  // captured by a []-deps cleanup would be stale and never clear).
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [toast, setToast] = useState<ToastState>({
     isVisible: false,
     message: '',
@@ -408,7 +425,7 @@ export default function ProcessorPage() {
     totalDuration: '',
     checked: false
   })
-  const [videoPollingInterval, setVideoPollingInterval] = useState<NodeJS.Timeout | null>(null)
+  const videoPollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [folderBrowser, setFolderBrowser] = useState({
     isOpen: false,
     currentPath: '',
@@ -963,8 +980,17 @@ export default function ProcessorPage() {
     return lines.map((_, index) => index + 1)
   }
 
-  // Load story data if storyId exists in URL
+  // Load story data if storyId exists in URL.
+  // The route reuses one component instance across /processor/:storyId, so
+  // switching stories does NOT remount — we must tear down the previous story's
+  // pollers here, otherwise story A's intervals keep writing over story B's
+  // audio/video status.
   useEffect(() => {
+    stopPolling()
+    if (videoPollingRef.current) {
+      clearInterval(videoPollingRef.current)
+      videoPollingRef.current = null
+    }
     if (storyId) {
       loadStory(storyId)
     }
@@ -973,7 +999,18 @@ export default function ProcessorPage() {
   // Fetch available voices on mount
   useEffect(() => {
     fetchVoices()
+    fetchOmniStatus()
+    fetchOmniPresets()
   }, [])
+
+  // While an OmniVoice model download is in progress, poll status every 2s so
+  // the progress bar updates; auto-stops when state leaves "downloading".
+  useEffect(() => {
+    const state = omniStatus?.downloads?.base?.state
+    if (state !== 'downloading') return
+    const id = setInterval(fetchOmniStatus, 2000)
+    return () => clearInterval(id)
+  }, [omniStatus?.downloads?.base?.state])
 
   const loadStory = async (id: string) => {
     try {
@@ -1052,6 +1089,69 @@ export default function ProcessorPage() {
       setVoices(response.data.voices || [])
     } catch (error) {
       console.error('Error fetching voices:', error)
+    }
+  }
+
+  // ---- OmniVoice (local TTS) ----
+  const fetchOmniStatus = async () => {
+    try {
+      const res = await axios.get('/api/v1/tts/omnivoice/status')
+      setOmniStatus(res.data)
+    } catch (error) {
+      console.error('Error fetching OmniVoice status:', error)
+      setOmniStatus(null)
+    }
+  }
+
+  const fetchOmniPresets = async () => {
+    try {
+      const res = await axios.get('/api/v1/tts/omnivoice/presets')
+      setOmniPresets(res.data.presets || [])
+    } catch (error) {
+      console.error('Error fetching OmniVoice presets:', error)
+    }
+  }
+
+  const handleDownloadOmniModel = async (modelKey: string) => {
+    setOmniDownloading(true)
+    try {
+      await axios.post(`/api/v1/tts/omnivoice/download?model_key=${modelKey}`)
+      showToast('Bắt đầu tải model OmniVoice…', 'info')
+      await fetchOmniStatus()  // the polling effect below tracks progress from here
+    } catch (error: any) {
+      showToast(errMessage(error, 'Lỗi khi tải model'), 'error')
+    } finally {
+      setOmniDownloading(false)
+    }
+  }
+
+  const handleCreatePreset = async () => {
+    if (!newPreset.name.trim() || !newPreset.ref_text.trim() || !newPreset.file) {
+      showToast('Cần nhập tên, transcript và chọn file audio mẫu', 'error')
+      return
+    }
+    try {
+      const fd = new FormData()
+      fd.append('name', newPreset.name)
+      fd.append('ref_text', newPreset.ref_text)
+      fd.append('ref_audio', newPreset.file)
+      const res = await axios.post('/api/v1/tts/omnivoice/presets', fd)
+      showToast('Đã tạo giọng clone', 'success')
+      setNewPreset({ name: '', ref_text: '', file: null })
+      await fetchOmniPresets()
+      setTtsConfig((c) => ({ ...c, preset_id: res.data.preset?.id || c.preset_id }))
+    } catch (error: any) {
+      showToast(errMessage(error, 'Lỗi khi tạo giọng clone'), 'error')
+    }
+  }
+
+  const handleDeletePreset = async (presetId: string) => {
+    try {
+      await axios.delete(`/api/v1/tts/omnivoice/presets/${presetId}`)
+      await fetchOmniPresets()
+      setTtsConfig((c) => (c.preset_id === presetId ? { ...c, preset_id: '' } : c))
+    } catch (error: any) {
+      showToast(errMessage(error, 'Lỗi khi xóa giọng'), 'error')
     }
   }
 
@@ -1259,7 +1359,7 @@ export default function ProcessorPage() {
   }
 
   const startVideoPolling = (taskId: string) => {
-    if (videoPollingInterval) clearInterval(videoPollingInterval)
+    if (videoPollingRef.current) clearInterval(videoPollingRef.current)
     const interval = setInterval(async () => {
       try {
         const response = await axios.get(`/api/v1/video/${taskId}/status`)
@@ -1272,7 +1372,7 @@ export default function ProcessorPage() {
         }))
         if (task.status === 'completed' || task.status === 'failed') {
           clearInterval(interval)
-          setVideoPollingInterval(null)
+          videoPollingRef.current = null
           if (task.status === 'completed') {
             try {
               const resultResp = await axios.get(`/api/v1/video/result/${storyData.id}`)
@@ -1287,7 +1387,7 @@ export default function ProcessorPage() {
         console.error('Error polling video status:', err)
       }
     }, 10000)
-    setVideoPollingInterval(interval)
+    videoPollingRef.current = interval
   }
 
   const fetchVideoStatus = async () => {
@@ -1580,9 +1680,9 @@ export default function ProcessorPage() {
   // Cleanup video polling on unmount
   useEffect(() => {
     return () => {
-      if (videoPollingInterval) clearInterval(videoPollingInterval)
+      if (videoPollingRef.current) clearInterval(videoPollingRef.current)
     }
-  }, [videoPollingInterval])
+  }, [])
 
   // Step 1: Update story info and start download
   // Ensure a story row exists (the route normally already created one) and
@@ -1809,23 +1909,21 @@ export default function ProcessorPage() {
   // Start polling for audio status
   const startPolling = () => {
     // Clear existing interval
-    if (pollingInterval) {
-      clearInterval(pollingInterval)
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
     }
 
     // Poll every 30 seconds
-    const interval = setInterval(() => {
+    pollingRef.current = setInterval(() => {
       fetchAudioRecords()
     }, 30000)
-
-    setPollingInterval(interval)
   }
 
   // Stop polling
   const stopPolling = () => {
-    if (pollingInterval) {
-      clearInterval(pollingInterval)
-      setPollingInterval(null)
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
     }
   }
 
@@ -1862,19 +1960,17 @@ export default function ProcessorPage() {
   // Start polling for merged TTS status
   const startMergedPolling = () => {
     // Clear existing interval
-    if (pollingInterval) {
-      clearInterval(pollingInterval)
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
     }
 
     // Poll immediately
     fetchMergedTtsStatus()
 
     // Poll every 10 seconds
-    const interval = setInterval(() => {
+    pollingRef.current = setInterval(() => {
       fetchMergedTtsStatus()
     }, 10000)
-
-    setPollingInterval(interval)
   }
 
   // Check if all audio records are completed (success, skipped, or failed)
@@ -3022,21 +3118,256 @@ export default function ProcessorPage() {
               <span className="step-badge">BƯỚC 4/7</span>
             </div>
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Voice</label>
-                <select
-                  value={ttsConfig.voice_code}
-                  onChange={(e) => setTtsConfig({ ...ttsConfig, voice_code: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  disabled={loading}
-                >
-                  {voices.map((voice) => (
-                    <option key={voice.code} value={voice.code}>
-                      {voice.name} ({voice.gender})
-                    </option>
-                  ))}
-                </select>
+              {/* Engine tabs: VBEE (cloud) vs OmniVoice (local) */}
+              <div className="flex gap-1 p-1 rounded-lg bg-surface-2 border border-token w-fit">
+                {([
+                  { key: 'vbee', label: 'VBEE (cloud)' },
+                  { key: 'omnivoice', label: 'OmniVoice (local, clone giọng)' },
+                ] as const).map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => setTtsConfig({ ...ttsConfig, engine: t.key })}
+                    disabled={loading}
+                    className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${
+                      ttsConfig.engine === t.key
+                        ? 'bg-primary-500 text-white'
+                        : 'text-dim hover:text-primary-600'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
               </div>
+
+              {/* ---------- VBEE tab ---------- */}
+              {ttsConfig.engine === 'vbee' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Voice</label>
+                    <select
+                      value={ttsConfig.voice_code}
+                      onChange={(e) => setTtsConfig({ ...ttsConfig, voice_code: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      disabled={loading}
+                    >
+                      {voices.map((voice) => (
+                        <option key={voice.code} value={voice.code}>
+                          {voice.name} ({voice.gender})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* ---------- OmniVoice tab ---------- */}
+              {ttsConfig.engine === 'omnivoice' && (
+                <div className="space-y-4">
+                  {/* Model download status + progress */}
+                  {omniStatus && (() => {
+                    const dl = omniStatus.downloads?.base
+                    const ready = omniStatus.availability?.ready
+                    const state = dl?.state
+                    const mb = (b?: number) => ((b || 0) / 1048576).toFixed(0)
+                    // Ready and not currently downloading → green confirmation
+                    if (ready && state !== 'downloading') {
+                      return (
+                        <div className="rounded-lg p-2.5 text-sm bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30">
+                          ✅ Model OmniVoice đã sẵn sàng
+                        </div>
+                      )
+                    }
+                    if (state === 'downloading') {
+                      const pct = dl?.percent
+                      return (
+                        <div className="rounded-lg p-3 text-sm bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-medium flex items-center gap-2">
+                              <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-600"></span>
+                              Đang tải model OmniVoice…
+                            </span>
+                            <span className="text-dim tabular-nums">
+                              {pct != null ? `${pct}% · ` : ''}{mb(dl?.downloaded_bytes)}
+                              {dl?.total_bytes ? ` / ${mb(dl?.total_bytes)}` : ''} MB
+                            </span>
+                          </div>
+                          <div className="w-full h-2 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
+                            <div
+                              className={`h-full bg-primary-500 transition-all ${pct == null ? 'animate-pulse w-full' : ''}`}
+                              style={pct != null ? { width: `${pct}%` } : undefined}
+                            />
+                          </div>
+                          <div className="text-dim text-xs mt-1.5">
+                            Tải xong sẽ tự bật. Model ~1–2GB, có thể mất vài phút — cứ để chạy nền.
+                          </div>
+                        </div>
+                      )
+                    }
+                    if (state === 'error') {
+                      return (
+                        <div className="rounded-lg p-3 text-sm bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30">
+                          <div className="font-medium mb-1 text-red-600 dark:text-red-400">Tải model thất bại</div>
+                          <div className="text-dim mb-2 break-words">{dl?.error}</div>
+                          <button
+                            onClick={() => handleDownloadOmniModel('base')}
+                            className="px-3 py-1.5 rounded-md bg-primary-500 text-white text-sm hover:bg-primary-600"
+                          >Thử lại</button>
+                        </div>
+                      )
+                    }
+                    // Not downloaded yet
+                    return (
+                      <div className="rounded-lg p-3 text-sm bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30">
+                        <div className="font-medium mb-1">Chưa có model OmniVoice</div>
+                        <div className="text-dim mb-2">Cần tải model về máy (~1–2GB) để dùng OmniVoice.</div>
+                        <button
+                          onClick={() => handleDownloadOmniModel('base')}
+                          disabled={omniDownloading}
+                          className="px-3 py-1.5 rounded-md bg-primary-500 text-white text-sm hover:bg-primary-600 disabled:bg-gray-400"
+                        >
+                          {omniDownloading ? 'Đang bắt đầu…' : 'Tải model về'}
+                        </button>
+                      </div>
+                    )
+                  })()}
+
+                  {/* Mode (OmniVoice base model — no model picker) */}
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Chế độ</label>
+                    <select
+                      value={ttsConfig.mode}
+                      onChange={(e) => setTtsConfig({ ...ttsConfig, mode: e.target.value as any })}
+                      className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      disabled={loading}
+                    >
+                      <option value="auto">Auto (model tự chọn giọng)</option>
+                      <option value="clone">Clone (giọng từ mẫu)</option>
+                      <option value="design">Design (mô tả giọng)</option>
+                    </select>
+                  </div>
+
+                  {/* Clone mode: preset picker + create */}
+                  {ttsConfig.mode === 'clone' && (
+                    <div className="space-y-4 rounded-xl p-4 bg-surface-2 border border-token">
+                      {/* Pick an existing cloned voice */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-sm font-medium">Giọng đã clone</label>
+                          {ttsConfig.preset_id && (
+                            <button
+                              onClick={() => handleDeletePreset(ttsConfig.preset_id)}
+                              className="text-xs text-red-600 dark:text-red-400 hover:underline"
+                            >
+                              Xóa giọng này
+                            </button>
+                          )}
+                        </div>
+                        <select
+                          value={ttsConfig.preset_id}
+                          onChange={(e) => setTtsConfig({ ...ttsConfig, preset_id: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          disabled={loading}
+                        >
+                          <option value="">
+                            {omniPresets.length ? '— Chọn giọng —' : '— Chưa có giọng nào, tạo bên dưới —'}
+                          </option>
+                          {omniPresets.map((p) => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Create a new cloned voice */}
+                      <div className="border-t border-token pt-4 space-y-3">
+                        <div className="text-sm font-semibold flex items-center gap-1.5">
+                          <span className="text-primary-500 text-base leading-none">+</span>
+                          Tạo giọng clone mới
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium text-dim mb-1">Tên giọng</label>
+                          <input
+                            type="text"
+                            placeholder="VD: Giọng nữ miền Nam"
+                            value={newPreset.name}
+                            onChange={(e) => setNewPreset({ ...newPreset, name: e.target.value })}
+                            className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium text-dim mb-1">Transcript của audio mẫu</label>
+                          <textarea
+                            placeholder="Nhập đúng nội dung được đọc trong file audio mẫu"
+                            value={newPreset.ref_text}
+                            onChange={(e) => setNewPreset({ ...newPreset, ref_text: e.target.value })}
+                            rows={2}
+                            className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium text-dim mb-1">Audio mẫu (5–15 giây)</label>
+                          <label className="flex items-center gap-3 cursor-pointer">
+                            <span className="px-3 py-1.5 rounded-md border border-token bg-black/5 dark:bg-white/10 text-sm font-medium hover:bg-primary-500/10 whitespace-nowrap transition">
+                              Chọn file…
+                            </span>
+                            <span className={`text-sm truncate ${newPreset.file ? '' : 'text-dim'}`}>
+                              {newPreset.file ? newPreset.file.name : 'Chưa chọn file'}
+                            </span>
+                            <input
+                              type="file"
+                              accept="audio/*"
+                              onChange={(e) => setNewPreset({ ...newPreset, file: e.target.files?.[0] || null })}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+
+                        <button
+                          onClick={handleCreatePreset}
+                          disabled={!newPreset.name.trim() || !newPreset.ref_text.trim() || !newPreset.file}
+                          className="w-full py-2 rounded-md bg-primary-500 text-white text-sm font-medium hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                        >
+                          Tạo giọng
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Design mode: voice description */}
+                  {ttsConfig.mode === 'design' && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Mô tả giọng (instruct)</label>
+                      <textarea
+                        placeholder="VD: A warm female voice, gentle and slow."
+                        value={ttsConfig.instruct}
+                        onChange={(e) => setTtsConfig({ ...ttsConfig, instruct: e.target.value })}
+                        rows={2}
+                        className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        disabled={loading}
+                      />
+                    </div>
+                  )}
+
+                  {/* Language */}
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Ngôn ngữ</label>
+                    <select
+                      value={ttsConfig.language}
+                      onChange={(e) => setTtsConfig({ ...ttsConfig, language: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      disabled={loading}
+                    >
+                      <option value="Auto">Auto</option>
+                      <option value="Vietnamese">Tiếng Việt</option>
+                      <option value="English">English</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Shared: speed + bitrate */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Speed</label>
@@ -3070,7 +3401,7 @@ export default function ProcessorPage() {
               )}
               <button
                 onClick={handleStartTTS}
-                disabled={loading}
+                disabled={loading || (ttsConfig.engine === 'omnivoice' && !omniStatus?.availability?.ready)}
                 className="w-full bg-primary-500 text-white py-2 px-4 rounded-md hover:bg-primary-600 transition disabled:bg-gray-400"
               >
                 {loading ? 'Processing TTS...' : 'Start TTS Processing'}

@@ -34,3 +34,12 @@ aiofiles==23.2.1
 
 # Document export
 python-docx==1.1.0
+
+# ---------------------------------------------------------------------------
+# This file is the NON-GPU build (VBEE cloud TTS only) — lightweight, runs on
+# any machine. It intentionally does NOT include torch / omnivoice / gradio.
+#
+# For the GPU build with the embedded OmniVoice local TTS engine, install the
+# frozen lock instead:  pip install -r requirements.lock.txt
+# (needs a CUDA 12.4 NVIDIA GPU; pulls torch+cu124, omnivoice, etc.)
+# ---------------------------------------------------------------------------

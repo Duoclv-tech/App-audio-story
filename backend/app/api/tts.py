@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Form, File, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from loguru import logger
 from typing import List
@@ -8,6 +9,89 @@ from app import models, schemas
 from app.workers.tts_worker import process_tts_task
 
 router = APIRouter()
+
+DEFAULT_VBEE_VOICE = "hn_female_ngochuyen_full_48k-fhg"
+
+
+def _build_tts_config(request: schemas.TTSRequest) -> dict:
+    """Flatten a TTSRequest into the config dict the workers consume.
+
+    Carries the engine selector plus both VBEE and OmniVoice fields so the
+    worker can route without caring which UI tab produced the request.
+    """
+    return {
+        "engine": (request.engine or "vbee").lower(),
+        # VBEE / shared
+        "voice_code": request.voice_code or DEFAULT_VBEE_VOICE,
+        "audio_type": request.audio_type or "mp3",
+        "bitrate": request.bitrate or 128,
+        "speed": request.speed if request.speed else 1.0,
+        # OmniVoice
+        "mode": request.mode or "auto",
+        "model_key": request.model_key or "base",
+        "preset_id": request.preset_id,
+        "ref_text": request.ref_text,
+        "instruct": request.instruct,
+        "language": request.language or "Auto",
+    }
+
+
+# ==================== OmniVoice (local TTS) ====================
+# Declared BEFORE the parametrized /{task_id}/status route so /omnivoice/status
+# isn't shadowed by it (FastAPI matches routes in definition order).
+
+@router.get("/omnivoice/status")
+async def omnivoice_status():
+    """Whether the local OmniVoice engine can run (deps/GPU/model) + download state."""
+    from app.services import omnivoice_processor as ov
+    from app.services import omnivoice_download as dl
+    return {
+        "availability": ov.availability(),
+        "downloads": dl.get_all_status(),
+    }
+
+
+@router.post("/omnivoice/download")
+async def omnivoice_download(model_key: str = "base"):
+    """Kick off (or report) a background model download from HuggingFace."""
+    from app.services import omnivoice_download as dl
+    try:
+        return dl.start_download(model_key)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/omnivoice/presets")
+async def omnivoice_list_presets():
+    """List saved clone-voice presets."""
+    from app.services import clone_preset_store as presets
+    return {"presets": presets.list_presets()}
+
+
+@router.post("/omnivoice/presets")
+async def omnivoice_create_preset(
+    name: str = Form(...),
+    ref_text: str = Form(...),
+    ref_audio: UploadFile = File(...),
+):
+    """Create a clone-voice preset from a reference sample + transcript."""
+    from app.services import clone_preset_store as presets
+    meta = await presets.save_preset(name, ref_text, ref_audio)
+    return {"ok": True, "preset": meta}
+
+
+@router.delete("/omnivoice/presets/{preset_id}")
+async def omnivoice_delete_preset(preset_id: str):
+    from app.services import clone_preset_store as presets
+    presets.delete_preset(preset_id)
+    return {"ok": True, "deleted": preset_id}
+
+
+@router.get("/omnivoice/presets/{preset_id}/audio")
+async def omnivoice_preset_audio(preset_id: str):
+    from app.services import clone_preset_store as presets
+    return FileResponse(presets.get_audio_path(preset_id))
+
 
 @router.post("/start", response_model=schemas.TTSResponse)
 async def start_tts(
@@ -31,12 +115,7 @@ async def start_tts(
     db.refresh(task)
 
     # Run TTS synchronously
-    config = {
-        "voice_code": request.voice_code if hasattr(request, 'voice_code') else "hn_female_ngochuyen_full_48k-fhg",
-        "audio_type": request.audio_type if hasattr(request, 'audio_type') else "mp3",
-        "bitrate": request.bitrate if hasattr(request, 'bitrate') else 128,
-        "speed": request.speed if hasattr(request, 'speed') else 1.0
-    }
+    config = _build_tts_config(request)
 
     result = await process_tts_task(task.id, story.id, config)
 
@@ -226,12 +305,7 @@ async def start_tts_background(
     db.refresh(task)
 
     # Start background processing
-    config = {
-        "voice_code": request.voice_code if hasattr(request, 'voice_code') else "hn_female_ngochuyen_full_48k-fhg",
-        "audio_type": request.audio_type if hasattr(request, 'audio_type') else "mp3",
-        "bitrate": request.bitrate if hasattr(request, 'bitrate') else 128,
-        "speed": request.speed if hasattr(request, 'speed') else 1.0
-    }
+    config = _build_tts_config(request)
 
     background_tasks.add_task(process_tts_task, task.id, story.id, config)
 
@@ -271,12 +345,7 @@ async def start_tts_merged(
     db.refresh(task)
 
     # Get config
-    config = {
-        "voice_code": request.voice_code if hasattr(request, 'voice_code') else "hn_female_ngochuyen_full_48k-fhg",
-        "audio_type": request.audio_type if hasattr(request, 'audio_type') else "mp3",
-        "bitrate": request.bitrate if hasattr(request, 'bitrate') else 128,
-        "speed": request.speed if hasattr(request, 'speed') else 1.0
-    }
+    config = _build_tts_config(request)
 
     # Start background processing
     from app.workers.tts_worker import process_merged_tts_task

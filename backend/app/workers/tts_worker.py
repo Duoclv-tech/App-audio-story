@@ -12,6 +12,11 @@ from app import models
 from app.config import settings
 
 
+def _engine(config: Optional[Dict]) -> str:
+    """Which TTS engine to use: 'vbee' (default, cloud) or 'omnivoice' (local)."""
+    return ((config or {}).get("engine") or "vbee").lower()
+
+
 async def process_tts_task(
     task_id: str,
     story_id: str,
@@ -50,20 +55,24 @@ async def process_tts_task(
             task.status = "running"
             db.commit()
 
-        # Create TTS processor (pass db to load settings from database)
-        tts_processor = VbeeTTSProcessor(db=db)
-
-        # Process all chapters
-        result = await tts_processor.process_story(
-            story_id=story_id,
-            task_id=task_id,
-            db=db,
-            voice_code=voice_code,
-            audio_type=audio_type,
-            bitrate=bitrate,
-            speed=speed,
-            max_concurrent=2  # Limit concurrent TTS requests
-        )
+        # Process all chapters via the selected engine
+        if _engine(config) == "omnivoice":
+            from app.services.omnivoice_processor import OmniVoiceProcessor
+            result = await OmniVoiceProcessor(db=db).process_story(
+                story_id=story_id, task_id=task_id, db=db, config=config
+            )
+        else:
+            tts_processor = VbeeTTSProcessor(db=db)
+            result = await tts_processor.process_story(
+                story_id=story_id,
+                task_id=task_id,
+                db=db,
+                voice_code=voice_code,
+                audio_type=audio_type,
+                bitrate=bitrate,
+                speed=speed,
+                max_concurrent=2  # Limit concurrent TTS requests
+            )
 
         if result.get("success"):
             logger.info(f"TTS task {task_id} completed: {result['successful']} successful, {result['failed']} failed")
@@ -114,18 +123,22 @@ async def process_single_chapter_tts(
         bitrate = config.get("bitrate", 128)
         speed = config.get("speed", 1.0)
 
-        # Create TTS processor (pass db to load settings from database)
-        tts_processor = VbeeTTSProcessor(db=db)
-
-        # Process chapter
-        result = await tts_processor.process_chapter(
-            chapter_id=chapter_id,
-            db=db,
-            voice_code=voice_code,
-            audio_type=audio_type,
-            bitrate=bitrate,
-            speed=speed
-        )
+        # Process chapter via the selected engine
+        if _engine(config) == "omnivoice":
+            from app.services.omnivoice_processor import OmniVoiceProcessor
+            result = await OmniVoiceProcessor(db=db).process_chapter(
+                chapter_id=chapter_id, db=db, config=config
+            )
+        else:
+            tts_processor = VbeeTTSProcessor(db=db)
+            result = await tts_processor.process_chapter(
+                chapter_id=chapter_id,
+                db=db,
+                voice_code=voice_code,
+                audio_type=audio_type,
+                bitrate=bitrate,
+                speed=speed
+            )
 
         if result.get("success"):
             logger.info(f"TTS processing completed for chapter {chapter_id}")
@@ -178,18 +191,22 @@ async def process_merged_tts_task(
             task.status = "running"
             db.commit()
 
-        # Create TTS processor (pass db to load settings from database)
-        tts_processor = VbeeTTSProcessor(db=db)
-
-        # Process merged content
-        result = await tts_processor.process_merged_content(
-            story_id=story_id,
-            db=db,
-            voice_code=voice_code,
-            audio_type=audio_type,
-            bitrate=bitrate,
-            speed=speed
-        )
+        # Route to the selected engine
+        if _engine(config) == "omnivoice":
+            from app.services.omnivoice_processor import OmniVoiceProcessor
+            result = await OmniVoiceProcessor(db=db).process_merged_content(
+                story_id=story_id, db=db, config=config
+            )
+        else:
+            tts_processor = VbeeTTSProcessor(db=db)
+            result = await tts_processor.process_merged_content(
+                story_id=story_id,
+                db=db,
+                voice_code=voice_code,
+                audio_type=audio_type,
+                bitrate=bitrate,
+                speed=speed
+            )
 
         # Update task status
         if task:

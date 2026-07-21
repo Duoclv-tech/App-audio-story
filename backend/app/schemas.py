@@ -176,6 +176,22 @@ class TTSRequest(BaseModel):
     speed: float = 1.0
     volume: int = 100
 
+    # Engine selection: "vbee" (cloud, default) or "omnivoice" (local GPU)
+    engine: str = "vbee"
+
+    # VBEE / shared audio config
+    voice_code: Optional[str] = None
+    audio_type: str = "mp3"
+    bitrate: int = 128
+
+    # OmniVoice-only config
+    mode: str = "auto"                 # auto | clone | design
+    model_key: Optional[str] = None    # khanhtts | base
+    preset_id: Optional[str] = None    # clone voice preset
+    ref_text: Optional[str] = None     # inline reference transcript (clone)
+    instruct: Optional[str] = None     # voice description (design)
+    language: str = "Auto"             # Auto | Vietnamese | English
+
 class TTSResponse(BaseModel):
     task_id: str
     status: str

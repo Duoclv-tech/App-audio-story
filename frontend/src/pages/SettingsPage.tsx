@@ -7,6 +7,7 @@ interface Settings {
   VBEE_BEARER_TOKEN?: string
   GEMINI_API_KEY?: string
   output_folder?: string
+  OMNIVOICE_USE_CPU?: boolean
 }
 
 export default function SettingsPage() {
@@ -34,7 +35,7 @@ export default function SettingsPage() {
   const loadSettings = async () => {
     setLoading(true)
     try {
-      const response = await axios.get('/api/v1/settings')
+      const response = await axios.get('/api/v1/settings/')
       // Convert array of settings to object
       const settingsObj: Settings = {}
       response.data.forEach((setting: any) => {
@@ -53,7 +54,7 @@ export default function SettingsPage() {
     setMessage(null)
 
     try {
-      await axios.put('/api/v1/settings', settings)
+      await axios.put('/api/v1/settings/', settings)
       loadOutputFolderInfo()
       setMessage({ type: 'success', text: 'Cài đặt đã được lưu thành công!' })
 
@@ -234,6 +235,27 @@ export default function SettingsPage() {
             Dùng để kiểm tra ngữ pháp bằng AI (Gemini 2.0 Flash - miễn phí)
           </p>
         </div>
+      </div>
+
+      {/* OmniVoice (local TTS) */}
+      <div className="mb-8">
+        <h3 className="text-lg font-semibold mb-4">OmniVoice (TTS cục bộ)</h3>
+        <label className="flex items-start gap-3 cursor-pointer p-4 rounded-lg border border-token bg-surface-2">
+          <input
+            type="checkbox"
+            checked={!!settings.OMNIVOICE_USE_CPU}
+            onChange={(e) => setSettings(prev => ({ ...prev, OMNIVOICE_USE_CPU: e.target.checked }))}
+            className="mt-0.5 h-4 w-4"
+          />
+          <span className="text-sm">
+            <span className="font-medium">Chạy OmniVoice trên CPU (khi máy không có GPU NVIDIA)</span>
+            <span className="block text-dim mt-1">
+              Cho phép dùng OmniVoice trên máy chỉ có card tích hợp. ⚠️ Rất chậm
+              (~15–20 lần so với thời gian thực) — hợp câu ngắn, không hợp truyện dài.
+              Máy có GPU thì để tắt để chạy nhanh.
+            </span>
+          </span>
+        </label>
       </div>
 
       {/* Message */}

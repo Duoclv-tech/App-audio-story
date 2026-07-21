@@ -40,7 +40,7 @@ DEFAULT_MODEL_KEY = "base"
 # One model is held in VRAM for the process lifetime. A lock serialises
 # generate() calls (single GPU) and guards model swaps.
 _model_lock = threading.Lock()
-_loaded: Dict[str, object] = {"key": None, "model": None}
+_loaded: Dict[str, object] = {"key": None, "model": None, "device": None}
 
 
 def _import_stack():
@@ -60,17 +60,45 @@ def _model_available(key: str) -> bool:
     return bool(path) and (Path(path) / "model.safetensors").exists()
 
 
-def availability() -> Dict:
+def _read_cpu_setting(db) -> bool:
+    """Whether the user opted into CPU mode (DB setting OMNIVOICE_USE_CPU)."""
+    if db is None:
+        return False
+    try:
+        s = db.query(models.Setting).filter(
+            models.Setting.setting_key == "OMNIVOICE_USE_CPU"
+        ).first()
+        if s is None:
+            return False
+        v = s.setting_value
+        if isinstance(v, str):
+            return v.strip().lower() in ("true", "1", "yes", "on")
+        return bool(v)
+    except Exception:
+        return False
+
+
+def effective_device(db=None) -> str:
+    """Device to run on: 'cpu' if the user enabled CPU mode, else the config
+    default (cuda:0). CPU works but is ~15-20x slower than realtime."""
+    if _read_cpu_setting(db):
+        return "cpu"
+    return settings.OMNIVOICE_DEVICE
+
+
+def availability(db=None) -> Dict:
     """Report whether the OmniVoice engine can run, and why not if it can't.
 
-    Returns a dict the UI uses to enable/disable the OmniVoice tab and to show
-    a "download model" prompt.
+    Returns a dict the UI uses to enable/disable the OmniVoice tab, show a
+    "download model" prompt, and offer/announce CPU mode.
     """
+    device = effective_device(db)
     info = {
         "enabled": settings.OMNIVOICE_ENABLED,
         "deps_installed": False,
         "gpu_available": False,
-        "device": settings.OMNIVOICE_DEVICE,
+        "device": device,
+        "cpu_mode": device == "cpu",
         "models": {
             key: _model_available(key) for key in MODEL_PATHS
         },
@@ -91,7 +119,9 @@ def availability() -> Dict:
         info["gpu_available"] = bool(torch.cuda.is_available())
     except Exception:
         info["gpu_available"] = False
-    if settings.OMNIVOICE_DEVICE.startswith("cuda") and not info["gpu_available"]:
+    # Only block on the GPU when actually targeting CUDA. In CPU mode we skip
+    # the GPU check so a no-GPU machine can still run (slowly).
+    if device.startswith("cuda") and not info["gpu_available"]:
         info["reason"] = "no CUDA GPU detected"
     elif not any(info["models"].values()):
         info["reason"] = "model not downloaded yet"
@@ -100,13 +130,14 @@ def availability() -> Dict:
     return info
 
 
-def is_ready() -> bool:
-    a = availability()
+def is_ready(db=None) -> bool:
+    a = availability(db)
     return bool(a.get("ready"))
 
 
-def _get_model_sync(key: str):
-    """Lazy-load the model on first use; swap (freeing VRAM) if key changes."""
+def _get_model_sync(key: str, device: Optional[str] = None):
+    """Lazy-load the model on first use; reload if the model key OR device
+    (cuda:0 <-> cpu) changes."""
     if key not in MODEL_PATHS:
         raise ValueError(f"unknown OmniVoice model: {key}")
     if not _model_available(key):
@@ -114,13 +145,16 @@ def _get_model_sync(key: str):
             f"OmniVoice model '{key}' not found at {MODEL_PATHS[key]} "
             f"(download it first)"
         )
-    if _loaded["key"] == key and _loaded["model"] is not None:
+    device = device or settings.OMNIVOICE_DEVICE
+    if (_loaded["key"] == key and _loaded.get("device") == device
+            and _loaded["model"] is not None):
         return _loaded["model"]
 
     torch, _sf, OmniVoice = _import_stack()
 
     if _loaded["model"] is not None:
-        logger.info(f"[omnivoice] Unloading previous model: {_loaded['key']}")
+        logger.info(f"[omnivoice] Unloading previous model: {_loaded['key']} "
+                    f"({_loaded.get('device')})")
         del _loaded["model"]
         try:
             torch.cuda.empty_cache()
@@ -128,8 +162,8 @@ def _get_model_sync(key: str):
             pass
         _loaded["model"] = None
         _loaded["key"] = None
+        _loaded["device"] = None
 
-    device = settings.OMNIVOICE_DEVICE
     dtype = torch.float16 if device.startswith("cuda") else torch.float32
     logger.info(f"[omnivoice] Loading model '{key}' from {MODEL_PATHS[key]} on {device}")
     t0 = time.time()
@@ -137,6 +171,7 @@ def _get_model_sync(key: str):
     logger.info(f"[omnivoice] Loaded '{key}' in {time.time() - t0:.1f}s")
     _loaded["key"] = key
     _loaded["model"] = model
+    _loaded["device"] = device
     return model
 
 
@@ -222,12 +257,13 @@ class OmniVoiceProcessor:
         if model_key not in MODEL_PATHS:
             model_key = DEFAULT_MODEL_KEY
         kwargs = self._build_kwargs(text, config)
+        device = effective_device(self.db)
         with _model_lock:
-            model = _get_model_sync(model_key)
+            model = _get_model_sync(model_key, device)
             t0 = time.time()
             audios = model.generate(**kwargs)
             logger.info(f"[omnivoice] generated in {time.time() - t0:.2f}s "
-                        f"(model={model_key}, mode={config.get('mode')})")
+                        f"(model={model_key}, mode={config.get('mode')}, device={device})")
         return audios
 
     def _generate_to_mp3(self, text: str, config: Dict, out_path: Path) -> float:

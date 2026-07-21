@@ -213,8 +213,10 @@ class AudioMergeResponse(BaseModel):
 class SettingResponse(BaseModel):
     id: int
     setting_key: str
-    setting_value: dict
-    updated_at: datetime
+    # Values are arbitrary JSON scalars/objects (string tokens, bool flags,
+    # paths…), not only dicts — typing as dict 500s on every scalar setting.
+    setting_value: Any = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

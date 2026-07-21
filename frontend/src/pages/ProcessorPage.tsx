@@ -3163,6 +3163,14 @@ export default function ProcessorPage() {
               {/* ---------- OmniVoice tab ---------- */}
               {ttsConfig.engine === 'omnivoice' && (
                 <div className="space-y-4">
+                  {/* CPU-mode warning (opted in via Settings) */}
+                  {omniStatus?.availability?.cpu_mode && (
+                    <div className="rounded-lg p-2.5 text-sm bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30">
+                      ⚠️ Đang chạy OmniVoice trên <span className="font-medium">CPU</span> — rất chậm
+                      (~15–20× thời gian thực). Tắt trong Cài đặt nếu máy có GPU.
+                    </div>
+                  )}
+
                   {/* Model download status + progress */}
                   {omniStatus && (() => {
                     const dl = omniStatus.downloads?.base
@@ -3170,15 +3178,18 @@ export default function ProcessorPage() {
                     const ready = av?.ready
                     const state = dl?.state
                     const mb = (b?: number) => ((b || 0) / 1048576).toFixed(0)
-                    // No CUDA GPU → OmniVoice can't run here. Don't offer the
-                    // (pointless) model download; steer the user to VBEE.
-                    if (av?.deps_installed && !av?.gpu_available) {
+                    // No CUDA GPU and CPU mode is OFF → OmniVoice can't run.
+                    // Don't offer the (pointless) model download; point the user
+                    // to VBEE or to enabling CPU mode in Settings.
+                    if (!av?.cpu_mode && av?.deps_installed && !av?.gpu_available) {
                       return (
                         <div className="rounded-lg p-3 text-sm bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30">
                           <div className="font-medium mb-1">Máy này không có GPU NVIDIA</div>
                           <div className="text-dim">
-                            OmniVoice cần GPU NVIDIA (CUDA) để chạy — card tích hợp (Intel/AMD) không hỗ trợ.
-                            Hãy dùng tab <span className="font-medium">VBEE</span> để tạo giọng đọc.
+                            OmniVoice cần GPU NVIDIA (CUDA) — card tích hợp (Intel/AMD) không hỗ trợ.
+                            Hãy dùng tab <span className="font-medium">VBEE</span>, hoặc bật
+                            {' '}<span className="font-medium">"Chạy OmniVoice trên CPU"</span> trong
+                            {' '}<span className="font-medium">Cài đặt</span> (chạy được nhưng rất chậm).
                           </div>
                         </div>
                       )

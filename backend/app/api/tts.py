@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Form, File, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -11,6 +13,18 @@ from app.workers.tts_worker import process_tts_task
 router = APIRouter()
 
 DEFAULT_VBEE_VOICE = "hn_female_ngochuyen_full_48k-fhg"
+
+
+def _delete_audio_file(file_path) -> None:
+    """Best-effort removal of an audio file on disk (ignore if missing)."""
+    if not file_path:
+        return
+    try:
+        os.remove(file_path)
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        logger.warning(f"[tts] could not delete orphan audio {file_path}: {e}")
 
 
 def _build_tts_config(request: schemas.TTSRequest) -> dict:
@@ -41,12 +55,12 @@ def _build_tts_config(request: schemas.TTSRequest) -> dict:
 # isn't shadowed by it (FastAPI matches routes in definition order).
 
 @router.get("/omnivoice/status")
-async def omnivoice_status():
-    """Whether the local OmniVoice engine can run (deps/GPU/model) + download state."""
+async def omnivoice_status(db: Session = Depends(get_db)):
+    """Whether the local OmniVoice engine can run (deps/GPU/model/CPU-mode) + download state."""
     from app.services import omnivoice_processor as ov
     from app.services import omnivoice_download as dl
     return {
-        "availability": ov.availability(),
+        "availability": ov.availability(db),
         "downloads": dl.get_all_status(),
     }
 
@@ -206,7 +220,13 @@ async def prepare_tts_records(
     if not chapters:
         raise HTTPException(status_code=404, detail="No chapters found")
 
-    # Delete old audio records if any
+    # Delete old audio records — remove their files from disk first so re-running
+    # /prepare doesn't leave orphan chapter_*.mp3 accumulating in storage.
+    old_records = db.query(models.AudioFile).filter(
+        models.AudioFile.chapter_id.in_([ch.id for ch in chapters])
+    ).all()
+    for rec in old_records:
+        _delete_audio_file(rec.file_path)
     db.query(models.AudioFile).filter(
         models.AudioFile.chapter_id.in_([ch.id for ch in chapters])
     ).delete(synchronize_session=False)
@@ -415,7 +435,9 @@ async def retry_chapter_tts(
     if not audio_record:
         raise HTTPException(status_code=404, detail="Audio record not found for this chapter")
 
-    # Reset audio record status to idle
+    # Reset audio record status to idle — delete the stale file first so the old
+    # mp3 isn't orphaned on disk when file_path is cleared.
+    _delete_audio_file(audio_record.file_path)
     audio_record.status = "idle"
     audio_record.error_message = None
     audio_record.request_id = None

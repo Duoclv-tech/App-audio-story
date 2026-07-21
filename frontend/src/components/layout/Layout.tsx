@@ -46,7 +46,7 @@ export default function Layout({ children }: LayoutProps) {
 
   // First-run nudge: if VBEE credentials aren't set yet, TTS won't work.
   useEffect(() => {
-    axios.get('/api/v1/settings')
+    axios.get('/api/v1/settings/')
       .then((res) => {
         const map: Record<string, any> = {}
         ;(res.data || []).forEach((s: any) => { map[s.setting_key] = s.setting_value })

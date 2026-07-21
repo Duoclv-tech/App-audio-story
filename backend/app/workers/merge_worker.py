@@ -8,6 +8,7 @@ from loguru import logger
 
 from app.database import SessionLocal
 from app.services.audio_merger import AudioMerger
+from app.services.output_delivery import deliver_final, safe_file_stem
 from app import models
 
 
@@ -167,10 +168,15 @@ async def merge_selected_chapters(
         )
 
         if result.get("success"):
+            # Deliver finished audio to the user's output folder (Downloads default)
+            _name = safe_file_stem(story.title if story and story.title else story_id, output_name)
+            final_path = deliver_final(str(output_path), db, filename=f"{_name}.{format}")
+            result["output_path"] = final_path
+
             # Save merged audio record
             merged_audio = models.MergedAudio(
                 story_id=story_id,
-                file_path=str(output_path),
+                file_path=final_path,
                 duration=result.get("duration", 0),
                 format=format,
                 # Note: bitrate, source_count and custom_name fields not in MergedAudio model

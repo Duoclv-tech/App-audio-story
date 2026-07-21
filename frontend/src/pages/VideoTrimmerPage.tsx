@@ -169,6 +169,7 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
     'idle'
   )
   const [processError, setProcessError] = useState<string | null>(null)
+  const [savedPath, setSavedPath] = useState<string | null>(null)
   const esRef = useRef<EventSource | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -412,6 +413,7 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
     setProcessStatus('running')
     setProcessProgress(0)
     setProcessError(null)
+    setSavedPath(null)
 
     const segsToSend =
       segments.length > 0
@@ -436,16 +438,13 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
       })
       setJobId(newJobId)
 
-      esRef.current = openProgressStream(newJobId, (pct, status, error) => {
+      esRef.current = openProgressStream(newJobId, (pct, status, error, outputPath) => {
         setProcessProgress(pct)
         if (status === 'completed') {
           setProcessStatus('completed')
-          const a = document.createElement('a')
-          a.href = getDownloadUrl(newJobId)
-          a.download = outputFilename
-          document.body.appendChild(a)
-          a.click()
-          a.remove()
+          // The server already saved the file into the configured output folder
+          // (Downloads by default) — show where instead of forcing a browser download.
+          setSavedPath(outputPath || null)
         } else if (status === 'failed') {
           setProcessStatus('failed')
           setProcessError(error || 'Xử lý thất bại')
@@ -501,6 +500,7 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
     setProcessProgress(0)
     setProcessStatus('idle')
     setProcessError(null)
+    setSavedPath(null)
   }
 
   // ─── render ──────────────────────────────────────────────────────────────
@@ -756,15 +756,21 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
                 </div>
                 <p className="text-sm text-dim mt-2">
                   {processStatus === 'running' && `Đang xử lý… ${processProgress.toFixed(1)}%`}
-                  {processStatus === 'completed' && ' Xong — file đang tải về trình duyệt'}
+                  {processStatus === 'completed' && ' Xong — đã lưu vào thư mục xuất'}
                   {processStatus === 'failed' && ` Lỗi: ${processError || 'Không xác định'}`}
                 </p>
+                {processStatus === 'completed' && savedPath && (
+                  <p className="text-sm text-dim mt-1 break-all">
+                    Đã lưu vào: <span className="font-mono text-strong">{savedPath}</span>
+                  </p>
+                )}
                 {processStatus === 'completed' && jobId && (
                   <a
                     href={getDownloadUrl(jobId)}
+                    download={outputFilename}
                     className="text-sm text-primary-600 dark:text-primary-400 hover:underline"
                   >
-                    Tải lại file
+                    Tải về trình duyệt
                   </a>
                 )}
               </div>

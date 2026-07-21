@@ -42,6 +42,9 @@ _SETTINGS = {
     "auto_run_tts": False,
     "audio_format": "mp3",
     "audio_bitrate": "192k",
+    # Where finished files (video/audio/word) are delivered. Empty = the OS
+    # Downloads folder (resolved at runtime in output_delivery.get_output_folder).
+    "output_folder": "",
 }
 
 

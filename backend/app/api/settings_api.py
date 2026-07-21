@@ -5,6 +5,7 @@ from loguru import logger
 
 from app.database import get_db
 from app import models, schemas
+from app.services.output_delivery import get_output_folder, default_output_folder
 
 router = APIRouter()
 
@@ -13,6 +14,21 @@ async def get_settings(db: Session = Depends(get_db)):
     """Get all settings"""
     settings = db.query(models.Setting).all()
     return settings
+
+@router.get("/output-folder")
+async def get_output_folder_info(db: Session = Depends(get_db)):
+    """Resolve the effective output folder (where finished files are saved).
+
+    Returns the currently configured folder, whether it is the default, and the
+    default Downloads path — so the Settings UI can show what's in effect.
+    """
+    effective = get_output_folder(db)
+    default = default_output_folder()
+    return {
+        "path": str(effective),
+        "default": str(default),
+        "is_default": str(effective) == str(default),
+    }
 
 @router.put("/")
 async def update_settings(settings_data: dict, db: Session = Depends(get_db)):

@@ -110,12 +110,14 @@ export async function startTrim(req: TrimProcessRequest): Promise<string> {
 
 export function openProgressStream(
   jobId: string,
-  onEvent: (pct: number, status: string, error?: string) => void
+  onEvent: (pct: number, status: string, error?: string, outputPath?: string) => void
 ): EventSource {
   const es = new EventSource(`${BASE}/progress/${jobId}`)
   es.onmessage = (e) => {
-    const payload = JSON.parse(e.data) as { percent: number; status: string; error?: string }
-    onEvent(payload.percent, payload.status, payload.error)
+    const payload = JSON.parse(e.data) as {
+      percent: number; status: string; error?: string; output_path?: string
+    }
+    onEvent(payload.percent, payload.status, payload.error, payload.output_path)
     if (payload.status !== 'running') es.close()
   }
   es.onerror = () => {

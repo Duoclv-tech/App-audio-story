@@ -14,6 +14,8 @@ from fastapi.responses import FileResponse, StreamingResponse
 from loguru import logger
 from pydantic import BaseModel
 
+from app.database import SessionLocal
+from app.services.output_delivery import deliver_final
 from app.services.video_trimmer import (
     TRIM_TEMP_DIR,
     probe,
@@ -245,6 +247,14 @@ async def process_trim(request: TrimProcessRequest):
 
             result = await loop.run_in_executor(None, _sync_trim)
             if result.get("success"):
+                # Deliver the trimmed short clip to the user's output folder
+                # (Downloads by default). The download endpoint serves
+                # job.output_path, so it keeps working from the new location.
+                _db = SessionLocal()
+                try:
+                    job.output_path = deliver_final(output_path, _db, filename=safe_name)
+                finally:
+                    _db.close()
                 job.status = "completed"
                 job.percent = 100.0
             else:
@@ -275,6 +285,8 @@ async def stream_progress(job_id: str):
             }
             if job.error:
                 payload["error"] = job.error
+            if job.status == "completed" and job.output_path:
+                payload["output_path"] = job.output_path
             yield f"data: {json.dumps(payload)}\n\n"
 
             if job.status != "running":

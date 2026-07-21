@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
+import { hasNativeDialogs, pickFolderNative } from '../services/nativeDialog'
 
 interface Settings {
   VBEE_APP_ID?: string
   VBEE_BEARER_TOKEN?: string
   GEMINI_API_KEY?: string
+  output_folder?: string
 }
 
 export default function SettingsPage() {
@@ -13,10 +15,21 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [showTokens, setShowTokens] = useState(false)
+  const [effectiveOutput, setEffectiveOutput] = useState<{ path: string; is_default: boolean } | null>(null)
 
   useEffect(() => {
     loadSettings()
+    loadOutputFolderInfo()
   }, [])
+
+  const loadOutputFolderInfo = async () => {
+    try {
+      const r = await axios.get('/api/v1/settings/output-folder')
+      setEffectiveOutput({ path: r.data.path, is_default: r.data.is_default })
+    } catch (e) {
+      console.error('Error loading output folder info:', e)
+    }
+  }
 
   const loadSettings = async () => {
     setLoading(true)
@@ -41,6 +54,7 @@ export default function SettingsPage() {
 
     try {
       await axios.put('/api/v1/settings', settings)
+      loadOutputFolderInfo()
       setMessage({ type: 'success', text: 'Cài đặt đã được lưu thành công!' })
 
       // Auto hide success message after 3 seconds
@@ -71,6 +85,45 @@ export default function SettingsPage() {
   return (
     <div className="bg-surface rounded-lg shadow-sm p-8">
       <h2 className="text-2xl font-bold mb-6">Cài Đặt</h2>
+
+      {/* Output folder */}
+      <div className="mb-8">
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          Thư Mục Lưu File (Output)
+        </h3>
+        <p className="text-sm text-dim mb-3">
+          Nơi lưu file thành phẩm (video dài, video ngắn cắt, audio ghép, file Word).
+          Để trống = thư mục <strong>Downloads</strong> của máy.
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={settings.output_folder || ''}
+            onChange={(e) => handleInputChange('output_folder', e.target.value)}
+            placeholder="Để trống để dùng thư mục Downloads"
+            className="flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+          />
+          {hasNativeDialogs() && (
+            <button
+              type="button"
+              onClick={async () => {
+                const picked = await pickFolderNative(settings.output_folder || undefined)
+                if (picked) handleInputChange('output_folder', picked)
+              }}
+              className="px-4 py-2 border rounded-md hover:bg-surface-2 transition text-sm font-medium whitespace-nowrap"
+            >
+              Chọn thư mục
+            </button>
+          )}
+        </div>
+        {effectiveOutput && (
+          <p className="text-xs text-dim mt-2 break-all">
+            Đang lưu vào:{' '}
+            <span className="font-mono text-strong">{effectiveOutput.path}</span>
+            {effectiveOutput.is_default && ' (mặc định Downloads)'}
+          </p>
+        )}
+      </div>
 
       {/* VBEE API Configuration */}
       <div className="mb-8">

@@ -17,6 +17,7 @@ from loguru import logger
 
 from app import models
 from app.config import settings
+from app.services.output_delivery import deliver_final, safe_file_stem
 
 
 class VbeeTTSProcessor:
@@ -603,6 +604,13 @@ class VbeeTTSProcessor:
             # Get file size
             file_size = os.path.getsize(output_path)
 
+            # Deliver finished audio to the user's output folder (Downloads by
+            # default). Everything reads audio by absolute path, so we store the
+            # delivered path in the DB and downstream steps keep working.
+            _story = db.query(models.Story).filter(models.Story.id == story_id).first()
+            _name = safe_file_stem(_story.title if _story and _story.title else story_id, story_id)
+            final_path = deliver_final(str(output_path), db, filename=f"{_name}.{audio_type}")
+
             # Save to MergedAudio table
             merged_audio = db.query(models.MergedAudio).filter(
                 models.MergedAudio.story_id == story_id
@@ -610,14 +618,14 @@ class VbeeTTSProcessor:
 
             if merged_audio:
                 # Update existing
-                merged_audio.file_path = str(output_path)
+                merged_audio.file_path = final_path
                 merged_audio.file_size = file_size
                 merged_audio.format = audio_type
             else:
                 # Create new
                 merged_audio = models.MergedAudio(
                     story_id=story_id,
-                    file_path=str(output_path),
+                    file_path=final_path,
                     file_size=file_size,
                     format=audio_type
                 )
@@ -625,14 +633,14 @@ class VbeeTTSProcessor:
 
             db.commit()
 
-            logger.info(f"TTS completed for story {story_id}: {output_path}")
+            logger.info(f"TTS completed for story {story_id}: {final_path}")
 
             return {
                 "success": True,
                 "story_id": story_id,
                 "request_id": request_id,
                 "audio_link": audio_link,
-                "file_path": str(output_path),
+                "file_path": final_path,
                 "file_size": file_size,
                 "char_count": len(merged_content)
             }

@@ -12,11 +12,13 @@ from typing import Optional, List, Dict, Callable
 from datetime import datetime
 
 import requests
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 from loguru import logger
 
 from app import models
 from app.config import settings
+from app.database import SessionLocal
 from app.services.output_delivery import deliver_final, safe_file_stem
 
 
@@ -464,23 +466,39 @@ class VbeeTTSProcessor:
 
             results = []
             semaphore = asyncio.Semaphore(max_concurrent)
+            total_items = len(chapters)
 
             async def process_with_limit(chapter):
                 async with semaphore:
-                    result = await self.process_chapter(
-                        chapter_id=chapter.id,
-                        db=db,
-                        voice_code=voice_code,
-                        audio_type=audio_type,
-                        bitrate=bitrate,
-                        speed=speed
-                    )
+                    # Each concurrent chapter gets its OWN session — a SQLAlchemy
+                    # Session is not safe to share across coroutines that commit
+                    # (one coroutine's commit would flush another's half-done
+                    # changes and corrupt the identity map / task counters).
+                    cdb = SessionLocal()
+                    try:
+                        result = await self.process_chapter(
+                            chapter_id=chapter.id,
+                            db=cdb,
+                            voice_code=voice_code,
+                            audio_type=audio_type,
+                            bitrate=bitrate,
+                            speed=speed
+                        )
 
-                    # Update task progress
-                    if task:
-                        task.completed_items = (task.completed_items or 0) + 1
-                        task.progress = int((task.completed_items / task.total_items) * 100)
-                        db.commit()
+                        # Bump progress with an ATOMIC UPDATE (not read-modify-write)
+                        # so two concurrent chapters can't both read the same
+                        # completed_items and clobber each other's increment.
+                        cdb.execute(
+                            update(models.Task)
+                            .where(models.Task.id == task_id)
+                            .values(
+                                completed_items=models.Task.completed_items + 1,
+                                progress=(models.Task.completed_items + 1) * 100 // total_items,
+                            )
+                        )
+                        cdb.commit()
+                    finally:
+                        cdb.close()
 
                     # Add delay between requests to avoid rate limiting
                     await asyncio.sleep(2)
@@ -495,6 +513,11 @@ class VbeeTTSProcessor:
             failed = len(results) - successful
 
             if task:
+                # The per-coroutine sessions incremented completed_items behind
+                # this session's back, so `task` is stale — refresh before the
+                # final write, otherwise committing it would overwrite
+                # completed_items back to the value loaded at "running".
+                db.refresh(task)
                 if failed == 0:
                     task.status = "completed"
                     task.progress = 100

@@ -81,6 +81,12 @@ async def startup_event():
     from app.seed import seed_defaults
     seed_defaults()
 
+    # Reconcile work orphaned by a previous crash/force-quit: mark in-progress
+    # tasks failed (no auto-resume — TTS is billable) and remove leftover *.work
+    # temp dirs. Runs before requests are served, so nothing live is affected.
+    from app.startup_recovery import run_startup_recovery
+    run_startup_recovery()
+
 @app.on_event("shutdown")
 async def shutdown_event():
     """Shutdown event handler"""

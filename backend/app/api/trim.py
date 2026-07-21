@@ -5,6 +5,7 @@ import asyncio
 import json
 import os
 import shutil
+import time
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -29,6 +30,29 @@ router = APIRouter()
 # Upload size ceiling (matches the 2 GB documented limit) so a stray/hostile
 # upload can't fill the disk.
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
+
+# trim_temp holds large uploaded/imported videos. They're only removed when the
+# client calls /clear, which never happens if the tab is closed/reloaded/errors
+# out. Sweep dirs older than this on each new upload/import so they can't pile
+# up unbounded (mirrors the preview/SRT cache sweeps).
+_TRIM_TTL_SECONDS = 6 * 3600
+
+
+def _sweep_trim_temp() -> None:
+    """Delete trim_temp subdirs older than the TTL. A dir being actively used
+    has a fresh mtime, so an in-flight job is never swept."""
+    now = time.time()
+    try:
+        if not TRIM_TEMP_DIR.exists():
+            return
+        for d in TRIM_TEMP_DIR.iterdir():
+            try:
+                if d.is_dir() and now - d.stat().st_mtime > _TRIM_TTL_SECONDS:
+                    shutil.rmtree(d, ignore_errors=True)
+            except Exception:
+                pass
+    except Exception as e:
+        logger.warning(f"[trim] temp sweep failed: {e}")
 
 
 def _assert_import_allowed(src: Path) -> None:
@@ -135,6 +159,7 @@ class TrimProcessResponse(BaseModel):
 @router.post("/upload", response_model=TrimUploadResponse)
 async def upload_video(file: UploadFile = File(...)):
     """Accept a video upload, persist it to trim_temp, return metadata."""
+    _sweep_trim_temp()
     file_id = str(uuid.uuid4())
     dest_dir = TRIM_TEMP_DIR / file_id
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -189,6 +214,7 @@ async def import_video(request: TrimImportRequest):
     Used to feed the long video produced by the pipeline directly into the
     trimmer to cut a short clip for Shorts/TikTok.
     """
+    _sweep_trim_temp()
     src = Path(request.path)
     if not src.exists() or not src.is_file():
         raise HTTPException(status_code=404, detail=f"File not found: {request.path}")

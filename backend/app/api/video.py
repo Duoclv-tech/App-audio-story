@@ -10,7 +10,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Optional
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from loguru import logger
@@ -22,6 +22,24 @@ from app.services.fonts import list_fonts, ensure_font, get_font_file_path
 from app.workers.video_worker import run_video_task
 
 router = APIRouter()
+
+# Loopback addresses allowed to hit the filesystem-browse / arbitrary-path
+# preview endpoints below.
+_LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
+
+
+def require_localhost(request: Request) -> None:
+    """Gate an endpoint to same-machine callers.
+
+    The browse/preview endpoints accept absolute filesystem paths and serve any
+    file on disk — safe as the desktop app's native file picker (bound to
+    127.0.0.1), but a full arbitrary-file-read hole the moment the server is
+    reachable on the LAN (e.g. someone sets API_HOST=0.0.0.0). This makes the
+    localhost restriction explicit regardless of the bind address.
+    """
+    host = request.client.host if request.client else None
+    if host not in _LOCAL_HOSTS:
+        raise HTTPException(status_code=403, detail="Localhost-only endpoint")
 
 _PREVIEW_JOBS: dict = {}
 _PREVIEW_LOCK = threading.Lock()
@@ -237,7 +255,7 @@ AUDIO_EXTENSIONS = {'.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.wma'}
 IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.bmp', '.webp'}
 
 
-@router.post("/browse", response_model=schemas.BrowseFolderResponse)
+@router.post("/browse", response_model=schemas.BrowseFolderResponse, dependencies=[Depends(require_localhost)])
 async def browse_folder(request: schemas.BrowseFolderRequest):
     """Browse server filesystem to select a video folder"""
     path = request.path.strip()
@@ -288,7 +306,7 @@ async def browse_folder(request: schemas.BrowseFolderRequest):
     }
 
 
-@router.post("/browse-files", response_model=schemas.BrowseFilesResponse)
+@router.post("/browse-files", response_model=schemas.BrowseFilesResponse, dependencies=[Depends(require_localhost)])
 async def browse_files(request: schemas.BrowseFolderRequest):
     """Browse server filesystem to select an audio file"""
     path = request.path.strip()
@@ -338,7 +356,7 @@ async def browse_files(request: schemas.BrowseFolderRequest):
     }
 
 
-@router.post("/browse-images", response_model=schemas.BrowseFilesResponse)
+@router.post("/browse-images", response_model=schemas.BrowseFilesResponse, dependencies=[Depends(require_localhost)])
 async def browse_images(request: schemas.BrowseFolderRequest):
     """Browse server filesystem to select an image file"""
     path = request.path.strip()
@@ -388,7 +406,7 @@ async def browse_images(request: schemas.BrowseFolderRequest):
     }
 
 
-@router.get("/preview-image")
+@router.get("/preview-image", dependencies=[Depends(require_localhost)])
 async def preview_image(path: str):
     """Serve an image file for preview"""
     file = Path(path)
@@ -399,7 +417,7 @@ async def preview_image(path: str):
     return FileResponse(str(file))
 
 
-@router.get("/preview-video")
+@router.get("/preview-video", dependencies=[Depends(require_localhost)])
 async def preview_video(path: str):
     """Serve a video file for preview"""
     file = Path(path)
@@ -428,7 +446,7 @@ async def get_font_file(font_key: str):
     return FileResponse(str(file), media_type="font/ttf", filename=file.name)
 
 
-@router.get("/audio-duration")
+@router.get("/audio-duration", dependencies=[Depends(require_localhost)])
 async def get_audio_duration(path: str):
     """Return duration in seconds of a media file at the given path."""
     if not path or not os.path.exists(path):
@@ -575,7 +593,7 @@ async def srt_content(path: str):
     return {"path": str(file), "content": text}
 
 
-@router.get("/sample-clip")
+@router.get("/sample-clip", dependencies=[Depends(require_localhost)])
 async def sample_clip(folder: str):
     """Return path to a random sample video clip from a folder"""
     import random
@@ -591,7 +609,7 @@ async def sample_clip(folder: str):
     return {"path": random.choice(clips)}
 
 
-@router.get("/folder-clips")
+@router.get("/folder-clips", dependencies=[Depends(require_localhost)])
 async def folder_clips(folder: str, limit: int = 200):
     """List clips in a folder (sorted by filename) with durations. Used by the
     frontend to build a playback schedule for the real-time preview."""
@@ -606,7 +624,7 @@ async def folder_clips(folder: str, limit: int = 200):
     return {"clips": clips, "total_duration": sum(c["duration"] for c in clips)}
 
 
-@router.get("/preview-audio")
+@router.get("/preview-audio", dependencies=[Depends(require_localhost)])
 async def preview_audio(path: str):
     """Serve an audio file for the live preview <audio> element."""
     file = Path(path)

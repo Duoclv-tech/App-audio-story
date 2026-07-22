@@ -21,6 +21,18 @@ from pathlib import Path
 # no SQLAlchemy echo. Env vars take priority over any .env file.
 os.environ.setdefault("DEBUG", "release")
 
+# Use the OS (Windows) certificate store for ALL outbound HTTPS instead of the
+# bundled certifi CA list. On machines behind antivirus/corporate TLS proxies
+# the interceptor's root CA lives in the Windows store but NOT in certifi, so
+# requests-based calls (Gemini/OpenAI spellcheck, VBEE cloud TTS, HuggingFace
+# model downloads) would otherwise fail with CERTIFICATE_VERIFY_FAILED. Must run
+# before app.main / any HTTPS call. truststore is already bundled.
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except Exception:
+    pass  # fall back to certifi if truststore is unavailable
+
 from app import paths
 paths.setup_ffmpeg_path()
 paths.hide_subprocess_windows()  # no console-window flashes from ffmpeg/ffprobe

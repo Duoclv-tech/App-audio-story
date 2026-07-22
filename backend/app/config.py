@@ -36,6 +36,19 @@ class Settings(BaseSettings):
     # OpenAI (for spellcheck) — only used by the auto_run.py CLI
     OPENAI_API_KEY: str = ""  # set in .env if you use the CLI spellcheck step
 
+    # --- Licensing (node-locked activation) ---------------------------------
+    # Storefront that signs/issues license tokens (see app/license/*).
+    LICENSE_SERVER_URL: str = "https://storetoolmmo.com"
+    # Offline grace window in days. 0 = activate online once, run offline forever
+    # (current mode). >0 enables periodic online re-verify (required for revoke).
+    LICENSE_TOKEN_GRACE_DAYS: int = 0
+    # Block unactivated use. Always enforced in the frozen .exe regardless of
+    # this flag (see app/license/service.enforcement_enabled); this only turns
+    # enforcement ON in dev when you want to test the activation flow.
+    LICENSE_ENFORCE: bool = False
+    # Sent as app_version in activation requests.
+    APP_VERSION: str = "1.0.0"
+
     # Server
     # Bind to loopback by default — the API has no authentication, so exposing
     # it on 0.0.0.0 would hand the whole file-browse/read/upload surface to the

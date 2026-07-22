@@ -180,6 +180,11 @@ def selftest() -> int:
     Used to smoke-test a frozen build: proves PyInstaller bundled the frontend,
     ffmpeg, sqlite and all hidden imports correctly. Run: TruyenFullProcessor.exe --selftest
     """
+    # Disable the license gate for this in-process smoke test only, so protected
+    # routes (e.g. /tts/voices) can be checked without a real activation.
+    from app.license import service as _license_service
+    _license_service.set_selftest_mode(True)
+
     port = _find_free_port()
     server = BackendServer(port)
     server.start()

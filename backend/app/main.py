@@ -16,7 +16,8 @@ paths.hide_subprocess_windows()
 
 from app.config import settings
 from app.database import test_connection, init_db
-from app.api import stories, chapters, download, text, tts, audio, video, settings_api, banned_words, prompts, export, trim, video_presets
+from app.api import stories, chapters, download, text, tts, audio, video, settings_api, banned_words, prompts, export, trim, video_presets, license as license_api
+from app.license import service as license_service
 
 # Configure loguru — log into the per-user data dir so it works when frozen
 # (Program Files is read-only) and in dev alike.
@@ -43,6 +44,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- License gate -----------------------------------------------------------
+# Blocks every /api/v1/* route until the machine is activated, EXCEPT the
+# license routes themselves (so the activation screen can work). Enforced
+# always in the packaged .exe; opt-in via LICENSE_ENFORCE in dev. The offline
+# token check is cheap (device_id is cached; Ed25519 verify is microseconds).
+from fastapi.responses import JSONResponse
+
+_LICENSE_ALLOW_PREFIX = "/api/v1/license"
+
+
+@app.middleware("http")
+async def license_gate(request, call_next):
+    if license_service.enforcement_enabled():
+        path = request.url.path
+        if path.startswith("/api/v1/") and not path.startswith(_LICENSE_ALLOW_PREFIX):
+            if not license_service.is_activated():
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "detail": "Ứng dụng chưa được kích hoạt. Vui lòng nhập mã kích hoạt.",
+                        "reason": "not_activated",
+                    },
+                )
+    return await call_next(request)
+
+
 # Mount storage folder for serving files
 app.mount("/storage", StaticFiles(directory=settings.STORAGE_PATH), name="storage")
 
@@ -60,6 +87,7 @@ app.include_router(prompts.router, prefix="/api/v1/prompts", tags=["prompts"])
 app.include_router(export.router, prefix="/api/v1/export", tags=["export"])
 app.include_router(trim.router, prefix="/api/v1/trim", tags=["trim"])
 app.include_router(video_presets.router, prefix="/api/v1/video-presets", tags=["video-presets"])
+app.include_router(license_api.router, prefix="/api/v1/license", tags=["license"])
 
 @app.on_event("startup")
 async def startup_event():

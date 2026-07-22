@@ -29,6 +29,9 @@ python-dotenv==1.0.0
 loguru==0.7.2
 tenacity==8.2.3
 
+# Licensing — Ed25519 offline token verification (node-locked activation)
+cryptography>=42.0
+
 # File handling
 aiofiles==23.2.1
 

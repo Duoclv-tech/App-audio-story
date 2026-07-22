@@ -3,8 +3,6 @@ OpenAI Spell-Check Service
 ===========================
 
 Calls OpenAI API (gpt-4o-mini) to detect misspelled Vietnamese words.
-Same prompt & output format as ollama_spellcheck.py so callers can swap
-freely.
 
 Each entry contains:
 - wrong:       the error phrase WITH 1-2 surrounding words
@@ -30,7 +28,7 @@ from loguru import logger
 
 DEFAULT_MODEL = "gpt-4o-mini"
 DEFAULT_TIMEOUT = 120
-DEFAULT_CHUNK_CHARS = 15000  # gpt-4o-mini has 128K context, can handle big chunks
+DEFAULT_CHUNK_CHARS = 60000  # most stories fit in ONE call; longer text is split into 60k chunks
 
 SYSTEM_PROMPT = (
     "Bạn là công cụ kiểm tra chính tả tiếng Việt cho văn bản truyện.\n\n"
@@ -234,29 +232,50 @@ class OpenAISpellChecker:
                 "summary": "Không có nội dung để kiểm tra.",
             }
 
-        user_prompt = USER_PROMPT_TEMPLATE.format(text=text[:DEFAULT_CHUNK_CHARS])
-        try:
-            raw = self._call_api(user_prompt)
-        except requests.RequestException as e:
-            detail = None
-            resp = getattr(e, "response", None)
-            if resp is not None:
-                try:
-                    detail = resp.json()
-                except Exception:
-                    detail = resp.text
-            logger.error(f"OpenAI grammar check failed: {detail or e}")
-            return {"success": False, "error": f"OpenAI API error: {detail or e}"}
+        # Split the FULL text into chunks so long stories are checked entirely
+        # instead of only the first slice.
+        chunks = _split_text(text, DEFAULT_CHUNK_CHARS)
+        logger.info(
+            f"OpenAI grammar check: {len(text):,} chars -> {len(chunks)} chunk(s) "
+            f"via {self.model}"
+        )
 
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError:
-            logger.warning(f"OpenAI returned invalid JSON: {raw[:200]}")
-            return {"success": False, "error": "OpenAI trả về JSON không hợp lệ"}
-
-        items = parsed.get("misspelled", [])
         spelling_errors: List[Dict] = []
-        if isinstance(items, list):
+        seen = set()
+        truncated = False  # a chunk failed after we already had results
+
+        for i, chunk in enumerate(chunks, 1):
+            if not chunk or not chunk.strip():
+                continue
+            user_prompt = USER_PROMPT_TEMPLATE.format(text=chunk)
+            try:
+                raw = self._call_api(user_prompt)
+            except requests.RequestException as e:
+                detail = None
+                resp = getattr(e, "response", None)
+                if resp is not None:
+                    try:
+                        detail = resp.json()
+                    except Exception:
+                        detail = resp.text
+                logger.error(f"OpenAI grammar check failed (chunk {i}/{len(chunks)}): {detail or e}")
+                # Surface auth/rate errors (which fail deterministically on the
+                # first chunk) instead of a misleading "0 lỗi". If we already
+                # gathered hits from earlier chunks, return them and flag partial.
+                if not spelling_errors:
+                    return {"success": False, "error": f"OpenAI API error: {detail or e}"}
+                truncated = True
+                break
+
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                logger.warning(f"OpenAI returned invalid JSON (chunk {i}): {raw[:200]}")
+                continue
+
+            items = parsed.get("misspelled", [])
+            if not isinstance(items, list):
+                continue
             for it in items:
                 if not isinstance(it, dict):
                     continue
@@ -264,11 +283,19 @@ class OpenAISpellChecker:
                 correct = str(it.get("correct", "")).strip()
                 if not wrong or not correct or wrong == correct:
                     continue
+                key = (wrong, correct)
+                if key in seen:
+                    continue
+                seen.add(key)
                 spelling_errors.append({
                     "original": wrong,
                     "suggestion": correct,
                     "context": str(it.get("explanation", "")).strip(),
                 })
+
+        summary = f"OpenAI ({self.model}): tìm thấy {len(spelling_errors)} lỗi chính tả."
+        if truncated:
+            summary += " (Kiểm tra dừng giữa chừng do lỗi API, kết quả có thể chưa đầy đủ.)"
 
         return {
             "success": True,
@@ -277,7 +304,7 @@ class OpenAISpellChecker:
             "spelling_errors": spelling_errors,
             "watermarks": [],
             "total_watermarks": 0,
-            "summary": f"OpenAI ({self.model}): tìm thấy {len(spelling_errors)} lỗi chính tả.",
+            "summary": summary,
         }
 
 

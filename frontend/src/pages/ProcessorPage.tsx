@@ -214,7 +214,9 @@ export default function ProcessorPage() {
     matchCount: 0,
     isSaving: false,
     isChecking: false,
-    aiResult: null as any
+    aiResult: null as any,
+    selectedErrors: {} as Record<number, boolean>,  // idx -> đang tick (mặc định tick hết)
+    acceptedErrors: {} as Record<number, boolean>,  // idx -> đã áp dụng => ẩn khỏi danh sách
   })
 
   // Merged TTS status for Step 6
@@ -2539,15 +2541,21 @@ export default function ProcessorPage() {
   // AI Grammar check for merged content
   const checkMergedGrammar = async () => {
     if (!storyData.id || !mergedView.content) return
-    setMergedView(prev => ({ ...prev, isChecking: true, aiResult: null }))
+    setMergedView(prev => ({ ...prev, isChecking: true, aiResult: null, selectedErrors: {}, acceptedErrors: {} }))
     try {
-      // Check first 4000 chars (API limit)
+      // Send the FULL story; the backend splits it into chunks and checks all of it.
       const response = await axios.post(`/api/v1/chapters/${chapters[0]?.id || 'temp'}/ai-grammar-check`, {
-        content: mergedView.content.slice(0, 8000)
+        content: mergedView.content
       })
+      // Tick sẵn mọi lỗi (mặc định chọn hết), chưa lỗi nào được áp dụng.
+      const selected: Record<number, boolean> = {}
+      const errs = response.data?.spelling_errors || []
+      errs.forEach((_: any, i: number) => { selected[i] = true })
       setMergedView(prev => ({
         ...prev,
         aiResult: response.data,
+        selectedErrors: selected,
+        acceptedErrors: {},
         isChecking: false
       }))
       if (response.data.success) {
@@ -2558,6 +2566,64 @@ export default function ProcessorPage() {
       showToast(errMessage(error, 'Lỗi khi kiểm tra ngữ pháp'), 'error')
       setMergedView(prev => ({ ...prev, isChecking: false }))
     }
+  }
+
+  // Bật/tắt tick một lỗi.
+  const toggleErrorSelected = (idx: number) => {
+    setMergedView(prev => ({
+      ...prev,
+      selectedErrors: { ...prev.selectedErrors, [idx]: !prev.selectedErrors[idx] }
+    }))
+  }
+
+  // Tick/bỏ tick toàn bộ lỗi chưa áp dụng.
+  const toggleSelectAllErrors = (checked: boolean) => {
+    setMergedView(prev => {
+      const next: Record<number, boolean> = { ...prev.selectedErrors }
+      const errs = prev.aiResult?.spelling_errors || []
+      errs.forEach((_: any, i: number) => { if (!prev.acceptedErrors[i]) next[i] = checked })
+      return { ...prev, selectedErrors: next }
+    })
+  }
+
+  // Áp dụng MỘT lỗi rồi ẩn nó khỏi danh sách.
+  const acceptSingleError = (idx: number) => {
+    const err = mergedView.aiResult?.spelling_errors?.[idx]
+    if (!err) return
+    const newContent = mergedView.content.replaceAll(err.original, err.suggestion)
+    setMergedView(prev => ({
+      ...prev,
+      content: newContent,
+      acceptedErrors: { ...prev.acceptedErrors, [idx]: true }
+    }))
+    showToast(`Đã thay "${err.original}" → "${err.suggestion}"`, 'success')
+  }
+
+  // Áp dụng TẤT CẢ lỗi đang tick (chưa áp dụng), thay từ dài → ngắn để tránh chồng lấn.
+  const acceptAllErrors = () => {
+    const errs = mergedView.aiResult?.spelling_errors || []
+    const targets = errs
+      .map((e: any, i: number) => ({ ...e, _idx: i }))
+      .filter((e: any) => mergedView.selectedErrors[e._idx] && !mergedView.acceptedErrors[e._idx])
+      .sort((a: any, b: any) => b.original.length - a.original.length)
+
+    if (targets.length === 0) {
+      showToast('Chưa chọn lỗi nào để áp dụng', 'info')
+      return
+    }
+
+    let text = mergedView.content
+    const accepted: Record<number, boolean> = { ...mergedView.acceptedErrors }
+    let applied = 0
+    for (const e of targets) {
+      if (text.includes(e.original)) {
+        text = text.replaceAll(e.original, e.suggestion)
+        applied++
+      }
+      accepted[e._idx] = true  // đánh dấu đã xử lý dù còn tìm thấy hay không
+    }
+    setMergedView(prev => ({ ...prev, content: text, acceptedErrors: accepted }))
+    showToast(`Đã áp dụng ${applied}/${targets.length} lỗi`, 'success')
   }
 
   // Render current step content
@@ -3003,38 +3069,82 @@ export default function ProcessorPage() {
                       )}
 
                       {/* Spelling Errors */}
-                      {mergedView.aiResult.spelling_errors && mergedView.aiResult.spelling_errors.length > 0 && (
-                        <div className="mb-4">
-                          <h4 className="font-semibold text-red-700 dark:text-red-400 mb-3 text-lg"> Lỗi chính tả</h4>
-                          <div className="space-y-3">
-                            {mergedView.aiResult.spelling_errors.map((error: any, idx: number) => (
-                              <div key={idx} className="bg-surface-2 border rounded-lg p-3">
-                                <div className="flex items-center justify-between gap-2 mb-2">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="text-dim text-sm">{idx + 1}.</span>
-                                    <span className="bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 px-2 py-1 rounded line-through">{error.original}</span>
-                                    <span className="text-faint"></span>
-                                    <span className="bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 px-2 py-1 rounded font-medium">{error.suggestion}</span>
-                                  </div>
-                                  <button
-                                    onClick={() => {
-                                      const newContent = mergedView.content.replaceAll(error.original, error.suggestion)
-                                      setMergedView(prev => ({ ...prev, content: newContent }))
-                                      showToast(`Đã thay "${error.original}" "${error.suggestion}"`, 'success')
-                                    }}
-                                    className="bg-green-500 text-white px-3 py-1 rounded text-sm font-medium hover:bg-green-600 transition whitespace-nowrap"
-                                  >
-                                    ✓ Accept
-                                  </button>
-                                </div>
-                                {error.context && (
-                                  <p className="text-dim text-sm italic ml-5">"{error.context}"</p>
-                                )}
+                      {mergedView.aiResult.spelling_errors && mergedView.aiResult.spelling_errors.length > 0 && (() => {
+                        const errs = mergedView.aiResult.spelling_errors
+                        // Chỉ số các lỗi CHƯA áp dụng (còn hiển thị).
+                        const remaining = errs
+                          .map((_: any, i: number) => i)
+                          .filter((i: number) => !mergedView.acceptedErrors[i])
+                        const selectedCount = remaining.filter((i: number) => mergedView.selectedErrors[i]).length
+                        const allChecked = remaining.length > 0 && selectedCount === remaining.length
+
+                        if (remaining.length === 0) {
+                          return (
+                            <div className="mb-4 bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30 rounded-lg p-3 text-green-700 dark:text-green-400 text-sm">
+                              ✓ Đã áp dụng toàn bộ {errs.length} lỗi chính tả.
+                            </div>
+                          )
+                        }
+
+                        return (
+                          <div className="mb-4">
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                              <h4 className="font-semibold text-red-700 dark:text-red-400 text-lg">
+                                Lỗi chính tả <span className="text-dim text-sm font-normal">(còn {remaining.length})</span>
+                              </h4>
+                              <div className="flex items-center gap-3">
+                                <label className="flex items-center gap-1.5 text-sm text-dim cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={allChecked}
+                                    onChange={(e) => toggleSelectAllErrors(e.target.checked)}
+                                    className="w-4 h-4 accent-green-500"
+                                  />
+                                  Chọn tất cả
+                                </label>
+                                <button
+                                  onClick={acceptAllErrors}
+                                  disabled={selectedCount === 0}
+                                  className="bg-green-500 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-green-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 transition whitespace-nowrap"
+                                >
+                                  ✓ Accept tất cả ({selectedCount})
+                                </button>
                               </div>
-                            ))}
+                            </div>
+                            <div className="space-y-3">
+                              {errs.map((error: any, idx: number) => (
+                                mergedView.acceptedErrors[idx] ? null : (
+                                  <div key={idx} className="bg-surface-2 border rounded-lg p-3">
+                                    <div className="flex items-center justify-between gap-2 mb-2">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <input
+                                          type="checkbox"
+                                          checked={!!mergedView.selectedErrors[idx]}
+                                          onChange={() => toggleErrorSelected(idx)}
+                                          className="w-4 h-4 accent-green-500"
+                                        />
+                                        <span className="text-dim text-sm">{idx + 1}.</span>
+                                        <span className="bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 px-2 py-1 rounded line-through">{error.original}</span>
+                                        <span className="text-faint">→</span>
+                                        <span className="bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 px-2 py-1 rounded font-medium">{error.suggestion}</span>
+                                      </div>
+                                      <button
+                                        onClick={() => acceptSingleError(idx)}
+                                        className="bg-green-500 text-white px-3 py-1 rounded text-sm font-medium hover:bg-green-600 transition whitespace-nowrap"
+                                      >
+                                        ✓ Accept
+                                      </button>
+                                    </div>
+                                    {error.context && (
+                                      <p className="text-dim text-sm italic ml-5">"{error.context}"</p>
+                                    )}
+                                  </div>
+                                )
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )
+                      })()}
 
                       {/* Watermarks */}
                       {mergedView.aiResult.watermarks && mergedView.aiResult.watermarks.length > 0 && (

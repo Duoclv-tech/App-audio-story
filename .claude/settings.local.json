@@ -70,7 +70,22 @@
       "Bash(./dist/TruyenFullProcessor/_internal/base_library.zip)",
       "Bash(ls dist/TruyenFullProcessor/_internal/truststore)",
       "Bash(./dist/TruyenFullProcessor/TruyenFullProcessor.exe)",
-      "Bash(echo \"APP EXIT: $?\")"
+      "Bash(echo \"APP EXIT: $?\")",
+      "Read(//c/Users/Van Duoc/AppData/Local/TruyenFullProcessor/**)",
+      "Read(//c/Users/Van Duoc/AppData/Local/TruyenFullProcessor//**)",
+      "Bash(sed 's/OPENAI_API_KEY=//')",
+      "Bash(awk '{print \"length=\"length\\($0\\)}')",
+      "Bash(sed 's/.*OPENAI_API_KEY=//')",
+      "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
+      "Bash(PYTHONIOENCODING=utf-8 python *)",
+      "Bash(cd /d/Project/web_app/frontend)",
+      "Bash(ls package.json)",
+      "Bash(node -e \"const s=require\\('./package.json'\\).scripts; console.log\\(JSON.stringify\\(s,null,2\\)\\)\")",
+      "Bash(PYTHONIOENCODING=utf-8 API_PORT=8011 python *)",
+      "Bash(PYTHONIOENCODING=utf-8 API_PORT=8012 python *)",
+      "Bash(PYTHONIOENCODING=utf-8 API_PORT=8013 python *)",
+      "Bash(rm -f backend/check_column.py backend/check_settings_table.py backend/check_status_default.py backend/fix_file_path_nullable.py backend/verify_migration.py backend/seed_voices.py backend/.env.mysql.bak backend/app/services/ollama_spellcheck.py __pycache__/auto_run.cpython-313.pyc)",
+      "Bash(rmdir __pycache__)"
     ],
     "deny": [],
     "ask": []

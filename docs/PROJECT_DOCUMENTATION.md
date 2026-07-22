@@ -195,7 +195,7 @@ Nhiều lớp kiểm tra, kết hợp regex và AI:
 
 **c) AI grammar (Gemini)** — `gemini_service.py`: `check_grammar` trả JSON danh sách lỗi, `improve_text` tối ưu văn bản cho TTS.
 
-**d) Spellcheck LLM (dùng trong batch)** — `openai_spellcheck.py` (gpt-4o-mini) và `ollama_spellcheck.py` (local, structured output). Chia chunk, dedup theo (sai, đúng).
+**d) Spellcheck LLM (dùng trong batch)** — `openai_spellcheck.py` (gpt-4o-mini). Chia chunk, dedup theo (sai, đúng).
 
 **Endpoints** (`/api/v1/chapters`): `check-grammar`, `check-grammar-save`, `story/{id}/check-grammar`, `censored-word/{id}/accept`, `create-chapter-zero`, và nhóm AI: `ai-grammar-check`, `ai-improve`.
 
@@ -369,7 +369,7 @@ Trong quá trình khảo sát phát hiện **secret thật đang bị phơi bày
 - **Không có message queue** (Celery/Redis) — Redis đã được để sẵn comment trong `docker-compose.yml` cho tương lai. Tiến trình theo dõi qua bảng `tasks` + registry in-memory → **không bền vững khi restart backend**.
 - **`init_db()` bị comment** trong `main.py` — bảng **không tự tạo** lúc chạy; phụ thuộc hoàn toàn vào init script của Docker. Migration (`current_step`, `prompts`) phải chạy tay.
 - **ProcessorPage là "God component"** ~5900 dòng gộp toàn bộ 8 bước + nhiều dialog → khó bảo trì; ứng viên số 1 để refactor tách nhỏ.
-- Một vài service (`vietnamese_word_splitter.py`, `openai_spellcheck.py`, `ollama_spellcheck.py`) hiện **chưa được router web gọi trực tiếp** — chủ yếu phục vụ `auto_run.py` hoặc là tiện ích dự phòng.
+- `vietnamese_word_splitter.py` là tiện ích tách từ tiếng Việt dùng nội bộ trong pipeline text, không phải endpoint web riêng.
 - Các endpoint serve/upload file đều có **kiểm tra path traversal** và giới hạn kích thước (SRT ≤ 5MB, upload video ≤ 2GB).
 
 ---

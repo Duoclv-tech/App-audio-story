@@ -11,38 +11,11 @@ echo.
 set "SCRIPT_DIR=%~dp0"
 cd /d "%SCRIPT_DIR%"
 
-:: Check Docker
-echo [1/4] Checking Docker...
-docker --version >nul 2>&1
-if errorlevel 1 (
-    echo [ERROR] Docker is not installed or not running!
-    echo Please install Docker Desktop and start it.
-    pause
-    exit /b 1
-)
-echo [OK] Docker is available
-
-:: Start MySQL
-echo.
-echo [2/4] Starting MySQL container...
-cd docker
-docker compose up -d mysql
-if errorlevel 1 (
-    echo [ERROR] Failed to start MySQL container!
-    pause
-    exit /b 1
-)
-cd ..
-echo [OK] MySQL container started
-echo      Waiting 10 seconds for MySQL to be ready...
-timeout /t 10 /nobreak >nul
-
 :: Create logs directory
 if not exist "logs" mkdir logs
 
 :: Start Backend
-echo.
-echo [3/4] Starting Backend (FastAPI)...
+echo [1/2] Starting Backend (FastAPI + SQLite)...
 cd backend
 
 :: Create venv if not exists
@@ -61,23 +34,23 @@ if not exist "venv\.installed" (
     call venv\Scripts\activate.bat
 )
 
-:: Copy .env if not exists
+:: Copy .env if not exists (optional - API keys are normally set in Settings UI)
 if not exist ".env" (
     if exist ".env.example" (
         copy .env.example .env >nul
-        echo [WARNING] Created .env file - please configure it!
+        echo [INFO] Created .env from .env.example ^(optional overrides^)
     )
 )
 
-:: Start backend server
+:: Start backend server (SQLite DB is created automatically; binds loopback)
 echo      Starting FastAPI server on port 8000...
-start "Backend-FastAPI" cmd /c "call venv\Scripts\activate.bat && python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
+start "Backend-FastAPI" cmd /c "call venv\Scripts\activate.bat && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000"
 cd ..
 echo [OK] Backend started
 
 :: Start Frontend
 echo.
-echo [4/4] Starting Frontend (React + Vite)...
+echo [2/2] Starting Frontend (React + Vite)...
 cd frontend
 
 :: Install dependencies if not exists

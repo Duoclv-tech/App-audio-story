@@ -1,231 +1,201 @@
-# 📖 TruyenFull Processor - Web Application
+# 📖 TruyenFull Processor
 
-A full-stack web application for downloading, processing, and converting stories from TruyenFull to audio using VBEE TTS.
+Turns web novels into **audiobooks and subtitled videos** through a guided, multi-step media pipeline:
+
+```
+Download chapters → Edit / censor text → AI grammar check → TTS (voice) → Merge audio → Render video → Export
+```
+
+Ships two ways: a **packaged Windows desktop app** (recommended for end users) and a **web app in dev mode** (backend + frontend) for development.
 
 ## 🏗️ Architecture
 
 ```
-Frontend: React + TypeScript + Tailwind CSS (Port: 5173)
-Backend:  FastAPI + Python (Port: 8000)
-Database: MySQL 8.0 (Docker, Port: 3307)
-Storage:  Local filesystem
+Frontend:  React 18 + TypeScript + Vite + Tailwind CSS   (dev port 5173)
+Backend:   FastAPI + SQLAlchemy 2.0 + Uvicorn            (port 8000 / random in desktop)
+Database:  SQLite (single file, per-user data dir)        — MySQL optional via DATABASE_URL
+Media:     FFmpeg / ffprobe (subprocess), Pillow
+Desktop:   pywebview (WebView2) + PyInstaller → .exe / Inno Setup installer
 ```
 
-## 📦 Prerequisites
+The desktop build runs the FastAPI server on `127.0.0.1:<random port>` and renders it in a native WebView2 window — no browser, no Docker, no external database.
 
-- **Docker & Docker Compose** (for MySQL)
-- **Python 3.10+** (for backend)
-- **Node.js 18+** (for frontend)
-- **FFmpeg** (for audio processing)
+## ✨ Features
 
-## 🚀 Quick Start
+- **Download** chapters from supported hosts, or paste / upload content directly and auto-split into chapters.
+- **Edit & censor** — review chapter text, handle masked/censored/merged words, manage a banned-words list.
+- **AI grammar check** — Google Gemini reviews and improves merged content.
+- **Text-to-speech, two engines:**
+  - **VBEE** (cloud API) — 14 Vietnamese voices, configured via the Settings UI.
+  - **OmniVoice** (local, embedded) — runs on NVIDIA GPU (or CPU, slower); self-disables if torch/CUDA/model is missing so VBEE keeps working.
+- **Merge audio** into a single file per story.
+- **Render video** from audio + background clips with subtitles (auto-detects NVENC GPU encoding, falls back to libx264). Includes a standalone **video trimmer**.
+- **Export** to documents (`python-docx`).
+- **Crash recovery** — reconciles orphaned tasks and cleans temp files / VRAM on restart.
+- **License activation** — node-locked, offline (Ed25519). Enforced in the packaged `.exe`.
 
-### 1. Start MySQL Database
+## 🚀 Option A — Run the desktop app (end users)
 
-```bash
-cd docker
-docker-compose up -d
-```
+Install and launch:
 
-Wait for MySQL to be ready (~10 seconds).
+1. Run `packaging/Output/TruyenFullProcessor-Setup.exe` (built with Inno Setup).
+2. Launch **TruyenFull Processor** from the Start menu.
+3. Activate your license on first run (Activation screen).
+4. Open **Settings** and enter your API keys (VBEE / Gemini / OpenAI) — keys are stored in the local SQLite DB, nothing is hardcoded.
 
-### 2. Start Backend
+User data lives in `%LOCALAPPDATA%\TruyenFullProcessor\`: `app.db` (SQLite), `storage/`, `cache/`, `logs/`.
+
+To run the frozen build without installing, from the repo: `dist/TruyenFullProcessor/TruyenFullProcessor.exe`.
+
+## 🧑‍💻 Option B — Run in dev mode (developers)
+
+No Docker or MySQL required — the backend creates a SQLite database automatically.
+
+### 1. Backend
 
 ```bash
 cd backend
 
 # Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+venv\Scripts\activate          # Windows (Git Bash: source venv/Scripts/activate)
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Copy environment file
-cp .env.example .env
-# Edit .env and configure your settings
+# (optional) create .env for overrides — API keys are normally set in the Settings UI
+# copy .env.example .env
 
-# Run server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# Run the API server
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Backend will be available at:
+Backend endpoints:
 
 - API: http://localhost:8000
 - API Docs: http://localhost:8000/docs
 - Health Check: http://localhost:8000/health
 
-### 3. Start Frontend
+Or run the full desktop shell in dev: `python backend/desktop.py`.
+
+### 2. Frontend
 
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Run dev server
-npm run dev
+npm run dev            # Vite dev server on http://localhost:5173, proxies /api → :8000
 ```
 
-Frontend will be available at: http://localhost:5173
+> **FFmpeg** is required for audio/video steps. Place `ffmpeg.exe` / `ffprobe.exe` in `backend/bin/`, or install FFmpeg on the system PATH.
 
 ## 📁 Project Structure
 
 ```
 web_app/
-├── docker/                    # Docker configuration
-│   ├── docker-compose.yml
-│   └── mysql/
-│       ├── init.sql
-│       └── my.cnf
 ├── backend/                   # FastAPI backend
 │   ├── app/
-│   │   ├── api/              # API endpoints
-│   │   ├── services/         # Business logic
-│   │   ├── models.py         # Database models
-│   │   ├── schemas.py        # Pydantic schemas
-│   │   ├── database.py       # Database config
-│   │   ├── config.py         # Settings
-│   │   └── main.py           # FastAPI app
-│   ├── storage/              # File storage
-│   ├── requirements.txt
-│   └── .env
-└── frontend/                  # React frontend
-    ├── src/
-    │   ├── components/
-    │   ├── pages/
-    │   ├── services/
-    │   └── App.tsx
-    ├── package.json
-    └── vite.config.ts
+│   │   ├── api/               # Routers (stories, download, tts, video, license, …)
+│   │   ├── services/          # Business logic (downloader, tts, video, spellcheck, …)
+│   │   ├── license/           # Node-locked activation (Ed25519, offline)
+│   │   ├── models.py          # SQLAlchemy models
+│   │   ├── schemas.py         # Pydantic schemas
+│   │   ├── database.py        # DB engine (SQLite default, MySQL optional)
+│   │   ├── config.py          # Settings
+│   │   ├── paths.py           # Per-user data dir resolution (dev + frozen)
+│   │   └── main.py            # FastAPI app
+│   ├── desktop.py             # Desktop entry point (uvicorn + pywebview)
+│   ├── bin/                   # ffmpeg.exe / ffprobe.exe (not committed)
+│   └── requirements.txt
+├── frontend/                  # React + Vite frontend
+│   └── src/{components,pages,services}
+├── packaging/                 # PyInstaller specs + Inno Setup installer
+│   ├── truyenfull.spec        # CPU build
+│   ├── truyenfull-gpu.spec    # GPU (OmniVoice) build
+│   ├── installer.iss          # Inno Setup script
+│   └── BUILD.md               # Build instructions
+├── dist/                      # PyInstaller output (TruyenFullProcessor.exe)
+└── docs/PROJECT_DOCUMENTATION.md   # Full architecture & flow reference
 ```
 
 ## 🔧 Configuration
 
-### Backend (.env)
+Runtime credentials (VBEE, Gemini) are read **from the `settings` table in the DB first**, then `.env` as a fallback — so they can be changed from the Settings UI without a restart. No secrets are hardcoded.
+
+Optional `backend/.env` overrides:
 
 ```bash
-# Database
-DATABASE_URL=mysql+pymysql://truyenfull_user:truyenfull_pass@localhost:3307/truyenfull_db
+# Point at MySQL instead of the default SQLite (advanced)
+# DATABASE_URL=mysql+pymysql://user:pass@localhost:3306/truyenfull_db
 
-# VBEE TTS API (required for TTS functionality)
-VBEE_API_KEY=your_api_key_here
-VBEE_API_URL=https://api.vbee.ai/v1
+# Optional .env fallbacks (primary source is the Settings UI / DB)
+VBEE_APP_ID=
+VBEE_BEARER_TOKEN=
+GEMINI_API_KEY=
+OPENAI_API_KEY=          # only used by the OpenAI spellcheck step
 
-# Server
+# OmniVoice local TTS
+OMNIVOICE_ENABLED=True
+OMNIVOICE_DEVICE=cuda:0  # set to "cpu" to force CPU
+
+# Server (dev) — binds loopback by default; the API has no auth
+API_HOST=127.0.0.1
 API_PORT=8000
-DEBUG=True
-
-# CORS
-CORS_ORIGINS=http://localhost:5173
+DEBUG=False
 ```
-
-### Frontend
-
-API proxy is configured in `vite.config.ts` to proxy `/api/*` requests to `http://localhost:8000`.
 
 ## 📊 Database
 
-MySQL database is automatically initialized with the schema defined in `docker/mysql/init.sql`.
+SQLite by default (`app.db`), created and migrated automatically on startup. Tables:
 
-**Tables:**
+`stories` · `chapters` · `audio_files` · `merged_audio` · `tasks` · `voices` · `censored_words` · `banned_words` · `video_outputs` · `video_presets` · `prompts` · `settings`
 
-- `stories` - Story metadata
-- `chapters` - Chapter content
-- `audio_files` - Generated audio files
-- `merged_audio` - Merged audio files
-- `tasks` - Background task tracking
-- `censored_words` - Censored word tracking
-- `settings` - Application settings
+## 🎯 Workflow (8-step wizard)
 
-## 🎯 Workflow
+State is tracked in `stories.current_step`; you can go back to any completed step.
 
-1. **Input** - Enter TruyenFull URL and chapter range
-2. **Download** - Download chapters from TruyenFull
-3. **Edit** - Review and edit chapter content, check for censored words
-4. **Confirm** - Configure TTS settings
-5. **TTS** - Convert text to speech using VBEE API
-6. **Merge** - Merge audio files into single file
-7. **Complete** - Download merged audio file
+```
+(1) Input → (2) Download → (3) Edit → (4) Grammar → (5) TTS Config
+                                                          │
+(8) Complete ← (7) Video ← (6) TTS Process ←──────────────┘
+```
+
+1. **Input** — story URL / title / chapter range, or pasted/uploaded content.
+2. **Download** — fetch chapters into the DB (auto).
+3. **Edit** — review text, handle censored/merged words.
+4. **Grammar** — AI grammar check (Gemini) on merged content.
+5. **TTS Config** — pick engine (VBEE / OmniVoice), voice, speed, volume.
+6. **TTS Process** — synthesize audio, retry per chapter.
+7. **Video** — render video from audio + background clips with subtitles.
+8. **Complete** — download the finished audio / video.
 
 ## 🔌 API Endpoints
 
-### Stories
+All routers are mounted under `/api/v1/*`:
 
-- `POST /api/v1/stories` - Create story project
-- `GET /api/v1/stories` - List all stories
-- `GET /api/v1/stories/{id}` - Get story details
-- `PUT /api/v1/stories/{id}` - Update story
-- `DELETE /api/v1/stories/{id}` - Delete story
-- `GET /api/v1/stories/{id}/stats` - Get story statistics
+`stories` · `chapters` · `download` · `text` · `tts` · `audio` · `video` · `video-presets` · `trim` · `settings` · `banned-words` · `prompts` · `export` · `license`
 
-### Download
+See interactive docs at http://localhost:8000/docs.
 
-- `POST /api/v1/download/start` - Start download
-- `GET /api/v1/download/{task_id}/status` - Check status
-- `POST /api/v1/download/pause` - Pause download
-- `POST /api/v1/download/resume` - Resume download
-- `POST /api/v1/download/cancel` - Cancel download
+## 📦 Building the desktop app
 
-### TTS
-
-- `POST /api/v1/tts/start` - Start TTS processing
-- `GET /api/v1/tts/{task_id}/status` - Check TTS status
-- `GET /api/v1/tts/voices` - List available voices
-
-### Audio
-
-- `GET /api/v1/audio/{story_id}` - List audio files
-- `POST /api/v1/audio/merge/start` - Start merging
-- `GET /api/v1/audio/merge/{task_id}/status` - Check merge status
-
-## 🛠️ Development
-
-### Backend Development
+See [`packaging/BUILD.md`](packaging/BUILD.md) for the full process. In short:
 
 ```bash
-cd backend
-source venv/bin/activate
-uvicorn app.main:app --reload
+# 1. Build frontend (static)
+cd frontend && npm run build
+
+# 2. Package with PyInstaller (from repo root)
+backend/venv/Scripts/pyinstaller.exe packaging/truyenfull.spec --noconfirm
+#   GPU build: packaging/truyenfull-gpu.spec
+
+# 3. Smoke-test the frozen build (no window)
+dist/TruyenFullProcessor/TruyenFullProcessor.exe --selftest
+
+# 4. Create the installer (requires Inno Setup 6)
+iscc packaging\installer.iss
+#   -> packaging/Output/TruyenFullProcessor-Setup.exe
 ```
-
-### Frontend Development
-
-```bash
-cd frontend
-npm run dev
-```
-
-### Database Management
-
-```bash
-# Stop database
-cd docker
-docker-compose down
-
-# Restart database (fresh)
-docker-compose down -v
-docker-compose up -d
-
-# View logs
-docker-compose logs -f mysql
-```
-
-## 📝 TODO
-
-- [ ] Implement core services (downloader, text_checker, tts_processor, audio_merger)
-- [ ] Implement frontend UI components and pages
-- [ ] Add WebSocket/SSE for real-time updates
-- [ ] Add authentication (optional)
-- [ ] Add file upload/download endpoints
-- [ ] Implement error handling and retry logic
-- [ ] Add unit tests
-- [ ] Add integration tests
-
-## 🤝 Contributing
-
-This is a local development project. Core services need to be refactored from the existing `make_story/` directory.
 
 ## 📄 License
 
-Private project for personal use.
+Private project. Distribution is gated by node-locked license activation.

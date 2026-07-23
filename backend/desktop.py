@@ -246,6 +246,8 @@ def main() -> int:
     webview.create_window(
         WINDOW_TITLE, url, js_api=NativeApi(),
         width=1400, height=900, min_size=(1000, 700),
+        text_select=True,  # pywebview disables page text selection by default;
+                           # enable it so users can drag-select & copy any text.
     )
     try:
         webview.start()  # blocks until the window is closed

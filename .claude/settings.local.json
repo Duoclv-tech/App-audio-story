@@ -85,7 +85,12 @@
       "Bash(PYTHONIOENCODING=utf-8 API_PORT=8012 python *)",
       "Bash(PYTHONIOENCODING=utf-8 API_PORT=8013 python *)",
       "Bash(rm -f backend/check_column.py backend/check_settings_table.py backend/check_status_default.py backend/fix_file_path_nullable.py backend/verify_migration.py backend/seed_voices.py backend/.env.mysql.bak backend/app/services/ollama_spellcheck.py __pycache__/auto_run.cpython-313.pyc)",
-      "Bash(rmdir __pycache__)"
+      "Bash(rmdir __pycache__)",
+      "Bash(git commit *)",
+      "Bash(npm --prefix frontend run build)",
+      "Bash(backend/venv/Scripts/pyinstaller.exe packaging/truyenfull-gpu.spec --noconfirm --distpath dist --workpath build)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(powershell -NoProfile -Command \"Get-Process TruyenFullProcessor -ErrorAction SilentlyContinue | Select-Object Id,ProcessName\")"
     ],
     "deny": [],
     "ask": []

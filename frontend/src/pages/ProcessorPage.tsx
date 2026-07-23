@@ -26,6 +26,12 @@ const WORKFLOW_STEPS = [
 // Visible steps for UI (filter out hidden ones)
 const VISIBLE_STEPS = WORKFLOW_STEPS.filter(step => !step.hidden)
 
+// Prompt gợi ý để người dùng tự kiểm tra chính tả miễn phí trên AI Studio / Gemini
+// (thay vì gọi API tốn phí). Copy prompt này kèm nội dung truyện rồi dán vào chat.
+const SPELLCHECK_PROMPT =
+  'Đọc kĩ từng dòng và check chính tả văn bản, liệt kê các từ sai chính tả và ' +
+  'gợi ý chỉnh sửa, xem có các watermark nào không? hãy liệt kê nữa'
+
 // Normalize a FastAPI error `detail` into a plain string. FastAPI 422 responses
 // return `detail` as an ARRAY of objects — rendering that directly as a React
 // child throws "Objects are not valid as a React child" and blanks the page.
@@ -918,6 +924,16 @@ export default function ProcessorPage() {
     setTimeout(() => {
       setToast(prev => ({ ...prev, isVisible: false }))
     }, 3000)
+  }
+
+  // Copy text vào clipboard + báo toast (dùng cho nút copy prompt gợi ý).
+  const copyText = async (text: string, okMsg = 'Đã copy') => {
+    try {
+      await navigator.clipboard.writeText(text)
+      showToast(okMsg, 'success')
+    } catch {
+      showToast('Không copy được, hãy bôi đen và Ctrl+C thủ công', 'error')
+    }
   }
 
   // Download the finished merged audio (the wizard's final deliverable).
@@ -2905,7 +2921,48 @@ export default function ProcessorPage() {
         return (
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3 mb-4">
-              <h3 className="text-xl font-semibold tracking-tight">Kiểm tra chính tả</h3>
+              <h3 className="text-xl font-semibold tracking-tight flex items-center gap-2">
+                Kiểm tra chính tả
+                {/* Icon hướng dẫn: hover để hiện cách kiểm tra miễn phí bằng AI Studio/Gemini */}
+                <span className="relative group inline-flex align-middle">
+                  <span
+                    className="flex items-center justify-center w-5 h-5 rounded-full bg-primary-100 dark:bg-primary-500/20 text-primary-700 dark:text-primary-300 text-xs font-bold cursor-help select-none"
+                    aria-label="Hướng dẫn kiểm tra chính tả miễn phí"
+                  >
+                    i
+                  </span>
+                  <div className="pointer-events-none absolute left-0 top-full z-30 pt-2 w-[26rem] max-w-[90vw] opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-hover:pointer-events-auto">
+                    <div className="rounded-lg border border-primary-200 dark:border-primary-500/30 bg-primary-50 dark:bg-primary-500/10 p-4 shadow-lg text-left font-normal">
+                      <div className="text-sm font-medium text-primary-800 dark:text-primary-300 mb-2">
+                        Không muốn tốn phí API? Kiểm tra miễn phí bằng AI Studio / Gemini
+                      </div>
+                      <p className="text-sm text-dim mb-3">
+                        Copy prompt bên dưới kèm nội dung truyện rồi dán vào{' '}
+                        <b>Google AI Studio</b> (aistudio.google.com) hoặc <b>Gemini</b> để nhờ AI
+                        kiểm tra miễn phí, sau đó tự sửa lại trong ô nội dung.
+                      </p>
+                      <div className="bg-surface border rounded-lg p-3 font-mono text-xs leading-5 whitespace-pre-wrap text-strong mb-3">
+                        {SPELLCHECK_PROMPT}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => copyText(SPELLCHECK_PROMPT, 'Đã copy prompt')}
+                          className="btn btn-secondary text-xs"
+                        >
+                          📋 Copy prompt
+                        </button>
+                        <button
+                          onClick={() => copyText(`${SPELLCHECK_PROMPT}\n\n${mergedView.content}`, 'Đã copy prompt + nội dung truyện')}
+                          disabled={!mergedView.content}
+                          className="btn btn-primary text-xs disabled:opacity-50"
+                        >
+                          📋 Copy prompt + nội dung truyện
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </span>
+              </h3>
               <span className="step-badge">BƯỚC 3/7</span>
             </div>
 
@@ -2923,10 +2980,15 @@ export default function ProcessorPage() {
 
             {(mergedView.content || mergedView.isOpen) && (
               <div className="space-y-4">
-                {/* Find & Replace */}
-                <div className="bg-surface border rounded-lg p-4">
-                  <h4 className="font-semibold text-strong mb-3"> Tìm và Thay thế</h4>
-                  <div className="flex flex-wrap gap-2 items-center">
+                {/* Find & Replace — thu gọn được để không chiếm chỗ */}
+                <details className="bg-surface border rounded-lg group/fr">
+                  <summary className="flex items-center gap-2 cursor-pointer select-none font-semibold text-strong px-4 py-3 list-none [&::-webkit-details-marker]:hidden">
+                    <svg className="w-4 h-4 shrink-0 transition-transform group-open/fr:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                    Tìm và Thay thế
+                  </summary>
+                  <div className="flex flex-wrap gap-2 items-center px-4 pb-4">
                     <input
                       type="text"
                       placeholder="Tìm kiếm..."
@@ -2957,7 +3019,7 @@ export default function ProcessorPage() {
                       Thay thế tất cả
                     </button>
                   </div>
-                </div>
+                </details>
 
                 {/* Text Editor */}
                 <div className="border rounded-lg overflow-hidden">

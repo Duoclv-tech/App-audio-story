@@ -3373,11 +3373,9 @@ export default function ProcessorPage() {
                           />
                           <span>
                             <span className="font-medium">Chạy trên CPU thay vì GPU</span>
-                            <span className="block text-dim mt-0.5">
-                              {noGpu
+                            <span className="text-dim"> — {noGpu
                                 ? 'Máy không có GPU NVIDIA nên bắt buộc chạy CPU. ⚠️ Rất chậm (~15–20× thời gian thực) — hợp câu ngắn.'
-                                : 'Tích nếu muốn chạy bằng CPU. ⚠️ Chậm hơn GPU nhiều lần — bình thường nên để tắt.'}
-                            </span>
+                                : 'Tích nếu muốn chạy bằng CPU. ⚠️ Chậm hơn GPU nhiều lần — bình thường nên để tắt.'}</span>
                           </span>
                         </label>
                       </div>
@@ -3424,11 +3422,9 @@ export default function ProcessorPage() {
                               />
                               <span>
                                 <span className="font-medium">Chạy trên CPU thay vì GPU</span>
-                                <span className="block text-dim mt-0.5">
-                                  {noGpu
+                                <span className="text-dim"> — {noGpu
                                     ? 'Máy không có GPU NVIDIA nên bắt buộc chạy CPU. ⚠️ Rất chậm (~15–20× thời gian thực) — hợp câu ngắn.'
-                                    : 'Tích nếu muốn chạy bằng CPU. ⚠️ Chậm hơn GPU nhiều lần — bình thường nên để tắt.'}
-                                </span>
+                                    : 'Tích nếu muốn chạy bằng CPU. ⚠️ Chậm hơn GPU nhiều lần — bình thường nên để tắt.'}</span>
                               </span>
                             </label>
                           )}
@@ -3506,8 +3502,9 @@ export default function ProcessorPage() {
                       </select>
                     </div>
 
-                    {/* Right column: UI tương ứng với chế độ đang chọn */}
-                    <div className="space-y-4">
+                    {/* Right column: UI tương ứng với chế độ đang chọn.
+                        md:mt-6 = chiều cao label + mb-1 của cột trái, để hàng đầu căn ngang ô select thay vì ngang label. */}
+                    <div className="space-y-4 md:mt-6">
                       {ttsConfig.mode === 'auto' && (
                         <div className="rounded-xl p-4 bg-surface-2 border border-token text-sm text-dim">
                           Auto: model tự chọn giọng đọc — không cần cấu hình thêm.

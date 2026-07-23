@@ -59,6 +59,12 @@
     background-color: initial;
     color: initial;
   }
+  /* Danh sách option khi mở select do trình duyệt tự vẽ (native) nên style hạn chế,
+     nhưng đặt nền/chữ theo token giúp không bị trắng lạc tông ở dark mode. */
+  option {
+    background-color: var(--surface);
+    color: var(--text);
+  }
   ::placeholder { color: var(--text-faint); opacity: 1; }
 
   /* Default border color follows the theme (overrides Tailwind gray-200 default

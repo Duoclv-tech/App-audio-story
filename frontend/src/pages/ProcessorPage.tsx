@@ -182,6 +182,7 @@ export default function ProcessorPage() {
   const [omniStatus, setOmniStatus] = useState<any>(null)
   const [omniPresets, setOmniPresets] = useState<any[]>([])
   const [omniDownloading, setOmniDownloading] = useState(false)
+  const [showOmniAdvanced, setShowOmniAdvanced] = useState(false)
   const [newPreset, setNewPreset] = useState<{ name: string; ref_text: string; file: File | null }>({
     name: '', ref_text: '', file: null,
   })
@@ -3322,6 +3323,8 @@ export default function ProcessorPage() {
                 ))}
               </div>
 
+              {/* Scrollable settings area — tabs above stay fixed */}
+              <div className="space-y-4 overflow-y-auto pr-2 max-h-[calc(100vh-340px)]">
               {/* ---------- VBEE tab ---------- */}
               {ttsConfig.engine === 'vbee' && (
                 <div className="space-y-4">
@@ -3346,9 +3349,12 @@ export default function ProcessorPage() {
               {/* ---------- OmniVoice tab ---------- */}
               {ttsConfig.engine === 'omnivoice' && (
                 <div className="space-y-4">
-                  {/* Device (GPU/CPU) selector — auto-detected default, overridable */}
+                  {/* Device (GPU/CPU) selector — hidden in happy path (folded into the compact chip below) */}
                   {omniStatus?.availability && (() => {
                     const av = omniStatus.availability
+                    const dl = omniStatus.downloads?.base
+                    // Happy path (model ready & not downloading) → collapse into the compact chip below
+                    if (av?.ready && dl?.state !== 'downloading') return null
                     const noGpu = av.deps_installed && !av.gpu_available
                     return (
                       <div className="rounded-lg p-3 border border-token bg-surface-2 space-y-2">
@@ -3387,9 +3393,45 @@ export default function ProcessorPage() {
                     const mb = (b?: number) => ((b || 0) / 1048576).toFixed(0)
                     // Ready and not currently downloading → green confirmation
                     if (ready && state !== 'downloading') {
+                      const noGpu = av?.deps_installed && !av?.gpu_available
+                      const device = av?.cpu_mode ? 'CPU' : (av?.gpu_available ? 'GPU NVIDIA' : 'CPU')
                       return (
-                        <div className="rounded-lg p-2.5 text-sm bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30">
-                          ✅ Model OmniVoice đã sẵn sàng
+                        <div className="rounded-lg border border-token bg-surface-2">
+                          <div className="flex items-center justify-between px-3 py-2 text-sm">
+                            <span className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-green-600 dark:text-green-400">✅</span>
+                              <span className="font-medium">Sẵn sàng</span>
+                              <span className="text-dim">·</span>
+                              <span className="text-dim truncate">{device}</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setShowOmniAdvanced((v) => !v)}
+                              className="shrink-0 flex items-center gap-1 text-xs text-dim hover:text-primary-600"
+                            >
+                              ⚙ Tuỳ chọn
+                              <span className={`transition-transform ${showOmniAdvanced ? 'rotate-180' : ''}`}>▾</span>
+                            </button>
+                          </div>
+                          {showOmniAdvanced && av && (
+                            <label className={`flex items-start gap-2 text-sm px-3 pb-3 pt-1 border-t border-token ${noGpu ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}>
+                              <input
+                                type="checkbox"
+                                className="mt-0.5 h-4 w-4"
+                                checked={!!av.cpu_mode}
+                                disabled={noGpu}
+                                onChange={(e) => handleSetOmniCpu(e.target.checked)}
+                              />
+                              <span>
+                                <span className="font-medium">Chạy trên CPU thay vì GPU</span>
+                                <span className="block text-dim mt-0.5">
+                                  {noGpu
+                                    ? 'Máy không có GPU NVIDIA nên bắt buộc chạy CPU. ⚠️ Rất chậm (~15–20× thời gian thực) — hợp câu ngắn.'
+                                    : 'Tích nếu muốn chạy bằng CPU. ⚠️ Chậm hơn GPU nhiều lần — bình thường nên để tắt.'}
+                                </span>
+                              </span>
+                            </label>
+                          )}
                         </div>
                       )
                     }
@@ -3447,20 +3489,30 @@ export default function ProcessorPage() {
                     )
                   })()}
 
-                  {/* Mode (OmniVoice base model — no model picker) */}
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Chế độ</label>
-                    <select
-                      value={ttsConfig.mode}
-                      onChange={(e) => setTtsConfig({ ...ttsConfig, mode: e.target.value as any })}
-                      className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      disabled={loading}
-                    >
-                      <option value="auto">Auto (model tự chọn giọng)</option>
-                      <option value="clone">Clone (giọng từ mẫu)</option>
-                      <option value="design">Design (mô tả giọng)</option>
-                    </select>
-                  </div>
+                  {/* Mode + its matching UI side by side (left = chế độ, right = UI của chế độ đó) */}
+                  <div className="grid grid-cols-1 md:grid-cols-[minmax(0,260px)_1fr] gap-4 items-start">
+                    {/* Left column: mode selector */}
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Chế độ</label>
+                      <select
+                        value={ttsConfig.mode}
+                        onChange={(e) => setTtsConfig({ ...ttsConfig, mode: e.target.value as any })}
+                        className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        disabled={loading}
+                      >
+                        <option value="auto">Auto (model tự chọn giọng)</option>
+                        <option value="clone">Clone (giọng từ mẫu)</option>
+                        <option value="design">Design (mô tả giọng)</option>
+                      </select>
+                    </div>
+
+                    {/* Right column: UI tương ứng với chế độ đang chọn */}
+                    <div className="space-y-4">
+                      {ttsConfig.mode === 'auto' && (
+                        <div className="rounded-xl p-4 bg-surface-2 border border-token text-sm text-dim">
+                          Auto: model tự chọn giọng đọc — không cần cấu hình thêm.
+                        </div>
+                      )}
 
                   {/* Clone mode: preset picker + create */}
                   {ttsConfig.mode === 'clone' && (
@@ -3565,6 +3617,8 @@ export default function ProcessorPage() {
                       />
                     </div>
                   )}
+                    </div>
+                  </div>
 
                   {/* Language */}
                   <div>
@@ -3615,13 +3669,30 @@ export default function ProcessorPage() {
               {error && (
                 <div className="text-red-600 dark:text-red-400 text-sm">{error}</div>
               )}
+              {/* Hint why the Start button is locked (OmniVoice needs a valid voice/config) */}
+              {(() => {
+                if (ttsConfig.engine !== 'omnivoice' || !omniStatus?.availability?.ready) return null
+                if (ttsConfig.mode === 'clone' && !ttsConfig.preset_id)
+                  return <div className="text-amber-600 dark:text-amber-400 text-sm">Hãy chọn một giọng đã clone (hoặc tạo giọng mới) trước khi bắt đầu.</div>
+                if (ttsConfig.mode === 'design' && !ttsConfig.instruct.trim())
+                  return <div className="text-amber-600 dark:text-amber-400 text-sm">Hãy nhập mô tả giọng (instruct) trước khi bắt đầu.</div>
+                return null
+              })()}
               <button
                 onClick={handleStartTTS}
-                disabled={loading || (ttsConfig.engine === 'omnivoice' && !omniStatus?.availability?.ready)}
-                className="w-full bg-primary-500 text-white py-2 px-4 rounded-md hover:bg-primary-600 transition disabled:bg-gray-400"
+                disabled={
+                  loading ||
+                  (ttsConfig.engine === 'omnivoice' && (
+                    !omniStatus?.availability?.ready ||
+                    (ttsConfig.mode === 'clone' && !ttsConfig.preset_id) ||
+                    (ttsConfig.mode === 'design' && !ttsConfig.instruct.trim())
+                  ))
+                }
+                className="w-full bg-primary-500 text-white py-2 px-4 rounded-md hover:bg-primary-600 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
                 {loading ? 'Processing TTS...' : 'Start TTS Processing'}
               </button>
+              </div>
             </div>
           </div>
         )

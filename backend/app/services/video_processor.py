@@ -29,7 +29,7 @@ from loguru import logger
 from sqlalchemy.orm import Session
 from app import models
 from app.config import settings
-from app.services.output_delivery import deliver_final
+from app.services.output_delivery import deliver_final, safe_file_stem
 
 VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v'}
 
@@ -1982,9 +1982,11 @@ class VideoProcessor:
                         # Deliver the finished long video to the user's output
                         # folder (Downloads by default). Serving/preview is
                         # path-based, so the DB just stores the delivered path.
+                        _sub = safe_file_stem(story.title if story and story.title else story_id, story_id)
                         result["output_path"] = deliver_final(
                             result["output_path"], db,
                             filename=f"{story_folder}_final.mp4",
+                            subfolder=_sub,
                         )
 
                         # 7. Save to DB

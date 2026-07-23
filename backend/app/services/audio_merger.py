@@ -442,7 +442,7 @@ class AudioMerger:
             if result["success"]:
                 # Deliver finished audio to the user's output folder (Downloads default)
                 _name = safe_file_stem(story.title if story and story.title else story_id, story_id)
-                final_path = deliver_final(str(output_path), db, filename=f"{_name}.{format}")
+                final_path = deliver_final(str(output_path), db, filename=f"{_name}.{format}", subfolder=_name)
 
                 # Save merged audio record
                 merged_audio = models.MergedAudio(

@@ -170,7 +170,7 @@ async def merge_selected_chapters(
         if result.get("success"):
             # Deliver finished audio to the user's output folder (Downloads default)
             _name = safe_file_stem(story.title if story and story.title else story_id, output_name)
-            final_path = deliver_final(str(output_path), db, filename=f"{_name}.{format}")
+            final_path = deliver_final(str(output_path), db, filename=f"{_name}.{format}", subfolder=_name)
             result["output_path"] = final_path
 
             # Save merged audio record

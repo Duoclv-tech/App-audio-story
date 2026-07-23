@@ -347,7 +347,7 @@ class OmniVoiceProcessor:
 
             # Deliver finished audio to the user's output folder (Downloads default)
             _name = safe_file_stem(story.title if story and story.title else story_id, story_id)
-            final_path = deliver_final(str(output_path), db, filename=f"{_name}.mp3")
+            final_path = deliver_final(str(output_path), db, filename=f"{_name}.mp3", subfolder=_name)
 
             merged_audio = db.query(models.MergedAudio).filter(
                 models.MergedAudio.story_id == story_id

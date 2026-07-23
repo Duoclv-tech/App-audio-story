@@ -632,7 +632,7 @@ class VbeeTTSProcessor:
             # delivered path in the DB and downstream steps keep working.
             _story = db.query(models.Story).filter(models.Story.id == story_id).first()
             _name = safe_file_stem(_story.title if _story and _story.title else story_id, story_id)
-            final_path = deliver_final(str(output_path), db, filename=f"{_name}.{audio_type}")
+            final_path = deliver_final(str(output_path), db, filename=f"{_name}.{audio_type}", subfolder=_name)
 
             # Save to MergedAudio table
             merged_audio = db.query(models.MergedAudio).filter(

@@ -3684,11 +3684,25 @@ export default function ProcessorPage() {
 
                 {/* Audio File */}
                 {mergedTtsStatus.audioFile && (
-                  <div className="text-sm text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-500/20 p-2 rounded">
-                     File: {mergedTtsStatus.audioFile.split('/').pop()}
-                    {mergedTtsStatus.audioSize && (
-                      <span className="ml-2">({(mergedTtsStatus.audioSize / 1024 / 1024).toFixed(2)} MB)</span>
-                    )}
+                  <div className="flex items-center justify-between gap-2 text-sm text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-500/20 p-2 rounded">
+                    <span className="min-w-0 break-all">
+                       File: {mergedTtsStatus.audioFile.split('/').pop()}
+                      {mergedTtsStatus.audioSize && (
+                        <span className="ml-2 whitespace-nowrap">({(mergedTtsStatus.audioSize / 1024 / 1024).toFixed(2)} MB)</span>
+                      )}
+                    </span>
+                    <button
+                      onClick={handleDownloadAudio}
+                      disabled={downloadingAudio}
+                      title="Tải file .mp3 về máy"
+                      className="shrink-0 inline-flex items-center gap-1 bg-green-600 text-white px-3 py-1 rounded text-xs font-medium hover:bg-green-700 disabled:opacity-50 transition"
+                    >
+                      {downloadingAudio ? (
+                        <><div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div> Đang tải...</>
+                      ) : (
+                        <>⬇ Tải xuống</>
+                      )}
+                    </button>
                   </div>
                 )}
 

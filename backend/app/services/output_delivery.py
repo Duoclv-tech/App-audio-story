@@ -75,7 +75,12 @@ def _unique_dest(dest: Path) -> Path:
         i += 1
 
 
-def deliver_final(src: str, db, filename: Optional[str] = None) -> str:
+def deliver_final(
+    src: str,
+    db,
+    filename: Optional[str] = None,
+    subfolder: Optional[str] = None,
+) -> str:
     """Move a finished file into the output folder and return the new path.
 
     Best-effort: on any failure the original ``src`` path is returned unchanged
@@ -87,12 +92,20 @@ def deliver_final(src: str, db, filename: Optional[str] = None) -> str:
         filename: desired file name in the output folder. Defaults to the
             source file name. Pass a story-aware name (e.g. ``"Tên truyện.mp3"``)
             to avoid generic names like ``merged_audio.mp3`` colliding.
+        subfolder: optional sub-directory (created if needed) under the output
+            folder. Pass the story title so all of a story's deliverables land
+            in ``<output>/<Tên truyện>/`` instead of dumped at the root.
     """
     try:
         src_path = Path(src)
         if not src_path.exists():
             return src
         folder = get_output_folder(db)
+        if subfolder:
+            sub = safe_file_stem(subfolder, "")
+            if sub:
+                folder = folder / sub
+                folder.mkdir(parents=True, exist_ok=True)
         dest = _unique_dest(folder / (filename or src_path.name))
         if src_path.resolve() == dest.resolve():
             return str(dest)

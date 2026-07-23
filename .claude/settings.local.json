@@ -90,7 +90,9 @@
       "Bash(npm --prefix frontend run build)",
       "Bash(backend/venv/Scripts/pyinstaller.exe packaging/truyenfull-gpu.spec --noconfirm --distpath dist --workpath build)",
       "Bash(echo \"EXIT=$?\")",
-      "Bash(powershell -NoProfile -Command \"Get-Process TruyenFullProcessor -ErrorAction SilentlyContinue | Select-Object Id,ProcessName\")"
+      "Bash(powershell -NoProfile -Command \"Get-Process TruyenFullProcessor -ErrorAction SilentlyContinue | Select-Object Id,ProcessName\")",
+      "Bash(venv/Scripts/python.exe -m py_compile app/services/output_delivery.py app/services/tts_processor.py app/services/omnivoice_processor.py app/services/audio_merger.py app/services/video_processor.py app/workers/merge_worker.py app/api/trim.py)",
+      "Bash(git -C \"D:/Project/web_app\" status --short)"
     ],
     "deny": [],
     "ask": []

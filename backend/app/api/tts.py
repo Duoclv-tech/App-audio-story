@@ -159,9 +159,11 @@ async def get_tts_status(task_id: str, db: Session = Depends(get_db)):
 async def list_voices(db: Session = Depends(get_db)):
     """List available TTS voices from database"""
     # Query voices from database
+    # Secondary sort by code: several voices share rank (e.g. four at rank=1),
+    # so ordering by rank alone would return a nondeterministic first row.
     voices = db.query(models.Voice).filter(
         models.Voice.is_active == True
-    ).order_by(models.Voice.rank).all()
+    ).order_by(models.Voice.rank, models.Voice.code).all()
 
     # Format response
     voices_list = [
@@ -179,6 +181,101 @@ async def list_voices(db: Session = Depends(get_db)):
 
     logger.info(f"Retrieved {len(voices_list)} voices from database")
     return {"voices": voices_list}
+
+
+# VBEE's own catalog is exactly Vietnamese + English (provider=vbee → 25 vi + 16
+# en; every other language is a Google/Amazon/Microsoft voice the VBEE engine
+# can't use). Filtering to provider=vbee keeps search results to voices this
+# account can actually synthesize.
+_VBEE_VOICES_URL = "https://vbee.vn/api/v1/voices"
+
+# The provider=vbee catalog is small (~41) and effectively static, so cache it
+# in-process instead of re-downloading on every search.
+_VBEE_CATALOG_TTL = 300  # seconds
+_vbee_catalog_cache: dict = {"at": 0.0, "voices": None}
+
+
+def _strip_accents(s: str) -> str:
+    """Lowercase + drop Vietnamese diacritics so "ngoc" matches "Ngọc".
+
+    VBEE's own ``search`` param is diacritic-sensitive, which is poor UX for
+    users typing without accents, so we filter locally instead.
+    """
+    import unicodedata
+
+    s = (s or "").replace("đ", "d").replace("Đ", "D")
+    nfkd = unicodedata.normalize("NFD", s)
+    return "".join(c for c in nfkd if not unicodedata.combining(c)).lower().strip()
+
+
+def _fetch_vbee_catalog() -> list:
+    """Return VBEE's provider=vbee voice list, cached for a few minutes.
+
+    Raises ``requests.RequestException`` (network) or ``ValueError`` (bad shape)
+    so the caller can turn either into a graceful 502.
+    """
+    import time
+    import requests
+
+    now = time.monotonic()
+    cached = _vbee_catalog_cache["voices"]
+    if cached is not None and now - _vbee_catalog_cache["at"] < _VBEE_CATALOG_TTL:
+        return cached
+
+    resp = requests.get(_VBEE_VOICES_URL, params={"provider": "vbee"}, timeout=15)
+    resp.raise_for_status()
+    data = resp.json()
+    result = data.get("result") if isinstance(data, dict) else None
+    voices = result.get("voices") if isinstance(result, dict) else None
+    if not isinstance(voices, list):
+        raise ValueError("unexpected VBEE voices payload")
+
+    _vbee_catalog_cache["voices"] = voices
+    _vbee_catalog_cache["at"] = now
+    return voices
+
+
+# Plain ``def`` (not ``async``): FastAPI runs sync path operations in a
+# threadpool, so the blocking requests.get here never freezes the event loop.
+@router.get("/voices/search")
+def search_vbee_voices(q: str = "", limit: int = 30):
+    """Search VBEE's live voice catalog (Vietnamese + English only).
+
+    Thin proxy over the public ``GET https://vbee.vn/api/v1/voices`` endpoint so
+    the UI can offer voices beyond the 25 seeded in the DB without us storing
+    them. ``provider=vbee`` is only ~41 voices, so we pull the whole list and
+    filter locally with accent-insensitive matching. Any ``code`` returned here
+    can be passed straight to /tts.
+    """
+    import requests
+
+    try:
+        raw = _fetch_vbee_catalog()
+    except (requests.exceptions.RequestException, ValueError) as e:
+        logger.error(f"[tts] VBEE voice search failed: {e}")
+        raise HTTPException(status_code=502, detail="Không gọi được VBEE để tìm giọng")
+
+    needle = _strip_accents(q)
+    voices_list = []
+    for v in raw:
+        if not isinstance(v, dict) or not v.get("code"):
+            continue
+        if needle and needle not in _strip_accents(v.get("name") or ""):
+            continue
+        voices_list.append({
+            "code": v.get("code"),
+            "name": v.get("name"),
+            "gender": v.get("gender"),
+            "locale": v.get("locale"),
+            "language_code": v.get("language_code"),
+            "category": v.get("category"),
+        })
+        if len(voices_list) >= limit:
+            break
+
+    logger.info(f"[tts] VBEE search q={q!r} -> {len(voices_list)} voices")
+    return {"voices": voices_list}
+
 
 @router.post("/pause")
 async def pause_tts(task_id: str, db: Session = Depends(get_db)):
@@ -408,6 +505,220 @@ async def get_merged_tts_status(story_id: str, db: Session = Depends(get_db)):
         "audio_size": merged_audio.file_size if merged_audio else None,
         "audio_format": merged_audio.format if merged_audio else None
     }
+
+
+# ==================== OmniVoice per-segment TTS ====================
+
+def _seg_out(seg: models.TtsSegment) -> dict:
+    return {
+        "id": seg.id,
+        "seg_index": seg.seg_index,
+        "text": seg.text,
+        "status": seg.status,
+        "error_message": seg.error_message,
+        "attempts": seg.attempts or 0,
+        "duration": seg.duration,
+        "gen_sec": seg.gen_sec,
+        "has_audio": bool(seg.file_path),
+    }
+
+
+@router.post("/segments/split")
+async def split_segments(request: schemas.SegmentSplitRequest, db: Session = Depends(get_db)):
+    """Split a story's merged content into TTS segments (replaces any existing)."""
+    from app.services import segment_tts
+    from app.workers.tts_worker import is_story_active
+
+    story = db.query(models.Story).filter(models.Story.id == request.story_id).first()
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+    if not story.merged_content or not story.merged_content.strip():
+        raise HTTPException(status_code=400, detail="No merged content found. Please edit content first.")
+    # Never wipe segments while a generation batch is running against them.
+    if is_story_active(request.story_id):
+        raise HTTPException(status_code=409, detail="Đang chạy TTS — hãy chờ xong trước khi tách lại.")
+
+    config = _build_tts_config(request)
+    segs = segment_tts.create_segments(db, story, request.split_mode, config)
+    return {
+        "story_id": story.id,
+        "split_mode": request.split_mode,
+        "segments": [_seg_out(s) for s in segs],
+        "stats": segment_tts.segment_stats(db, story.id),
+    }
+
+
+@router.get("/segments/{story_id}")
+async def list_segments(story_id: str, db: Session = Depends(get_db)):
+    """List a story's segments + whether the source story changed since split."""
+    from app.services import segment_tts
+
+    story = db.query(models.Story).filter(models.Story.id == story_id).first()
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+
+    segs = db.query(models.TtsSegment).filter(
+        models.TtsSegment.story_id == story_id
+    ).order_by(models.TtsSegment.seg_index).all()
+
+    return {
+        "story_id": story_id,
+        "split_mode": segs[0].split_mode if segs else None,
+        "source_changed": segment_tts.source_changed(db, story),
+        "segments": [_seg_out(s) for s in segs],
+        "stats": segment_tts.segment_stats(db, story_id),
+    }
+
+
+@router.post("/segments/run")
+async def run_segments(
+    request: schemas.TTSRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Generate audio for all pending/error segments in the background.
+
+    Applies the *current* config from the request to the segments about to be
+    generated, so a voice/speed/bitrate change since split time takes effect
+    without needing a re-split.
+    """
+    from app.workers.tts_worker import process_segments_task, try_acquire_story, release_story
+
+    story = db.query(models.Story).filter(models.Story.id == request.story_id).first()
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+
+    todo = db.query(models.TtsSegment).filter(
+        models.TtsSegment.story_id == request.story_id,
+        models.TtsSegment.status.in_(["pending", "error"]),
+    ).count()
+    if todo == 0:
+        return {"status": "idle", "message": "Tất cả câu đã xong.", "queued": 0}
+
+    if not try_acquire_story(request.story_id):
+        return {"status": "busy", "message": "Đang chạy TTS cho truyện này.", "queued": 0}
+
+    try:
+        # Refresh config on the segments we're about to generate.
+        config = _build_tts_config(request)
+        db.query(models.TtsSegment).filter(
+            models.TtsSegment.story_id == request.story_id,
+            models.TtsSegment.status.in_(["pending", "error"]),
+        ).update({models.TtsSegment.config: config}, synchronize_session=False)
+        db.commit()
+    except Exception:
+        release_story(request.story_id)
+        raise
+
+    background_tasks.add_task(process_segments_task, request.story_id)
+    return {"status": "started", "queued": todo}
+
+
+@router.post("/segments/{segment_id}/retry")
+async def retry_segment(
+    segment_id: str,
+    request: schemas.TTSRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Reset one segment and regenerate it (per-row Re-TTS), using current config."""
+    from app.workers.tts_worker import process_single_segment_task, try_acquire_story, release_story
+
+    seg = db.query(models.TtsSegment).filter(models.TtsSegment.id == segment_id).first()
+    if not seg:
+        raise HTTPException(status_code=404, detail="Segment not found")
+
+    if not try_acquire_story(seg.story_id):
+        return {"status": "busy", "message": "Đang chạy TTS cho truyện này."}
+
+    try:
+        _delete_audio_file(seg.file_path)
+        seg.file_path = None
+        seg.status = "pending"
+        seg.error_message = None
+        seg.config = _build_tts_config(request)
+        db.commit()
+    except Exception:
+        release_story(seg.story_id)
+        raise
+
+    background_tasks.add_task(process_single_segment_task, segment_id)
+    return {"status": "started", "segment_id": segment_id, "seg_index": seg.seg_index}
+
+
+@router.delete("/segments/{segment_id}")
+async def delete_segment(segment_id: str, db: Session = Depends(get_db)):
+    """Delete one segment (and its file), then reindex the rest."""
+    from app.workers.tts_worker import is_story_active
+
+    seg = db.query(models.TtsSegment).filter(models.TtsSegment.id == segment_id).first()
+    if not seg:
+        raise HTTPException(status_code=404, detail="Segment not found")
+
+    # Don't reindex/delete rows out from under a running generation batch.
+    if is_story_active(seg.story_id):
+        raise HTTPException(status_code=409, detail="Đang chạy TTS — hãy chờ xong trước khi xóa.")
+
+    story_id = seg.story_id
+    _delete_audio_file(seg.file_path)
+    db.delete(seg)
+    db.commit()
+
+    # Reindex remaining segments so #numbers stay contiguous.
+    rest = db.query(models.TtsSegment).filter(
+        models.TtsSegment.story_id == story_id
+    ).order_by(models.TtsSegment.seg_index).all()
+    for i, s in enumerate(rest, start=1):
+        if s.seg_index != i:
+            s.seg_index = i
+    db.commit()
+
+    return {"status": "deleted", "segment_id": segment_id, "remaining": len(rest)}
+
+
+@router.get("/segments/{segment_id}/audio")
+async def segment_audio(segment_id: str, db: Session = Depends(get_db)):
+    """Stream one segment's mp3 (Nghe / Tải WAV per row)."""
+    seg = db.query(models.TtsSegment).filter(models.TtsSegment.id == segment_id).first()
+    if not seg:
+        raise HTTPException(status_code=404, detail="Segment not found")
+    if not seg.file_path or not os.path.exists(seg.file_path):
+        raise HTTPException(status_code=404, detail="Segment audio not generated yet")
+    return FileResponse(seg.file_path, media_type="audio/mpeg",
+                        filename=f"segment_{seg.seg_index:04d}.mp3")
+
+
+@router.post("/segments/merge")
+async def merge_segments_endpoint(
+    request: schemas.SegmentMergeRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Concatenate all done segments into one final mp3 (background).
+
+    Progress/result is reported through the existing GET /merged-status/{story_id}.
+    """
+    from app.workers.tts_worker import process_segments_merge_task
+    from app.services import segment_tts
+
+    story = db.query(models.Story).filter(models.Story.id == request.story_id).first()
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+
+    stats = segment_tts.segment_stats(db, request.story_id)
+    if stats["total"] == 0:
+        raise HTTPException(status_code=400, detail="Chưa có câu nào để ghép.")
+    if not stats["all_done"]:
+        raise HTTPException(status_code=400,
+                            detail="Còn câu chưa xong — hãy chạy/retry hết trước khi ghép.")
+
+    task = models.Task(story_id=story.id, type="tts_merged", status="running", total_items=1)
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+
+    background_tasks.add_task(process_segments_merge_task, story.id, task.id)
+    return {"task_id": task.id, "status": "started", "segment_count": stats["total"]}
 
 
 @router.post("/retry-chapter/{chapter_id}")

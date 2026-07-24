@@ -296,12 +296,13 @@ class OmniVoiceProcessor:
         return audios
 
     def _generate_to_mp3(self, text: str, config: Dict, out_path: Path) -> float:
-        """Generate one text -> mp3 file. Returns audio duration in seconds."""
+        """Generate one text -> mp3 file. Returns the delivered mp3's duration."""
         _torch, sf, _OV = _import_stack()
         audios = self.generate_wav(text, config)
         audio = audios[0]
         if audio is None or getattr(audio, "size", 0) == 0:
             raise RuntimeError("model returned empty audio")
+        speed = float(config.get("speed", 1.0))
         tmp_wav = paths.TRIM_TEMP_DIR / f"omnivoice_{int(time.time()*1000)}.wav"
         tmp_wav.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -309,11 +310,15 @@ class OmniVoiceProcessor:
             _wav_to_mp3(
                 tmp_wav, out_path,
                 bitrate=int(config.get("bitrate", 128)),
-                speed=float(config.get("speed", 1.0)),
+                speed=speed,
             )
         finally:
             tmp_wav.unlink(missing_ok=True)
-        return len(audio) / SR
+        # _wav_to_mp3 applies atempo=speed, scaling the output duration by 1/speed.
+        # Report the *delivered* mp3 length, not the raw pre-speed length, so DB
+        # durations (and the merged total) match the actual audio.
+        raw = len(audio) / SR
+        return raw / speed if speed > 0 else raw
 
     # -- pipeline-compatible entry points -----------------------------------
     async def process_merged_content(

@@ -89,6 +89,42 @@ def _progress_poller(key: str, local_dir: str, stop: threading.Event) -> None:
         stop.wait(1.5)
 
 
+def _ensure_clean_dir(local_dir: str) -> None:
+    """Make sure ``local_dir`` is a usable directory to download into.
+
+    A leftover **broken symlink / stale reparse point** at the path (e.g. a dev
+    setup that symlinked the models dir to a since-removed folder) makes
+    ``mkdir(exist_ok=True)`` raise WinError 183 — and crucially, MSYS/git-style
+    symlinks don't even register as ``is_symlink()`` in Python, so we can't
+    detect them by inspection. Instead: try mkdir; if it fails, remove whatever
+    stale entry is there (trying each removal strategy) and create it fresh.
+    """
+    import shutil
+
+    p = Path(local_dir)
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+        return
+    except OSError:
+        # A dir already exists and is usable → nothing to fix.
+        if p.is_dir() and not p.is_symlink():
+            return
+
+    logger.warning(f"[omnivoice] stale entry at {local_dir} blocks mkdir — clearing it")
+    for _remove in (
+        lambda: p.unlink(),
+        lambda: os.remove(str(p)),
+        lambda: os.rmdir(str(p)),
+        lambda: shutil.rmtree(str(p)),
+    ):
+        try:
+            _remove()
+            break
+        except OSError:
+            continue
+    p.mkdir(parents=True, exist_ok=True)
+
+
 def _do_download(key: str) -> None:
     repo_id, local_dir = _TARGETS[key]
     stop = threading.Event()
@@ -104,7 +140,7 @@ def _do_download(key: str) -> None:
             _status[key]["total_bytes"] = total
         logger.info(f"[omnivoice] downloading {repo_id} -> {local_dir} "
                     f"(total {total/1024/1024:.0f} MB)")
-        Path(local_dir).mkdir(parents=True, exist_ok=True)
+        _ensure_clean_dir(local_dir)
         poller.start()
         snapshot_download(repo_id=repo_id, local_dir=str(local_dir))
         with _lock:

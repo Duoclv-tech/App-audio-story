@@ -30,6 +30,7 @@ class Story(Base):
     tasks = relationship("Task", back_populates="story", cascade="all, delete-orphan")
     merged_audio = relationship("MergedAudio", back_populates="story", cascade="all, delete-orphan")
     video_outputs = relationship("VideoOutput", back_populates="story", cascade="all, delete-orphan")
+    tts_segments = relationship("TtsSegment", back_populates="story", cascade="all, delete-orphan")
 
 class Chapter(Base):
     __tablename__ = "chapters"
@@ -104,6 +105,36 @@ class Task(Base):
 
     # Relationships
     story = relationship("Story", back_populates="tasks")
+
+class TtsSegment(Base):
+    """One sentence/line of a story queued for OmniVoice TTS.
+
+    Splitting the merged story into segments lets each line be generated,
+    inspected, retried and re-listened to independently, then concatenated
+    into one final audio. Persisted in DB so progress survives app restarts.
+    """
+    __tablename__ = "tts_segments"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    story_id = Column(String(36), ForeignKey('stories.id', ondelete='CASCADE'), nullable=False, index=True)
+    seg_index = Column(Integer, nullable=False)          # 1-based order
+    text = Column(Text, nullable=False)
+    status = Column(String(20), default='pending')       # pending | processing | done | error
+    error_message = Column(Text, nullable=True)
+    attempts = Column(Integer, default=0)
+    file_path = Column(Text, nullable=True)              # mp3 for this segment
+    file_size = Column(BigInteger, nullable=True)
+    duration = Column(Float, nullable=True)              # audio seconds
+    gen_sec = Column(Float, nullable=True)               # generation wall time
+    split_mode = Column(String(10), default='newline')   # newline | period
+    source_hash = Column(String(40), nullable=True)      # sha1 of merged_content at split time
+    config = Column(JSON, nullable=True)                 # snapshot of ttsConfig (engine/preset/lang/speed/bitrate)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+    # Relationships
+    story = relationship("Story", back_populates="tts_segments")
+
 
 class CensoredWord(Base):
     __tablename__ = "censored_words"

@@ -115,6 +115,11 @@ async def startup_event():
     from app.startup_recovery import run_startup_recovery
     run_startup_recovery()
 
+    # OmniVoice per-segment TTS: a segment left 'processing' by a closed app has
+    # no live task generating it — reset it to 'pending' so it can be re-run.
+    from app.workers.tts_worker import resume_stuck_segments
+    resume_stuck_segments()
+
 @app.on_event("shutdown")
 async def shutdown_event():
     """Shutdown event handler"""

@@ -197,6 +197,17 @@ class TTSResponse(BaseModel):
     status: str
     message: str
 
+
+# ---- Per-segment TTS (OmniVoice) ----
+# Split / run / retry all carry the full TTSRequest config (engine/preset/lang/
+# speed/bitrate) so the *current* config is applied when generating — not a
+# stale snapshot. Run & retry reuse TTSRequest directly.
+class SegmentSplitRequest(TTSRequest):
+    split_mode: str = "newline"        # newline | period
+
+class SegmentMergeRequest(BaseModel):
+    story_id: str
+
 # Audio Merge Request
 class AudioMergeRequest(BaseModel):
     story_id: str

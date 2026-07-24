@@ -147,6 +147,15 @@ export default function ProcessorPage() {
   })
   const [chapters, setChapters] = useState<Chapter[]>([])
   const [voices, setVoices] = useState<any[]>([])
+  // Live VBEE voice search (Vietnamese + English) — lets the user pick a voice
+  // beyond the 25 seeded in the DB without us storing it.
+  const [voiceSearchQuery, setVoiceSearchQuery] = useState('')
+  const [voiceSearchResults, setVoiceSearchResults] = useState<any[] | null>(null)
+  const [voiceSearching, setVoiceSearching] = useState(false)
+  const [searchedVoice, setSearchedVoice] = useState<any | null>(null)
+  // The DB-dropdown's own selection, kept separate from ttsConfig.voice_code so
+  // a searched voice doesn't clobber it and we can restore it on "bỏ".
+  const [dbVoiceCode, setDbVoiceCode] = useState('hn_female_ngochuyen_full_48k-fhg')
   const [chapterStats, setChapterStats] = useState<ChapterStats | null>(null)
   const [checkingGrammar, setCheckingGrammar] = useState(false)
   const [editDialog, setEditDialog] = useState<EditDialogState>({
@@ -234,6 +243,27 @@ export default function ProcessorPage() {
     audioSize: null as number | null,
     error: null as string | null
   })
+
+  // Per-segment TTS for Step 6 (OmniVoice only)
+  type TtsSegment = {
+    id: string
+    seg_index: number
+    text: string
+    status: 'pending' | 'processing' | 'done' | 'error'
+    error_message: string | null
+    attempts: number
+    duration: number | null
+    gen_sec: number | null
+    has_audio: boolean
+  }
+  const [segments, setSegments] = useState<TtsSegment[]>([])
+  const [splitMode, setSplitMode] = useState<'newline' | 'period'>('newline')
+  const [segSourceChanged, setSegSourceChanged] = useState(false)
+  const [segBusy, setSegBusy] = useState(false)   // a split/run/merge request is in flight
+  const [segMerging, setSegMerging] = useState(false)
+  const [segNowPlaying, setSegNowPlaying] = useState<string | null>(null)
+  const segAudioRef = useRef<HTMLAudioElement | null>(null)
+  const segPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Video processing state for Step 7
   const VIDEO_TRANSITIONS = [
@@ -938,10 +968,21 @@ export default function ProcessorPage() {
   }
 
   // Download the finished merged audio (the wizard's final deliverable).
+  // Desktop (WebView2) can't trigger a programmatic blob download, and the file
+  // is already delivered to the user's Downloads folder — so there we just
+  // reveal it in Explorer. In a plain browser (dev) we do a real blob download.
   const handleDownloadAudio = async () => {
     const id = storyData.id
     if (!id) {
       showToast('Không tìm thấy truyện để tải audio.', 'error')
+      return
+    }
+    if (hasNativeDialogs()) {
+      try {
+        await axios.post(`/api/v1/video/reveal-audio/${id}`)
+      } catch (err: any) {
+        showToast(errMessage(err, 'Không mở được thư mục chứa file.'), 'error')
+      }
       return
     }
     setDownloadingAudio(true)
@@ -1109,6 +1150,38 @@ export default function ProcessorPage() {
     } catch (error) {
       console.error('Error fetching voices:', error)
     }
+  }
+
+  // Search VBEE's live catalog (Việt + Anh) by name. Diacritic-insensitive on
+  // the backend, so "ngoc" matches "Ngọc".
+  const searchVbeeVoices = async () => {
+    const q = voiceSearchQuery.trim()
+    setVoiceSearching(true)
+    try {
+      const res = await axios.get('/api/v1/tts/voices/search', { params: { q } })
+      setVoiceSearchResults(res.data.voices || [])
+    } catch (error) {
+      setVoiceSearchResults([])
+      showToast(errMessage(error, 'Không tìm được giọng trên VBEE'), 'error')
+    } finally {
+      setVoiceSearching(false)
+    }
+  }
+
+  // Pick a searched voice: route TTS through its code, leaving the DB dropdown
+  // selection (dbVoiceCode) untouched so "bỏ" can restore it.
+  const useSearchedVoice = (voice: any) => {
+    setSearchedVoice(voice)
+    setTtsConfig((c) => ({ ...c, voice_code: voice.code }))
+    setVoiceSearchResults(null)
+  }
+
+  // Drop the searched voice and restore the user's prior DB dropdown selection.
+  const clearSearchedVoice = () => {
+    setSearchedVoice(null)
+    setVoiceSearchQuery('')
+    setVoiceSearchResults(null)
+    setTtsConfig((c) => ({ ...c, voice_code: dbVoiceCode }))
   }
 
   // ---- OmniVoice (local TTS) ----
@@ -1901,7 +1974,14 @@ export default function ProcessorPage() {
       // Move to Step 6 first
       await moveToStep(6)
 
-      // Start merged TTS processing
+      // OmniVoice → per-segment workspace (split, run per line, merge). Don't
+      // auto-generate; just land on the step. Segments are (re)loaded/split by
+      // the step's own effect. VBEE keeps the classic one-shot merged flow.
+      if (ttsConfig.engine === 'omnivoice') {
+        return
+      }
+
+      // Start merged TTS processing (VBEE)
       console.log('Starting merged TTS processing...')
       const response = await axios.post('/api/v1/tts/start-merged', {
         story_id: storyData.id,
@@ -2003,6 +2083,144 @@ export default function ProcessorPage() {
     }, 10000)
   }
 
+  // ===== Per-segment TTS (OmniVoice, Step 6) =====
+  const segStats = useMemo(() => {
+    const total = segments.length
+    const by = { pending: 0, processing: 0, done: 0, error: 0 }
+    for (const s of segments) by[s.status]++
+    return { total, ...by, allDone: total > 0 && by.done === total }
+  }, [segments])
+
+  const stopSegPolling = () => {
+    if (segPollRef.current) {
+      clearInterval(segPollRef.current)
+      segPollRef.current = null
+    }
+  }
+
+  const fetchSegments = async (opts?: { silent?: boolean }) => {
+    if (!storyData.id) return null
+    try {
+      const res = await axios.get(`/api/v1/tts/segments/${storyData.id}`)
+      const segs: TtsSegment[] = res.data.segments || []
+      setSegments(segs)
+      setSegSourceChanged(!!res.data.source_changed)
+      if (res.data.split_mode) setSplitMode(res.data.split_mode)
+      // Keep polling while a run is still working through the queue: a batch
+      // leaves segments 'pending' until each is generated, and right after
+      // /run returns nothing is 'processing' yet — so we must NOT stop just
+      // because processing===0, or we'd kill the interval the instant it starts.
+      const active = segs.some(s => s.status === 'processing' || s.status === 'pending')
+      if (segPollRef.current && !active) stopSegPolling()
+      return res.data
+    } catch (e) {
+      if (!opts?.silent) console.error('fetchSegments error', e)
+      return null
+    }
+  }
+
+  const startSegPolling = () => {
+    stopSegPolling()
+    fetchSegments({ silent: true })
+    segPollRef.current = setInterval(() => fetchSegments({ silent: true }), 4000)
+  }
+
+  const handleSplitSegments = async () => {
+    if (!storyData.id) return
+    setSegBusy(true)
+    setError(null)
+    try {
+      const res = await axios.post('/api/v1/tts/segments/split', {
+        story_id: storyData.id,
+        ...ttsConfig,
+        split_mode: splitMode,
+      })
+      setSegments(res.data.segments || [])
+      setSegSourceChanged(false)
+      showToast(`Đã tách ${res.data.segments?.length || 0} câu.`, 'success')
+    } catch (e: any) {
+      showToast(errMessage(e, 'Lỗi khi tách câu'), 'error')
+    } finally {
+      setSegBusy(false)
+    }
+  }
+
+  const handleRunSegments = async () => {
+    if (!storyData.id) return
+    setSegBusy(true)
+    try {
+      const res = await axios.post('/api/v1/tts/segments/run', { story_id: storyData.id, ...ttsConfig })
+      if (res.data.status === 'started') {
+        showToast(`Đang đọc ${res.data.queued} câu...`, 'info')
+        startSegPolling()
+      } else if (res.data.status === 'busy') {
+        showToast(res.data.message || 'Đang chạy, vui lòng chờ...', 'info')
+        startSegPolling()   // a run is already active — reflect its progress
+      } else {
+        showToast(res.data.message || 'Tất cả câu đã xong.', 'info')
+      }
+    } catch (e: any) {
+      showToast(errMessage(e, 'Lỗi khi chạy TTS'), 'error')
+    } finally {
+      setSegBusy(false)
+    }
+  }
+
+  const handleRetrySegment = async (segId: string) => {
+    if (!storyData.id) return
+    try {
+      const res = await axios.post(`/api/v1/tts/segments/${segId}/retry`, { story_id: storyData.id, ...ttsConfig })
+      if (res.data.status === 'busy') {
+        showToast(res.data.message || 'Đang chạy, vui lòng chờ...', 'info')
+        startSegPolling()
+        return
+      }
+      // Optimistically mark processing, then poll for the result.
+      setSegments(prev => prev.map(s => s.id === segId ? { ...s, status: 'processing', error_message: null } : s))
+      startSegPolling()
+    } catch (e: any) {
+      showToast(errMessage(e, 'Lỗi khi chạy lại câu'), 'error')
+    }
+  }
+
+  const handleDeleteSegment = async (segId: string) => {
+    try {
+      await axios.delete(`/api/v1/tts/segments/${segId}`)
+      await fetchSegments({ silent: true })
+    } catch (e: any) {
+      showToast(errMessage(e, 'Lỗi khi xóa câu'), 'error')
+    }
+  }
+
+  const handleMergeSegments = async () => {
+    if (!storyData.id) return
+    setSegMerging(true)
+    setMergedTtsStatus(s => ({ ...s, status: 'running', error: null }))
+    try {
+      await axios.post('/api/v1/tts/segments/merge', { story_id: storyData.id })
+      startMergedPolling()   // reuse merged-status polling for the final file
+      showToast('Đang ghép các câu thành 1 file...', 'info')
+    } catch (e: any) {
+      setMergedTtsStatus(s => ({ ...s, status: 'failed', error: errMessage(e, 'Lỗi khi ghép') }))
+      showToast(errMessage(e, 'Lỗi khi ghép audio'), 'error')
+    } finally {
+      setSegMerging(false)
+    }
+  }
+
+  const toggleSegPlay = (seg: TtsSegment) => {
+    if (!seg.has_audio) return
+    const el = segAudioRef.current
+    if (!el) return
+    if (segNowPlaying === seg.id) {
+      el.pause()
+      setSegNowPlaying(null)
+      return
+    }
+    el.src = `/api/v1/tts/segments/${seg.id}/audio`
+    el.play().then(() => setSegNowPlaying(seg.id)).catch(() => setSegNowPlaying(null))
+  }
+
   // Check if all audio records are completed (success, skipped, or failed)
   const checkAllCompleted = () => {
     if (audioRecords.length === 0) return false
@@ -2030,17 +2248,35 @@ export default function ProcessorPage() {
         loadMergedContent()
       }
 
-      // Fetch merged TTS status
-      fetchMergedTtsStatus()
+      if (ttsConfig.engine === 'omnivoice') {
+        // Per-segment flow: load existing segments; auto-split on first arrival.
+        fetchSegments({ silent: true }).then((data) => {
+          if (!data) return
+          const segs = data.segments ?? []
+          if (segs.length === 0 && !data.source_changed) {
+            handleSplitSegments()
+          } else if (segs.some((s: TtsSegment) => s.status === 'processing')) {
+            // A run was still in flight when we left — resume live polling.
+            startSegPolling()
+          }
+        })
+        // Also fetch merged status so a previously merged file shows up.
+        fetchMergedTtsStatus()
+      } else {
+        // Fetch merged TTS status (VBEE one-shot)
+        fetchMergedTtsStatus()
+      }
     } else if (currentStep !== 6) {
       // Stop polling when leaving step 6
       stopPolling()
+      stopSegPolling()
     }
 
     // Cleanup on unmount or step change
     return () => {
       if (currentStep !== 6) {
         stopPolling()
+        stopSegPolling()
       }
     }
   }, [currentStep])
@@ -2056,6 +2292,7 @@ export default function ProcessorPage() {
   useEffect(() => {
     return () => {
       stopPolling()
+      stopSegPolling()
     }
   }, [])
 
@@ -3328,13 +3565,85 @@ export default function ProcessorPage() {
               {/* ---------- VBEE tab ---------- */}
               {ttsConfig.engine === 'vbee' && (
                 <div className="space-y-4">
+                  {/* Live VBEE search (Việt + Anh) — pick a voice beyond the 25 in the DB */}
                   <div>
-                    <label className="block text-sm font-medium mb-1">Voice</label>
+                    <label className="block text-sm font-medium mb-1">🔎 Tìm giọng khác trên VBEE (Việt + Anh)</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={voiceSearchQuery}
+                        onChange={(e) => setVoiceSearchQuery(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); searchVbeeVoices() } }}
+                        placeholder="nhập tên giọng… (vd: alloy, ngoc)"
+                        className="flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        disabled={loading || voiceSearching}
+                      />
+                      <button
+                        onClick={searchVbeeVoices}
+                        disabled={loading || voiceSearching}
+                        className="px-4 py-2 rounded-md text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50"
+                      >
+                        {voiceSearching ? 'Đang tìm…' : 'Tìm'}
+                      </button>
+                    </div>
+
+                    {/* Results list */}
+                    {voiceSearchResults !== null && (
+                      voiceSearchResults.length === 0 ? (
+                        <div className="mt-2 text-sm text-dim">Không có giọng khớp — thử tên khác hoặc dùng danh sách bên dưới.</div>
+                      ) : (
+                        <div className="mt-2 border border-token rounded-md divide-y divide-token max-h-56 overflow-y-auto">
+                          <div className="px-3 py-1.5 text-xs text-dim">Kết quả ({voiceSearchResults.length}):</div>
+                          {voiceSearchResults.map((v) => (
+                            <div key={v.code} className="flex items-center justify-between gap-2 px-3 py-2">
+                              <div className="min-w-0">
+                                <div className="text-sm font-medium truncate">{v.name}</div>
+                                <div className="text-xs text-dim truncate">
+                                  {[v.language_code, v.gender, v.locale].filter(Boolean).join(' · ')}
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => useSearchedVoice(v)}
+                                disabled={loading}
+                                className="shrink-0 px-3 py-1 rounded-md text-sm font-medium border border-primary-500 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-500/10"
+                              >
+                                Chọn
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    )}
+                  </div>
+
+                  {/* Banner shown when a searched voice is active */}
+                  {searchedVoice && (
+                    <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-md bg-green-50 dark:bg-green-500/10 border border-green-300 dark:border-green-500/30">
+                      <div className="min-w-0 text-sm">
+                        <span className="font-medium text-green-700 dark:text-green-400">✔ Đang dùng giọng từ VBEE: {searchedVoice.name}</span>
+                        <span className="text-dim"> ({searchedVoice.code})</span>
+                        <div className="text-xs text-dim">{[searchedVoice.language_code, searchedVoice.gender].filter(Boolean).join(' · ')}</div>
+                      </div>
+                      <button
+                        onClick={clearSearchedVoice}
+                        disabled={loading}
+                        className="shrink-0 px-2 py-1 rounded-md text-sm text-dim hover:text-red-600"
+                      >
+                        ✕ bỏ, quay lại danh sách
+                      </button>
+                    </div>
+                  )}
+
+                  <div className={searchedVoice ? 'opacity-50 pointer-events-none' : ''}>
+                    <label className="block text-sm font-medium mb-1">Voice ({voices.length} giọng đã lưu)</label>
                     <select
-                      value={ttsConfig.voice_code}
-                      onChange={(e) => setTtsConfig({ ...ttsConfig, voice_code: e.target.value })}
+                      value={dbVoiceCode}
+                      onChange={(e) => {
+                        setDbVoiceCode(e.target.value)
+                        setTtsConfig({ ...ttsConfig, voice_code: e.target.value })
+                      }}
                       className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      disabled={loading}
+                      disabled={loading || !!searchedVoice}
                     >
                       {voices.map((voice) => (
                         <option key={voice.code} value={voice.code}>
@@ -3687,7 +3996,11 @@ export default function ProcessorPage() {
                 }
                 className="w-full bg-primary-500 text-white py-2 px-4 rounded-md hover:bg-primary-600 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
-                {loading ? 'Processing TTS...' : 'Start TTS Processing'}
+                {loading
+                  ? 'Đang chuyển...'
+                  : ttsConfig.engine === 'omnivoice'
+                    ? 'Tiếp tục → Đọc TTS'
+                    : 'Start TTS Processing'}
               </button>
               </div>
             </div>
@@ -3695,6 +4008,225 @@ export default function ProcessorPage() {
         )
 
       case 6:
+        if (ttsConfig.engine === 'omnivoice') {
+          const total = segStats.total
+          const progressed = segStats.done + segStats.error
+          const pct = total ? Math.round((progressed / total) * 100) : 0
+          const anyBusy = segStats.processing > 0
+          return (
+            <div className="space-y-4">
+              <audio ref={segAudioRef} onEnded={() => setSegNowPlaying(null)} className="hidden" />
+
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <h3 className="text-xl font-semibold tracking-tight">Đọc TTS theo từng câu</h3>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-500/15 border border-green-300 dark:border-green-500/30 rounded-full px-2.5 py-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                    Đã lưu tạm · tự khôi phục sau khi tắt app
+                  </span>
+                  <span className="step-badge">BƯỚC 5/7</span>
+                </div>
+              </div>
+
+              {/* Config summary */}
+              <div className="flex flex-wrap gap-2 text-xs">
+                <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400 border border-primary-200 dark:border-primary-500/30">⚙️ OmniVoice <span className="opacity-60">local</span></span>
+                {ttsConfig.mode === 'clone' && (
+                  <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-surface-2 border border-token text-dim">🎭 Giọng clone: <b className="text-token">{omniPresets.find(p => p.id === ttsConfig.preset_id)?.name || '—'}</b></span>
+                )}
+                <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-surface-2 border border-token text-dim">🌐 <b className="text-token">{ttsConfig.language === 'Vietnamese' ? 'Tiếng Việt' : ttsConfig.language}</b></span>
+                <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-surface-2 border border-token text-dim">⏩ Speed <b className="text-token">{ttsConfig.speed}×</b></span>
+                <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-surface-2 border border-token text-dim">🎚️ <b className="text-token">{ttsConfig.bitrate} kbps</b></span>
+              </div>
+
+              {/* Source changed warning (ask before re-splitting) */}
+              {segSourceChanged && (
+                <div className="flex items-start gap-3 text-sm bg-amber-50 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/30 rounded-lg p-3">
+                  <span>⚠️</span>
+                  <div className="flex-1">
+                    <b className="text-amber-800 dark:text-amber-300">Nội dung truyện đã thay đổi</b> so với lúc tách câu. Tách lại sẽ <b>xóa toàn bộ câu &amp; audio đã tạo</b>.
+                    <div className="mt-2">
+                      <button
+                        onClick={handleSplitSegments}
+                        disabled={segBusy || anyBusy}
+                        className="bg-amber-600 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-amber-700 disabled:opacity-50 transition"
+                      >
+                        {segBusy ? 'Đang tách...' : anyBusy ? 'Đang chạy TTS…' : '✂️ Tách lại từ đầu'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Toolbar */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex bg-surface-2 border border-token rounded-lg p-0.5 gap-0.5">
+                  <span className="self-center text-xs text-dim px-2">Tách theo:</span>
+                  <button
+                    onClick={() => setSplitMode('period')}
+                    className={`text-xs font-medium rounded-md px-3 py-1.5 transition ${splitMode === 'period' ? 'bg-surface text-primary-600 dark:text-primary-400 shadow-sm' : 'text-dim hover:text-token'}`}
+                  >. Dấu chấm</button>
+                  <button
+                    onClick={() => setSplitMode('newline')}
+                    className={`text-xs font-medium rounded-md px-3 py-1.5 transition ${splitMode === 'newline' ? 'bg-surface text-primary-600 dark:text-primary-400 shadow-sm' : 'text-dim hover:text-token'}`}
+                  >↵ Xuống dòng</button>
+                </div>
+                <button
+                  onClick={handleSplitSegments}
+                  disabled={segBusy || anyBusy}
+                  className="text-sm font-medium rounded-lg px-3 py-2 border border-token bg-surface-2 hover:bg-surface-3 disabled:opacity-50 transition"
+                >✂️ Tách câu</button>
+                <div className="flex-1"></div>
+                <button
+                  onClick={handleRunSegments}
+                  disabled={segBusy || anyBusy || total === 0 || segStats.pending + segStats.error === 0}
+                  className="text-sm font-medium rounded-lg px-3 py-2 bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                >🎙️ Chạy TTS tất cả</button>
+                <button
+                  onClick={handleRunSegments}
+                  disabled={segBusy || anyBusy || segStats.error === 0}
+                  className="text-sm font-medium rounded-lg px-3 py-2 border border-token bg-surface-2 hover:bg-surface-3 disabled:opacity-50 transition"
+                >↻ Chạy lại lỗi</button>
+              </div>
+
+              {/* Progress + stats */}
+              {total > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-mono text-dim tabular-nums">
+                    {total} dòng · <span className="text-primary-600 dark:text-primary-400">chạy {segStats.processing}</span> · <span className="text-green-600 dark:text-green-400">xong {segStats.done}</span> · <span className="text-red-600 dark:text-red-400">lỗi {segStats.error}</span> · chờ {segStats.pending}
+                  </div>
+                  <div className="h-2 rounded-full bg-surface-3 border border-token overflow-hidden">
+                    <div className="h-full rounded-full transition-all duration-300" style={{ width: `${pct}%`, background: 'linear-gradient(90deg, var(--primary-500, #c07a12), #22c55e)' }}></div>
+                  </div>
+                </div>
+              )}
+
+              {/* Segment list */}
+              <div className="flex items-baseline justify-between">
+                <h4 className="text-sm font-semibold">Danh sách câu</h4>
+                <span className="text-xs text-dim">tiến độ {progressed} / {total || 0}</span>
+              </div>
+
+              <div className="space-y-2 max-h-[calc(100vh-520px)] min-h-[180px] overflow-y-auto pr-1">
+                {total === 0 && (
+                  <div className="text-sm text-dim bg-surface-2 border border-token rounded-lg p-4 text-center">
+                    Chưa có câu nào. Bấm <b>Tách câu</b> để tách nội dung truyện.
+                  </div>
+                )}
+                {segments.map((seg) => (
+                  <div
+                    key={seg.id}
+                    className={`grid grid-cols-[36px_1fr_auto_auto] gap-3 items-center rounded-lg border p-2.5 ${
+                      seg.status === 'processing' ? 'border-primary-300 dark:border-primary-500/40 bg-primary-50/50 dark:bg-primary-500/5' :
+                      seg.status === 'error' ? 'border-red-300 dark:border-red-500/40' :
+                      'border-token bg-surface'
+                    }`}
+                  >
+                    <span className="text-xs font-mono text-dim">#{seg.seg_index}</span>
+                    <div className="min-w-0">
+                      <div className="text-sm text-token leading-snug">{seg.text}</div>
+                      <div className="text-[11px] font-mono text-dim mt-0.5">
+                        {seg.status === 'done' && [
+                          seg.duration ? `audio ${seg.duration.toFixed(2)}s` : null,
+                          seg.gen_sec ? `gen ${seg.gen_sec.toFixed(2)}s` : null,
+                          seg.attempts > 1 ? `try ${seg.attempts}` : null,
+                        ].filter(Boolean).join(' · ')}
+                        {seg.status === 'processing' && 'đang sinh audio trên GPU…'}
+                        {seg.status === 'pending' && 'chờ trong hàng đợi'}
+                        {seg.status === 'error' && <span className="text-red-600 dark:text-red-400">✕ {seg.error_message || 'Lỗi'}{seg.attempts > 0 ? ` · try ${seg.attempts}` : ''}</span>}
+                      </div>
+                    </div>
+                    <span className={`justify-self-end text-[11px] font-medium rounded-full px-2.5 py-1 border whitespace-nowrap ${
+                      seg.status === 'done' ? 'text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-500/15 border-green-300 dark:border-green-500/30' :
+                      seg.status === 'processing' ? 'text-primary-700 dark:text-primary-400 bg-primary-100 dark:bg-primary-500/15 border-primary-300 dark:border-primary-500/40' :
+                      seg.status === 'error' ? 'text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-500/15 border-red-300 dark:border-red-500/30' :
+                      'text-dim bg-surface-2 border-token'
+                    }`}>
+                      {seg.status === 'processing' && <span className="inline-block w-2 h-2 mr-1 rounded-full border-2 border-current border-r-transparent animate-spin align-[-1px]"></span>}
+                      {seg.status === 'done' ? 'Đã xong' : seg.status === 'processing' ? 'Đang chạy' : seg.status === 'error' ? 'Lỗi' : 'Chưa chạy'}
+                    </span>
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => toggleSegPlay(seg)}
+                        disabled={!seg.has_audio}
+                        className="text-xs font-medium rounded-md px-2 py-1.5 border border-token bg-surface-2 text-dim hover:text-token disabled:opacity-40 disabled:cursor-not-allowed transition"
+                      >{segNowPlaying === seg.id ? '⏸ Dừng' : '▶ Nghe'}</button>
+                      <button
+                        onClick={() => handleRetrySegment(seg.id)}
+                        disabled={anyBusy || seg.status === 'processing'}
+                        className="text-xs font-medium rounded-md px-2 py-1.5 border border-primary-300 dark:border-primary-500/40 bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400 hover:bg-primary-100 disabled:opacity-40 transition"
+                      >↻ Re-TTS</button>
+                      {seg.has_audio && (
+                        <a
+                          href={`/api/v1/tts/segments/${seg.id}/audio`}
+                          download
+                          className="text-xs font-medium rounded-md px-2 py-1.5 border border-token bg-surface-2 text-dim hover:text-token transition"
+                        >⬇︎</a>
+                      )}
+                      <button
+                        onClick={() => handleDeleteSegment(seg.id)}
+                        disabled={anyBusy || seg.status === 'processing'}
+                        className="text-xs font-medium rounded-md px-2 py-1.5 border border-token bg-surface-2 text-dim hover:text-red-600 disabled:opacity-40 transition"
+                      >✕</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Merge */}
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  onClick={handleMergeSegments}
+                  disabled={!segStats.allDone || segMerging || anyBusy}
+                  className="text-sm font-medium rounded-lg px-4 py-2 bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                >🔗 Ghép tất cả thành 1 file</button>
+                {!segStats.allDone && total > 0 && (
+                  <span className="text-xs text-dim">chỉ ghép được khi tất cả câu “Đã xong”</span>
+                )}
+              </div>
+
+              {/* Merged output */}
+              {(mergedTtsStatus.status === 'running' || mergedTtsStatus.audioFile) && (
+                <div className="rounded-xl border border-dashed border-token bg-surface-2 p-4 space-y-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-semibold">🎧 File thành phẩm</span>
+                    {mergedTtsStatus.status === 'running' && (
+                      <span className="inline-flex items-center gap-2 text-xs text-primary-600 dark:text-primary-400">
+                        <span className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-primary-600"></span> Đang ghép…
+                      </span>
+                    )}
+                    {mergedTtsStatus.audioFile && (
+                      <span className="text-xs font-mono text-dim break-all">
+                        {mergedTtsStatus.audioFile.split(/[\\/]/).pop()}
+                        {mergedTtsStatus.audioSize ? ` · ${(mergedTtsStatus.audioSize / 1024 / 1024).toFixed(2)} MB` : ''}
+                      </span>
+                    )}
+                  </div>
+                  {mergedTtsStatus.audioFile && (
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={handleDownloadAudio}
+                        disabled={downloadingAudio}
+                        className="text-sm font-medium rounded-lg px-3 py-2 border border-token bg-surface hover:bg-surface-3 disabled:opacity-50 transition"
+                      >{hasNativeDialogs() ? '📂 Mở thư mục' : '⬇️ Tải audio'}</button>
+                      <button
+                        onClick={() => moveToStep(7)}
+                        className="text-sm font-medium rounded-lg px-3 py-2 bg-green-500 text-white hover:bg-green-600 transition"
+                      >➡️ Sang bước Video</button>
+                    </div>
+                  )}
+                  {mergedTtsStatus.error && (
+                    <div className="text-sm text-red-700 dark:text-red-400">Lỗi: {mergedTtsStatus.error}</div>
+                  )}
+                </div>
+              )}
+
+              {error && (
+                <div className="text-red-600 dark:text-red-400 text-sm bg-red-50 dark:bg-red-500/10 p-3 rounded-md">{error}</div>
+              )}
+            </div>
+          )
+        }
         return (
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3 mb-4">
@@ -3754,7 +4286,7 @@ export default function ProcessorPage() {
                 {mergedTtsStatus.audioFile && (
                   <div className="flex items-center justify-between gap-2 text-sm text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-500/20 p-2 rounded">
                     <span className="min-w-0 break-all">
-                       File: {mergedTtsStatus.audioFile.split('/').pop()}
+                       File: {mergedTtsStatus.audioFile.split(/[\\/]/).pop()}
                       {mergedTtsStatus.audioSize && (
                         <span className="ml-2 whitespace-nowrap">({(mergedTtsStatus.audioSize / 1024 / 1024).toFixed(2)} MB)</span>
                       )}
@@ -3762,11 +4294,13 @@ export default function ProcessorPage() {
                     <button
                       onClick={handleDownloadAudio}
                       disabled={downloadingAudio}
-                      title="Tải file .mp3 về máy"
+                      title={hasNativeDialogs() ? 'File đã lưu ở Downloads — bấm để mở thư mục chứa file' : 'Tải file .mp3 về máy'}
                       className="shrink-0 inline-flex items-center gap-1 bg-green-600 text-white px-3 py-1 rounded text-xs font-medium hover:bg-green-700 disabled:opacity-50 transition"
                     >
                       {downloadingAudio ? (
                         <><div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div> Đang tải...</>
+                      ) : hasNativeDialogs() ? (
+                        <>📂 Mở thư mục</>
                       ) : (
                         <>⬇ Tải xuống</>
                       )}
@@ -5969,7 +6503,7 @@ export default function ProcessorPage() {
                 disabled={downloadingAudio}
                 className="btn btn-primary w-full justify-center py-3 text-base disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {downloadingAudio ? 'Đang tải...' : 'Tải audio hoàn chỉnh'}
+                {downloadingAudio ? 'Đang tải...' : hasNativeDialogs() ? '📂 Mở thư mục chứa audio' : 'Tải audio hoàn chỉnh'}
               </button>
               <button
                 onClick={() => {

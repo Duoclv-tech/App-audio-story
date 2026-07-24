@@ -1,0 +1,472 @@
+<title>Đọc TTS — thiết kế theo từng câu</title>
+<style>
+  :root {
+    --bg: #faf8f4;
+    --surface: #ffffff;
+    --surface-2: #f4f1ea;
+    --surface-3: #efeadf;
+    --border: #e6e0d2;
+    --border-strong: #d8d0bd;
+    --text: #26221a;
+    --dim: #736b5a;
+    --faint: #9a9484;
+    --accent: #c07a12;
+    --accent-hover: #a8680c;
+    --accent-soft: #f6ecd8;
+    --ok: #2f8f4e;
+    --ok-soft: #e5f3e9;
+    --err: #d5453b;
+    --err-soft: #fbe7e5;
+    --run: #b06c0f;
+    --run-soft: #f7ebd6;
+    --shadow: 0 1px 2px rgba(38,34,26,.06), 0 6px 20px rgba(38,34,26,.05);
+    --mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14120e;
+      --surface: #1c1a15;
+      --surface-2: #232019;
+      --surface-3: #2a271f;
+      --border: #35301f;
+      --border-strong: #433d29;
+      --text: #ece7db;
+      --dim: #a49b86;
+      --faint: #7c745f;
+      --accent: #e0a13e;
+      --accent-hover: #eeb254;
+      --accent-soft: #33280f;
+      --ok: #58c47c;
+      --ok-soft: #16301f;
+      --err: #f0766c;
+      --err-soft: #3a1a17;
+      --run: #e0a13e;
+      --run-soft: #332912;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #faf8f4; --surface: #ffffff; --surface-2: #f4f1ea; --surface-3: #efeadf;
+    --border: #e6e0d2; --border-strong: #d8d0bd; --text: #26221a; --dim: #736b5a; --faint: #9a9484;
+    --accent: #c07a12; --accent-hover: #a8680c; --accent-soft: #f6ecd8;
+    --ok: #2f8f4e; --ok-soft: #e5f3e9; --err: #d5453b; --err-soft: #fbe7e5; --run: #b06c0f; --run-soft: #f7ebd6;
+    --shadow: 0 1px 2px rgba(38,34,26,.06), 0 6px 20px rgba(38,34,26,.05);
+  }
+  :root[data-theme="dark"] {
+    --bg: #14120e; --surface: #1c1a15; --surface-2: #232019; --surface-3: #2a271f;
+    --border: #35301f; --border-strong: #433d29; --text: #ece7db; --dim: #a49b86; --faint: #7c745f;
+    --accent: #e0a13e; --accent-hover: #eeb254; --accent-soft: #33280f;
+    --ok: #58c47c; --ok-soft: #16301f; --err: #f0766c; --err-soft: #3a1a17; --run: #e0a13e; --run-soft: #332912;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: var(--sans); line-height: 1.5;
+    font-feature-settings: "kern";
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 32px 24px 72px; }
+
+  .doc-note {
+    display: flex; gap: 12px; align-items: flex-start;
+    background: var(--accent-soft); border: 1px solid var(--border-strong);
+    border-radius: 12px; padding: 13px 16px; margin-bottom: 28px;
+    font-size: 13.5px; color: var(--dim);
+  }
+  .doc-note b { color: var(--text); }
+  .doc-note .tag {
+    flex: none; font-size: 11px; font-weight: 700; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--accent);
+    background: var(--surface); border: 1px solid var(--border-strong);
+    border-radius: 6px; padding: 3px 8px; margin-top: 1px;
+  }
+
+  h1.page { font-size: 22px; margin: 0 0 20px; letter-spacing: -.01em; text-wrap: balance; }
+
+  /* Stepper */
+  .stepper { display: flex; align-items: center; gap: 0; margin-bottom: 34px; overflow-x: auto; padding-bottom: 4px; }
+  .step { display: flex; flex-direction: column; align-items: center; gap: 7px; flex: none; }
+  .step .dot {
+    width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+    font-size: 13px; font-weight: 600; border: 2px solid var(--border-strong);
+    background: var(--surface); color: var(--faint);
+  }
+  .step.done .dot { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+  .step.current .dot { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 0 0 4px var(--accent-soft); }
+  .step .lbl { font-size: 11.5px; color: var(--faint); text-align: center; white-space: nowrap; line-height: 1.2; }
+  .step.current .lbl { color: var(--accent); font-weight: 600; }
+  .step.done .lbl { color: var(--dim); }
+  .seg { height: 2px; width: 46px; background: var(--border-strong); flex: none; margin: 0 2px 22px; }
+  .seg.done { background: var(--ok); }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; box-shadow: var(--shadow); overflow: hidden;
+  }
+  .card-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 18px 20px; border-bottom: 1px solid var(--border); flex-wrap: wrap;
+  }
+  .card-head h2 { font-size: 16px; margin: 0; }
+  .badge-step {
+    font-size: 11px; font-weight: 700; letter-spacing: .05em; color: var(--accent);
+    background: var(--accent-soft); border-radius: 999px; padding: 4px 11px;
+  }
+
+  /* config chips */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12.5px; color: var(--dim); background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 999px; padding: 5px 11px;
+  }
+  .chip b { color: var(--text); font-weight: 600; }
+  .chip .k { color: var(--faint); }
+  .chip.accent { background: var(--accent-soft); border-color: var(--border-strong); color: var(--accent); }
+  .chip.accent b { color: var(--accent); }
+
+  .body { padding: 20px; display: flex; flex-direction: column; gap: 18px; }
+
+  /* script input */
+  .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .field .sub { color: var(--faint); font-weight: 400; }
+  textarea.script {
+    width: 100%; min-height: 92px; resize: vertical; font-family: var(--sans);
+    font-size: 13.5px; line-height: 1.6; color: var(--text);
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 11px 13px;
+  }
+  textarea.script:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  /* toolbar */
+  .toolbar { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; }
+
+  /* segmented control */
+  .seg-ctl { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 9px; padding: 3px; gap: 3px; }
+  .seg-ctl > button {
+    font-family: var(--sans); font-size: 12.5px; font-weight: 600; cursor: pointer;
+    border: none; background: transparent; color: var(--dim); border-radius: 6px; padding: 6px 12px;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .seg-ctl > button.on { background: var(--surface); color: var(--accent); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .seg-ctl .ttl { font-size: 12px; color: var(--faint); font-weight: 500; align-self: center; padding-left: 4px; }
+
+  /* saved / restore indicator */
+  .saved {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ok);
+    background: var(--ok-soft); border: 1px solid var(--ok); border-radius: 999px; padding: 4px 11px;
+  }
+  .saved .dot-live { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
+
+  .warn {
+    display: flex; gap: 10px; align-items: flex-start; font-size: 12.5px; color: var(--dim);
+    background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: 8px; padding: 9px 13px;
+  }
+  .warn b { color: var(--text); }
+  .btn {
+    font-family: var(--sans); font-size: 13px; font-weight: 600; cursor: pointer;
+    border-radius: 9px; padding: 8px 14px; border: 1px solid var(--border-strong);
+    background: var(--surface-2); color: var(--text); display: inline-flex; align-items: center; gap: 7px;
+    transition: background .12s, border-color .12s, transform .04s;
+  }
+  .btn:hover { background: var(--surface-3); }
+  .btn:active { transform: translateY(1px); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent-hover); }
+  .btn.ghost { background: transparent; }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .spacer { flex: 1; }
+
+  /* progress + stats */
+  .prog-wrap { display: flex; flex-direction: column; gap: 8px; }
+  .stats { font-family: var(--mono); font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .stats .hl-ok { color: var(--ok); } .stats .hl-run { color: var(--run); } .stats .hl-err { color: var(--err); }
+  .bar { height: 8px; border-radius: 999px; background: var(--surface-3); border: 1px solid var(--border); overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 50%; border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent), var(--ok)); transition: width .3s ease; }
+
+  /* list */
+  .list-head { display: flex; align-items: baseline; justify-content: space-between; }
+  .list-head h3 { font-size: 13.5px; margin: 0; }
+  .list-head .count { font-size: 12px; color: var(--faint); }
+  .rows { display: flex; flex-direction: column; gap: 8px; }
+
+  .row {
+    display: grid; grid-template-columns: 40px 1fr auto auto; gap: 12px; align-items: center;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 11px;
+    padding: 10px 13px;
+  }
+  .row.is-run { border-color: var(--run); background: var(--run-soft); }
+  .row.is-err { border-color: var(--err); }
+  .idx { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+  .txt { font-size: 13.5px; color: var(--text); line-height: 1.4; }
+  .txt .meta { display: block; margin-top: 3px; font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .txt .meta.err-msg { color: var(--err); }
+
+  .pill { justify-self: end; font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 4px 10px; white-space: nowrap; border: 1px solid transparent; }
+  .pill.pending { color: var(--faint); background: var(--surface-2); border-color: var(--border); }
+  .pill.running { color: var(--run); background: var(--run-soft); border-color: var(--run); }
+  .pill.done { color: var(--ok); background: var(--ok-soft); border-color: var(--ok); }
+  .pill.error { color: var(--err); background: var(--err-soft); border-color: var(--err); }
+  .pill .spin { display: inline-block; width: 8px; height: 8px; margin-right: 5px; border-radius: 50%;
+    border: 2px solid currentColor; border-right-color: transparent; vertical-align: -1px; animation: spin .7s linear infinite; }
+  @media (prefers-reduced-motion: reduce) { .pill .spin { animation: none; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .act { display: flex; gap: 6px; }
+  .mini {
+    font-family: var(--sans); font-size: 12px; font-weight: 600; cursor: pointer;
+    border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--dim);
+    border-radius: 7px; padding: 5px 9px; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+    transition: background .12s, color .12s;
+  }
+  .mini:hover { background: var(--surface-3); color: var(--text); }
+  .mini.retry { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  .mini.play:disabled { opacity: .4; cursor: not-allowed; }
+  .mini.play:disabled:hover { background: var(--surface-2); color: var(--dim); }
+
+  /* merged output */
+  .merged {
+    display: flex; flex-direction: column; gap: 12px; background: var(--surface-2);
+    border: 1px dashed var(--border-strong); border-radius: 13px; padding: 16px;
+  }
+  .merged .m-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .merged .m-title { font-size: 13.5px; font-weight: 600; }
+  .merged .m-sub { font-size: 12px; color: var(--faint); font-family: var(--mono); }
+  .player {
+    display: flex; align-items: center; gap: 12px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px;
+  }
+  .player .play-big { flex: none; width: 34px; height: 34px; border-radius: 50%; border: none; cursor: pointer;
+    background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 13px; }
+  .player .track { flex: 1; height: 6px; border-radius: 999px; background: var(--surface-3); position: relative; }
+  .player .track > i { position: absolute; left: 0; top: 0; bottom: 0; width: 34%; border-radius: 999px; background: var(--accent); }
+  .player .track > b { position: absolute; left: 34%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--accent); border: 2px solid var(--surface); }
+  .player .time { font-family: var(--mono); font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+
+  .row-scroll { overflow-x: auto; }
+  @media (max-width: 640px) {
+    .row { grid-template-columns: 32px 1fr; row-gap: 8px; }
+    .pill { grid-column: 2; justify-self: start; }
+    .act { grid-column: 1 / -1; flex-wrap: wrap; }
+  }
+</style>
+
+<div class="wrap">
+  <div class="doc-note">
+    <span class="tag">Đề xuất</span>
+    <div><b>Bản thiết kế bước “Đọc TTS”</b> — tách truyện thành từng câu, chạy TTS từng dòng có trạng thái &amp; retry riêng, rồi ghép lại 1 file. Lấy nguyên logic từ tab <b>TTS</b> của source <code>omivoice</code>, dựng lại theo giao diện app của bạn (chưa nối vào code thật).</div>
+  </div>
+
+  <h1 class="page">Xử lý truyện</h1>
+
+  <div class="stepper">
+    <div class="step done"><div class="dot">✓</div><div class="lbl">Nhập</div></div>
+    <div class="seg done"></div>
+    <div class="step done"><div class="dot">✓</div><div class="lbl">Sửa</div></div>
+    <div class="seg done"></div>
+    <div class="step done"><div class="dot">✓</div><div class="lbl">Kiểm tra</div></div>
+    <div class="seg done"></div>
+    <div class="step done"><div class="dot">✓</div><div class="lbl">Cấu hình<br>TTS</div></div>
+    <div class="seg done"></div>
+    <div class="step current"><div class="dot">5</div><div class="lbl">Đọc TTS</div></div>
+    <div class="seg"></div>
+    <div class="step"><div class="dot">6</div><div class="lbl">Video</div></div>
+    <div class="seg"></div>
+    <div class="step"><div class="dot">7</div><div class="lbl">Hoàn tất</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h2>Đọc TTS theo từng câu</h2>
+      <div style="display:flex;gap:10px;align-items:center">
+        <span class="saved"><span class="dot-live"></span>Đã lưu tạm · tự khôi phục sau khi tắt app</span>
+        <span class="badge-step">BƯỚC 5/7</span>
+      </div>
+    </div>
+
+    <div class="body">
+      <!-- config summary -->
+      <div class="chips">
+        <span class="chip accent">⚙️ <b>OmniVoice</b> <span class="k">local</span></span>
+        <span class="chip">🎭 <span class="k">Giọng clone:</span> <b>Ngọc Huyền Vbee</b></span>
+        <span class="chip">🌐 <b>Tiếng Việt</b></span>
+        <span class="chip">⏩ <span class="k">Speed</span> <b>1×</b></span>
+        <span class="chip">🎚️ <b>128 kbps</b></span>
+        <span class="chip">🖥️ <span class="k">GPU</span> <b>RTX 3060</b> · batch <b>4</b></span>
+      </div>
+
+      <!-- script input -->
+      <div class="field">
+        <label>Kịch bản <span class="sub">— tự lấy từ nội dung đã gộp, hoặc dán / chọn file .txt.</span></label>
+        <textarea class="script" spellcheck="false">Ngày xưa, ở một ngôi làng nhỏ ven sông, có hai anh em mồ côi sống nương tựa vào nhau. Người anh tên Tân, hiền lành và chăm chỉ. Người em tên Lang, tính tình nóng nảy nhưng rất thương anh. Một hôm, cha mẹ qua đời để lại cho hai anh em một mảnh vườn nhỏ. Từ đó, hai anh em ngày ngày ra đồng làm lụng, tối về quây quần bên bếp lửa. Cuộc sống tuy nghèo khó nhưng đầm ấm và bình yên. Cho đến một ngày, người anh quyết định lấy vợ. Người vợ hiền dịu, đối xử với cả hai anh em như người thân ruột thịt.</textarea>
+      </div>
+
+      <!-- split mode + toolbar -->
+      <div class="toolbar">
+        <div class="seg-ctl">
+          <span class="ttl">Tách theo:</span>
+          <button>. Dấu chấm</button>
+          <button class="on">↵ Xuống dòng</button>
+        </div>
+        <button class="btn">✂️ Tách câu</button>
+        <span class="spacer"></span>
+        <button class="btn primary">🎙️ Chạy TTS tất cả</button>
+        <button class="btn ghost">↻ Chạy lại các dòng lỗi</button>
+        <button class="btn ghost">🗑️ Xóa danh sách</button>
+      </div>
+
+      <!-- reset warning -->
+      <div class="warn">
+        <span>💾</span>
+        <div><b>Danh sách câu &amp; audio được lưu trong DB</b> — đóng app rồi mở lại vẫn còn nguyên tiến độ. Nếu bạn <b>sửa hoặc xáo lại nội dung truyện</b> ở bước trước, app sẽ <b>hỏi trước</b> rồi mới tách lại (không tự xóa audio đã chạy).</div>
+      </div>
+
+      <!-- progress -->
+      <div class="prog-wrap">
+        <div class="stats">8 dòng · <span class="hl-run">chạy 1</span> · <span class="hl-ok">xong 3</span> · <span class="hl-err">lỗi 1</span> · chờ 3 · batch 4 · ETA ~0:42</div>
+        <div class="bar"><i style="width:50%"></i></div>
+      </div>
+
+      <!-- list -->
+      <div class="list-head">
+        <h3>Danh sách câu</h3>
+        <span class="count">tiến độ 4 / 8</span>
+      </div>
+
+      <div class="row-scroll">
+        <div class="rows">
+
+          <div class="row">
+            <span class="idx">#1</span>
+            <span class="txt">Ngày xưa, ở một ngôi làng nhỏ ven sông, có hai anh em mồ côi sống nương tựa vào nhau.
+              <span class="meta">audio 6.20s · gen 3.10s · try 1</span></span>
+            <span class="pill done">Đã xong</span>
+            <div class="act">
+              <button class="mini play">▶ Nghe</button>
+              <button class="mini retry">↻ Re-TTS</button>
+              <button class="mini">⬇︎</button>
+              <button class="mini">✕</button>
+            </div>
+          </div>
+
+          <div class="row">
+            <span class="idx">#2</span>
+            <span class="txt">Người anh tên Tân, hiền lành và chăm chỉ.
+              <span class="meta">audio 3.05s · gen 1.80s · try 1</span></span>
+            <span class="pill done">Đã xong</span>
+            <div class="act">
+              <button class="mini play">▶ Nghe</button>
+              <button class="mini retry">↻ Re-TTS</button>
+              <button class="mini">⬇︎</button>
+              <button class="mini">✕</button>
+            </div>
+          </div>
+
+          <div class="row">
+            <span class="idx">#3</span>
+            <span class="txt">Người em tên Lang, tính tình nóng nảy nhưng rất thương anh.
+              <span class="meta">audio 3.90s · gen 2.10s · try 1</span></span>
+            <span class="pill done">Đã xong</span>
+            <div class="act">
+              <button class="mini play">▶ Nghe</button>
+              <button class="mini retry">↻ Re-TTS</button>
+              <button class="mini">⬇︎</button>
+              <button class="mini">✕</button>
+            </div>
+          </div>
+
+          <div class="row is-run">
+            <span class="idx">#4</span>
+            <span class="txt">Một hôm, cha mẹ qua đời để lại cho hai anh em một mảnh vườn nhỏ.
+              <span class="meta">đang sinh audio trên GPU…</span></span>
+            <span class="pill running"><span class="spin"></span>Đang chạy</span>
+            <div class="act">
+              <button class="mini play" disabled>▶ Nghe</button>
+              <button class="mini" disabled>↻ Re-TTS</button>
+              <button class="mini" disabled>✕</button>
+            </div>
+          </div>
+
+          <div class="row is-err">
+            <span class="idx">#5</span>
+            <span class="txt">Từ đó, hai anh em ngày ngày ra đồng làm lụng, tối về quây quần bên bếp lửa.
+              <span class="meta err-msg">✕ CUDA out of memory — thử lại hoặc giảm batch size · try 2</span></span>
+            <span class="pill error">Lỗi</span>
+            <div class="act">
+              <button class="mini play" disabled>▶ Nghe</button>
+              <button class="mini retry">↻ Re-TTS</button>
+              <button class="mini">✕</button>
+            </div>
+          </div>
+
+          <div class="row">
+            <span class="idx">#6</span>
+            <span class="txt">Cuộc sống tuy nghèo khó nhưng đầm ấm và bình yên.
+              <span class="meta">chờ trong hàng đợi</span></span>
+            <span class="pill pending">Chưa chạy</span>
+            <div class="act">
+              <button class="mini play" disabled>▶ Nghe</button>
+              <button class="mini">↻ Re-TTS</button>
+              <button class="mini">✕</button>
+            </div>
+          </div>
+
+          <div class="row">
+            <span class="idx">#7</span>
+            <span class="txt">Cho đến một ngày, người anh quyết định lấy vợ.
+              <span class="meta">chờ trong hàng đợi</span></span>
+            <span class="pill pending">Chưa chạy</span>
+            <div class="act">
+              <button class="mini play" disabled>▶ Nghe</button>
+              <button class="mini">↻ Re-TTS</button>
+              <button class="mini">✕</button>
+            </div>
+          </div>
+
+          <div class="row">
+            <span class="idx">#8</span>
+            <span class="txt">Người vợ hiền dịu, đối xử với cả hai anh em như người thân ruột thịt.
+              <span class="meta">chờ trong hàng đợi</span></span>
+            <span class="pill pending">Chưa chạy</span>
+            <div class="act">
+              <button class="mini play" disabled>▶ Nghe</button>
+              <button class="mini">↻ Re-TTS</button>
+              <button class="mini">✕</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- merge -->
+      <div class="toolbar">
+        <button class="btn primary">🔗 Ghép tất cả thành 1 file</button>
+        <span class="stats" style="align-self:center">chỉ ghép được khi tất cả các dòng ở trạng thái “Đã xong”</span>
+      </div>
+
+      <!-- merged output preview -->
+      <div class="merged">
+        <div class="m-top">
+          <span class="m-title">🎧 File thành phẩm</span>
+          <span class="m-sub">Ngu_Cong_doi_nui.mp3 · 8 câu · 03:41 · 3.4 MB</span>
+        </div>
+        <div class="player">
+          <button class="play-big" aria-label="Phát">▶</button>
+          <span class="time">01:12</span>
+          <div class="track"><i></i><b></b></div>
+          <span class="time">03:41</span>
+        </div>
+        <div class="toolbar">
+          <button class="btn">⬇️ Tải audio</button>
+          <button class="btn ghost">➡️ Sang bước Video</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

@@ -3,6 +3,7 @@ TTS Worker
 Background task worker for text-to-speech processing
 """
 import asyncio
+import threading
 from typing import Dict, Optional
 from loguru import logger
 
@@ -15,6 +16,149 @@ from app.config import settings
 def _engine(config: Optional[Dict]) -> str:
     """Which TTS engine to use: 'vbee' (default, cloud) or 'omnivoice' (local)."""
     return ((config or {}).get("engine") or "vbee").lower()
+
+
+# ---- Per-story segment-generation lock (single desktop process) -------------
+# Serialises segment generation per story so overlapping run/run, run/retry and
+# retry/retry requests can't double-generate the same segment. The GPU model
+# lock already serialises the actual generate() call, but that doesn't stop two
+# tasks from each iterating the same pending rows; this does. Endpoints acquire
+# synchronously (closing the schedule-time race) and the task releases when done.
+_active_stories: set = set()
+_active_lock = threading.Lock()
+
+
+def try_acquire_story(story_id: str) -> bool:
+    """Reserve a story for generation. Returns False if one is already active."""
+    with _active_lock:
+        if story_id in _active_stories:
+            return False
+        _active_stories.add(story_id)
+        return True
+
+
+def release_story(story_id: str) -> None:
+    with _active_lock:
+        _active_stories.discard(story_id)
+
+
+def is_story_active(story_id: str) -> bool:
+    with _active_lock:
+        return story_id in _active_stories
+
+
+def process_segments_task(story_id: str) -> Dict:
+    """Generate audio for every pending/error segment of a story, one at a time.
+
+    Runs in a FastAPI BackgroundTask (own DB session). Each segment's status is
+    committed as it finishes so the frontend sees live progress by polling. The
+    OmniVoice GPU model lock already serialises generation, so we process
+    sequentially rather than fanning out.
+    """
+    from app.services import segment_tts
+
+    db = SessionLocal()
+    try:
+        pending = db.query(models.TtsSegment).filter(
+            models.TtsSegment.story_id == story_id,
+            models.TtsSegment.status.in_(["pending", "error"]),
+        ).order_by(models.TtsSegment.seg_index).all()
+
+        logger.info(f"[segment-tts] story {story_id}: running {len(pending)} segment(s)")
+        ok = 0
+        for seg in pending:
+            result = segment_tts.synthesize_segment(db, seg)
+            if result.get("success"):
+                ok += 1
+        logger.info(f"[segment-tts] story {story_id}: done, {ok}/{len(pending)} succeeded")
+        return {"success": True, "processed": len(pending), "ok": ok}
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"[segment-tts] batch failed for story {story_id}: {e}")
+        return {"success": False, "error": str(e)}
+    finally:
+        release_story(story_id)
+        db.close()
+
+
+def process_single_segment_task(segment_id: str) -> Dict:
+    """(Re)generate one segment — used by the per-row Re-TTS button."""
+    from app.services import segment_tts
+
+    db = SessionLocal()
+    story_id = None
+    try:
+        seg = db.query(models.TtsSegment).filter(
+            models.TtsSegment.id == segment_id
+        ).first()
+        if not seg:
+            return {"success": False, "error": "Segment not found"}
+        story_id = seg.story_id
+        return segment_tts.synthesize_segment(db, seg)
+    finally:
+        if story_id:
+            release_story(story_id)
+        db.close()
+
+
+def process_segments_merge_task(story_id: str, task_id: str) -> Dict:
+    """Concatenate a story's done segments into one final mp3, tracked by a Task
+    row so the existing merged-status polling endpoint reports progress."""
+    from app.services import segment_tts
+
+    db = SessionLocal()
+    try:
+        task = db.query(models.Task).filter(models.Task.id == task_id).first()
+        story = db.query(models.Story).filter(models.Story.id == story_id).first()
+        if not story:
+            if task:
+                task.status = "failed"
+                task.error_message = "Story not found"
+                db.commit()
+            return {"success": False, "error": "Story not found"}
+
+        result = segment_tts.merge_segments(db, story)
+        if task:
+            if result.get("success"):
+                task.status = "completed"
+                task.completed_items = 1
+                task.progress = 100
+            else:
+                task.status = "failed"
+                task.error_message = result.get("error", "Unknown error")
+            db.commit()
+        return result
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"[segment-tts] merge failed for story {story_id}: {e}")
+        task = db.query(models.Task).filter(models.Task.id == task_id).first()
+        if task:
+            task.status = "failed"
+            task.error_message = str(e)
+            db.commit()
+        return {"success": False, "error": str(e)}
+    finally:
+        db.close()
+
+
+def resume_stuck_segments() -> None:
+    """Reset segments left 'processing' by a crashed/closed app back to 'pending'.
+
+    Called on startup — the in-memory background task that was generating them is
+    gone, so the row would otherwise be stuck spinning forever.
+    """
+    db = SessionLocal()
+    try:
+        stuck = db.query(models.TtsSegment).filter(
+            models.TtsSegment.status == "processing"
+        ).all()
+        for seg in stuck:
+            seg.status = "pending"
+        if stuck:
+            db.commit()
+            logger.info(f"[segment-tts] reset {len(stuck)} stuck 'processing' segment(s) to pending")
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"[segment-tts] resume_stuck_segments failed: {e}")
+    finally:
+        db.close()
 
 
 async def process_tts_task(

@@ -1,8 +1,13 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec for TruyenFull Processor (Windows desktop app).
+PyInstaller spec for TruyenFull Processor (Windows desktop app) — FULL build.
 
-Build from the repo root:
+Bundles the local OmniVoice TTS engine (torch + CUDA + transformers) alongside
+the cloud VBEE engine, so the shipped app supports BOTH. Large (~6-10 GB onedir).
+OmniVoice runs on GPU when an NVIDIA card is present, and automatically falls
+back to CPU (slower) on GPU-less machines — see app/services/omnivoice_processor.
+
+Build from the repo root (venv must have requirements.lock.txt installed):
     backend/venv/Scripts/pyinstaller.exe packaging/truyenfull.spec --noconfirm
 
 Produces dist/TruyenFullProcessor/TruyenFullProcessor.exe (onedir).
@@ -10,8 +15,6 @@ Produces dist/TruyenFullProcessor/TruyenFullProcessor.exe (onedir).
 import os
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
-# SPECPATH is the directory containing this .spec (i.e. <repo>/packaging),
-# so the repo root is its parent.
 REPO = os.path.dirname(SPECPATH)
 BACKEND = os.path.join(REPO, "backend")
 
@@ -19,21 +22,36 @@ datas = []
 binaries = []
 hiddenimports = ["sqlalchemy.dialects.sqlite"]
 
-# pywebview + its .NET bridge (WebView2 on Windows) need their data/binaries
-# and submodules collected explicitly.
+# pywebview + its .NET bridge (WebView2 on Windows).
 for pkg in ("webview", "clr_loader", "pythonnet", "bottle"):
     try:
         d, b, h = collect_all(pkg)
-        datas += d
-        binaries += b
-        hiddenimports += h
+        datas += d; binaries += b; hiddenimports += h
     except Exception:
         pass
 
-# uvicorn loads its loops/protocols/lifespan lazily -> pull them all in.
+# uvicorn loads loops/protocols/lifespan lazily.
 hiddenimports += collect_submodules("uvicorn")
 
-# App routers/services/workers may be referenced indirectly -> bundle them all.
+# --- ML stack for OmniVoice ------------------------------------------------
+# torch/omnivoice are imported lazily in app.services.omnivoice_processor, so
+# PyInstaller's static analysis won't discover them — collect them explicitly.
+# collect_all pulls each package's data files + binaries (incl. torch's bundled
+# CUDA DLLs from the cu124 wheel) + submodules.
+ML_PACKAGES = [
+    "torch", "torchaudio", "omnivoice", "transformers", "tokenizers",
+    "safetensors", "accelerate", "huggingface_hub", "soundfile", "soxr",
+    "librosa", "numba", "llvmlite", "scipy", "sklearn", "truststore",
+    "regex", "webdataset",
+]
+for pkg in ML_PACKAGES:
+    try:
+        d, b, h = collect_all(pkg)
+        datas += d; binaries += b; hiddenimports += h
+    except Exception as e:
+        print(f"[spec] WARN collect_all({pkg}) failed: {e}")
+
+# App routers/services/workers referenced indirectly.
 import sys as _sys
 _sys.path.insert(0, BACKEND)
 hiddenimports += collect_submodules("app")
@@ -44,6 +62,10 @@ datas += [
     (os.path.join(BACKEND, "bin", "ffmpeg.exe"), "bin"),
     (os.path.join(BACKEND, "bin", "ffprobe.exe"), "bin"),
 ]
+# Default OmniVoice clone-voice presets (seeded into user dir on first run).
+_def_presets = os.path.join(BACKEND, "default_clone_presets")
+if os.path.isdir(_def_presets):
+    datas.append((_def_presets, "default_clone_presets"))
 _fonts = os.path.join(BACKEND, "assets", "fonts")
 if os.path.isdir(_fonts) and os.listdir(_fonts):
     datas.append((_fonts, "assets/fonts"))
@@ -57,7 +79,13 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter", "matplotlib", "pymysql", "aiomysql"],
+    # gradio is a transitive dep of omnivoice but NOT needed for inference
+    # (verified: `from omnivoice import OmniVoice` does not import gradio).
+    # Excluding it avoids gradio's heavy, PyInstaller-hostile assets.
+    excludes=[
+        "tkinter", "matplotlib", "pymysql", "aiomysql",
+        "gradio", "gradio_client", "safehttpx", "groovy",
+    ],
     noarchive=False,
 )
 

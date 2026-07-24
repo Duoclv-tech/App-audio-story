@@ -195,6 +195,7 @@ export default function ProcessorPage() {
   const [newPreset, setNewPreset] = useState<{ name: string; ref_text: string; file: File | null }>({
     name: '', ref_text: '', file: null,
   })
+  const [showCreatePreset, setShowCreatePreset] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [downloadingAudio, setDownloadingAudio] = useState(false)
@@ -501,6 +502,10 @@ export default function ProcessorPage() {
   const previewVideoRef = useRef<HTMLVideoElement | null>(null)
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
   const previewFrameRef = useRef<HTMLDivElement | null>(null)
+  // Chiều rộng khả dụng của cột chứa preview (đo runtime để khung không tràn ra
+  // ngoài card khi cột hẹp hơn kích thước tối đa cứng).
+  const previewColRef = useRef<HTMLDivElement | null>(null)
+  const [previewAvailW, setPreviewAvailW] = useState<number>(720)
   // Offset to apply to <video> after a clip switch finishes loading
   const pendingClipOffsetRef = useRef<number>(0)
   const [previewVolume, setPreviewVolume] = useState<number>(1)
@@ -859,6 +864,19 @@ export default function ProcessorPage() {
       main.style.paddingRight = ''
     }
     return () => { main.style.paddingRight = '' }
+  }, [currentStep])
+
+  // Đo chiều rộng khả dụng của cột preview (step 7) để khung video co lại vừa
+  // card thay vì tràn khi cột hẹp hơn kích thước tối đa cứng.
+  useEffect(() => {
+    if (currentStep !== 7) return
+    const el = previewColRef.current
+    if (!el) return
+    const update = () => setPreviewAvailW(el.clientWidth)
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
   }, [currentStep])
 
   // Fetch font list once on mount
@@ -3851,13 +3869,25 @@ export default function ProcessorPage() {
                         </select>
                       </div>
 
-                      {/* Create a new cloned voice */}
-                      <div className="border-t border-token pt-4 space-y-3">
-                        <div className="text-sm font-semibold flex items-center gap-1.5">
-                          <span className="text-primary-500 text-base leading-none">+</span>
+                      {/* Create a new cloned voice — collapse để đỡ chiếm diện tích, click header để mở */}
+                      <div className="border-t border-token pt-4">
+                        <button
+                          type="button"
+                          onClick={() => setShowCreatePreset((v) => !v)}
+                          className="w-full flex items-center gap-1.5 text-sm font-semibold hover:text-primary-500 transition"
+                        >
+                          <span className="text-primary-500 text-base leading-none">{showCreatePreset ? '−' : '+'}</span>
                           Tạo giọng clone mới
-                        </div>
+                          <svg
+                            className={`w-4 h-4 ml-auto text-dim transition-transform ${showCreatePreset ? 'rotate-180' : ''}`}
+                            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
 
+                        {showCreatePreset && (
+                        <div className="space-y-3 mt-3">
                         <div>
                           <label className="block text-xs font-medium text-dim mb-1">Tên giọng</label>
                           <input
@@ -3905,6 +3935,8 @@ export default function ProcessorPage() {
                         >
                           Tạo giọng
                         </button>
+                        </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -4363,7 +4395,9 @@ export default function ProcessorPage() {
       case 7: {
         const [resW, resH] = videoConfig.resolution.split('x').map(Number)
         const ratio = resW / resH
-        const maxW = 720, maxH = 540
+        // maxW co theo chiều rộng cột (trừ ~10px cho outline offset của khung)
+        // để preview không tràn ra ngoài card khi cột hẹp.
+        const maxW = Math.min(720, Math.max(200, previewAvailW - 10)), maxH = 540
         const previewW = ratio >= 1 ? maxW : Math.round(maxH * ratio)
         const previewH = ratio >= 1 ? Math.round(maxW / ratio) : maxH
         const previewScaleX = videoConfig.bannerImage ? videoConfig.bannerVideoScaleX : 1
@@ -5736,7 +5770,7 @@ export default function ProcessorPage() {
                   <span className="text-[11px] text-faint">{clipList.length} clip · cycle theo folder order</span>
                 )}
               </div>
-              <div className="flex flex-col items-center">
+              <div ref={previewColRef} className="flex flex-col items-center">
                 <div
                   ref={previewFrameRef}
                   className="relative overflow-hidden bg-black shadow-lg"

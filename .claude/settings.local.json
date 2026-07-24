@@ -58,7 +58,11 @@
       "Artifact",
       "Skill(code-review)",
       "Workflow(code-review)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(./dist/TruyenFullProcessor/TruyenFullProcessor.exe --selftest)"
+    ],
+    "deny": [
+      "Bash(sudo:*)"
     ],
     "ask": [
       "Bash(rm:*)",
@@ -68,9 +72,6 @@
       "Bash(git filter-branch:*)",
       "Bash(git filter-repo:*)",
       "Bash(taskkill:*)"
-    ],
-    "deny": [
-      "Bash(sudo:*)"
     ]
   }
 }

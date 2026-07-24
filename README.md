@@ -109,8 +109,7 @@ web_app/
 ├── frontend/                  # React + Vite frontend
 │   └── src/{components,pages,services}
 ├── packaging/                 # PyInstaller specs + Inno Setup installer
-│   ├── truyenfull.spec        # CPU build
-│   ├── truyenfull-gpu.spec    # GPU (OmniVoice) build
+│   ├── truyenfull.spec        # PyInstaller spec (full build: VBEE + OmniVoice)
 │   ├── installer.iss          # Inno Setup script
 │   └── BUILD.md               # Build instructions
 ├── dist/                      # PyInstaller output (TruyenFullProcessor.exe)
@@ -186,7 +185,7 @@ cd frontend && npm run build
 
 # 2. Package with PyInstaller (from repo root)
 backend/venv/Scripts/pyinstaller.exe packaging/truyenfull.spec --noconfirm
-#   GPU build: packaging/truyenfull-gpu.spec
+#   (full build: nhúng cả VBEE + OmniVoice; OmniVoice tự chạy GPU hoặc CPU)
 
 # 3. Smoke-test the frozen build (no window)
 dist/TruyenFullProcessor/TruyenFullProcessor.exe --selftest

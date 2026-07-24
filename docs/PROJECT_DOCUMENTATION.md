@@ -701,7 +701,7 @@ Ngoài chế độ web (Docker + MySQL) và batch CLI, dự án đã được đ
 ### File cốt lõi của bản desktop
 - `backend/app/paths.py` — trung tâm hóa đường dẫn (phân biệt dev / frozen qua `sys.frozen` + `sys._MEIPASS`).
 - `backend/app/database.py` — engine SQLite + PRAGMA (`WAL`, `foreign_keys=ON`, `busy_timeout`); giữ nhánh MySQL nếu override `DATABASE_URL`.
-- `backend/app/seed.py` — nạp 14 giọng VBEE + 7 settings mặc định khi DB rỗng (thay cho SQL init của Docker).
+- `backend/app/seed.py` — nạp 25 giọng VBEE tiếng Việt (trọn bộ catalog, lấy từ `GET https://vbee.vn/api/v1/voices`, sắp theo `rank` của VBEE) + 10 settings mặc định khi DB rỗng (thay cho SQL init của Docker).
 - `backend/desktop.py` — entry point: uvicorn chạy nền (port động) + cửa sổ pywebview; có `--selftest` để smoke-test.
 - `packaging/truyenfull.spec` — cấu hình PyInstaller.
 - `packaging/installer.iss` — Inno Setup (+ bootstrap WebView2 runtime).

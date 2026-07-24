@@ -1,7 +1,13 @@
 # --- Secrets / local config ---
-backend/.env
-backend/.env.mysql.bak
+# Chặn mọi biến thể .env (real secrets), trừ template .example và frontend/.env vô hại
+.env
+.env.*
+*.env
 *.env.local
+*.bak
+!*.env.example
+!.env.example
+!frontend/.env
 
 # --- Python ---
 __pycache__/
@@ -44,3 +50,5 @@ backend/clone_presets/
 # Standalone OmniVoice reference repo (nested git repo + multi-GB weights) —
 # kept locally for reference, never part of this repo.
 omivoice-tts/
+
+omivoice/

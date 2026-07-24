@@ -345,7 +345,7 @@ Backend (`backend/.env`):
 | `API_HOST`, `API_PORT`, `DEBUG` | Server |
 | `CORS_ORIGINS` | Danh sách origin cho phép (CSV) |
 
-Frontend (`frontend/.env`): `VITE_API_URL=http://localhost:8000`.
+Frontend: không dùng file `.env`. Các API service gọi đường dẫn tương đối `/api/v1/...`; khi dev, Vite proxy (`vite.config.ts`) chuyển tiếp sang `http://localhost:8000`.
 
 ---
 

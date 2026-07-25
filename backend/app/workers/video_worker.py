@@ -116,6 +116,11 @@ async def process_video_task(
         visualizer_waveform_mode = config.get("visualizer_waveform_mode", "cline")
         visualizer_waveform_mirror = config.get("visualizer_waveform_mirror", False)
         stickers = config.get("stickers") or []
+        bgm_path = config.get("bgm_path")
+        bgm_volume = config.get("bgm_volume", 0.12)
+        bgm_loop = config.get("bgm_loop", True)
+        bgm_ducking = config.get("bgm_ducking", True)
+        bgm_fade = config.get("bgm_fade", 2.0)
 
         # Update task status
         task = db.query(models.Task).filter(models.Task.id == task_id).first()
@@ -209,6 +214,11 @@ async def process_video_task(
             visualizer_waveform_mode=visualizer_waveform_mode,
             visualizer_waveform_mirror=visualizer_waveform_mirror,
             stickers=stickers,
+            bgm_path=bgm_path,
+            bgm_volume=bgm_volume,
+            bgm_loop=bgm_loop,
+            bgm_ducking=bgm_ducking,
+            bgm_fade=bgm_fade,
         )
 
         if result.get("success"):

@@ -305,6 +305,8 @@ export default function ProcessorPage() {
     subtitle_x: number; subtitle_y: number; subtitle_opacity: number;
     fade_in: number; fade_out: number;
     mute_source_videos: boolean;
+    bgmPath: string;
+    bgm_volume: number; bgm_loop: boolean; bgm_ducking: boolean; bgm_fade: number;
     visualizer_enabled: boolean;
     visualizer_style: 'bars'|'waveform'|'spectrum'|'cqt';
     visualizer_x: number; visualizer_y: number;
@@ -329,7 +331,7 @@ export default function ProcessorPage() {
     stickers: Sticker[];
   }
 
-  type VideoCfgPreset = Omit<VideoConfig, 'folder'|'audioPath'|'bannerImage'|'bannerVideoScaleX'|'bannerVideoScaleY'|'bannerVideoOffsetX'|'bannerVideoOffsetY'|'watermarkImage'>
+  type VideoCfgPreset = Omit<VideoConfig, 'folder'|'audioPath'|'bannerImage'|'bannerVideoScaleX'|'bannerVideoScaleY'|'bannerVideoOffsetX'|'bannerVideoOffsetY'|'watermarkImage'|'bgmPath'>
 
   const DEFAULT_VIDEO_CFG: VideoCfgPreset = {
     audio_speed: 1.0,
@@ -356,6 +358,10 @@ export default function ProcessorPage() {
     fade_in: 0.0,
     fade_out: 0.0,
     mute_source_videos: true,
+    bgm_volume: 0.12,
+    bgm_loop: true,
+    bgm_ducking: true,
+    bgm_fade: 2.0,
     visualizer_enabled: false,
     visualizer_style: 'bars',
     visualizer_x: 0.5,
@@ -417,6 +423,7 @@ export default function ProcessorPage() {
     const savedFolder = localStorage.getItem('videoConfig_folder') || ''
     const savedBanner = localStorage.getItem('videoConfig_bannerImage') || ''
     const savedWatermark = localStorage.getItem('videoConfig_watermarkImage') || ''
+    const savedBgm = localStorage.getItem('videoConfig_bgmPath') || ''
     // Legacy single scale → migrate to per-axis when the new keys are absent.
     const savedScale = parseFloat(localStorage.getItem('videoConfig_bannerVideoScale') || '1.0')
     const legacyScale = isNaN(savedScale) ? 1.0 : savedScale
@@ -436,6 +443,7 @@ export default function ProcessorPage() {
       bannerVideoOffsetX: isNaN(savedOffX) ? 0 : Math.max(-0.5, Math.min(0.5, savedOffX)),
       bannerVideoOffsetY: isNaN(savedOffY) ? 0 : Math.max(-0.5, Math.min(0.5, savedOffY)),
       watermarkImage: savedWatermark,
+      bgmPath: savedBgm,
       ...DEFAULT_VIDEO_CFG,
       ...migrateOldCfg(savedCfg),
     }
@@ -488,6 +496,8 @@ export default function ProcessorPage() {
     files: [] as string[],
     loading: false
   })
+  // Which field the audio browser writes to: the main narration or the BGM track.
+  const [audioBrowserTarget, setAudioBrowserTarget] = useState<'main' | 'bgm'>('main')
   const [imageBrowser, setImageBrowser] = useState({
     isOpen: false,
     currentPath: '',
@@ -660,6 +670,11 @@ export default function ProcessorPage() {
       fade_in: videoConfig.fade_in,
       fade_out: videoConfig.fade_out,
       mute_source_videos: videoConfig.mute_source_videos,
+      bgm_path: videoConfig.bgmPath || undefined,
+      bgm_volume: videoConfig.bgm_volume,
+      bgm_loop: videoConfig.bgm_loop,
+      bgm_ducking: videoConfig.bgm_ducking,
+      bgm_fade: videoConfig.bgm_fade,
       ad_flip_random: videoConfig.ad_flip_random,
       ad_flip_all: videoConfig.ad_flip_all,
       ad_zoom: videoConfig.ad_zoom,
@@ -1444,6 +1459,11 @@ export default function ProcessorPage() {
         fade_in: videoConfig.fade_in,
         fade_out: videoConfig.fade_out,
         mute_source_videos: videoConfig.mute_source_videos,
+        bgm_path: videoConfig.bgmPath || undefined,
+        bgm_volume: videoConfig.bgm_volume,
+        bgm_loop: videoConfig.bgm_loop,
+        bgm_ducking: videoConfig.bgm_ducking,
+        bgm_fade: videoConfig.bgm_fade,
         ad_flip_random: videoConfig.ad_flip_random,
         ad_flip_all: videoConfig.ad_flip_all,
         ad_zoom: videoConfig.ad_zoom,
@@ -1577,11 +1597,16 @@ export default function ProcessorPage() {
   }
 
   // Audio file browser functions
-  const openAudioBrowser = async (startPath?: string, isFilePath: boolean = false) => {
+  const openAudioBrowser = async (startPath?: string, isFilePath: boolean = false, target?: 'main' | 'bgm') => {
+    if (target !== undefined) setAudioBrowserTarget(target)
+    const tgt = target !== undefined ? target : audioBrowserTarget
     // In the packaged desktop app, use the native Windows file picker.
     if (hasNativeDialogs()) {
       const picked = await pickAudioFileNative(startPath)
-      if (picked) setVideoConfig(prev => ({ ...prev, audioPath: picked }))
+      if (picked) {
+        if (tgt === 'bgm') setVideoConfig(prev => ({ ...prev, bgmPath: picked }))
+        else setVideoConfig(prev => ({ ...prev, audioPath: picked }))
+      }
       return
     }
     setAudioBrowser(prev => ({ ...prev, isOpen: true, loading: true }))
@@ -1617,7 +1642,11 @@ export default function ProcessorPage() {
   const selectAudioFile = (fileName: string) => {
     const sep = audioBrowser.currentPath.includes('/') ? '/' : '\\'
     const fullPath = `${audioBrowser.currentPath.replace(/[\\/]$/, '')}${sep}${fileName}`
-    setVideoConfig(prev => ({ ...prev, audioPath: fullPath }))
+    if (audioBrowserTarget === 'bgm') {
+      setVideoConfig(prev => ({ ...prev, bgmPath: fullPath }))
+    } else {
+      setVideoConfig(prev => ({ ...prev, audioPath: fullPath }))
+    }
     setAudioBrowser(prev => ({ ...prev, isOpen: false }))
   }
 
@@ -1686,7 +1715,8 @@ export default function ProcessorPage() {
     localStorage.setItem('videoConfig_bannerVideoOffsetX', String(videoConfig.bannerVideoOffsetX))
     localStorage.setItem('videoConfig_bannerVideoOffsetY', String(videoConfig.bannerVideoOffsetY))
     localStorage.setItem('videoConfig_watermarkImage', videoConfig.watermarkImage)
-    const { folder, audioPath, bannerImage, bannerVideoScaleX, bannerVideoScaleY, bannerVideoOffsetX, bannerVideoOffsetY, watermarkImage, ...cfg } = videoConfig
+    localStorage.setItem('videoConfig_bgmPath', videoConfig.bgmPath)
+    const { folder, audioPath, bannerImage, bannerVideoScaleX, bannerVideoScaleY, bannerVideoOffsetX, bannerVideoOffsetY, watermarkImage, bgmPath, ...cfg } = videoConfig
     localStorage.setItem('videoConfig_cfg', JSON.stringify(cfg))
   }, [videoConfig])
 
@@ -1701,7 +1731,7 @@ export default function ProcessorPage() {
   }, [])
 
   const extractCfgFromConfig = () => {
-    const { folder, audioPath, bannerImage, bannerVideoScaleX, bannerVideoScaleY, bannerVideoOffsetX, bannerVideoOffsetY, watermarkImage, ...cfg } = videoConfig
+    const { folder, audioPath, bannerImage, bannerVideoScaleX, bannerVideoScaleY, bannerVideoOffsetX, bannerVideoOffsetY, watermarkImage, bgmPath, ...cfg } = videoConfig
     return cfg
   }
 
@@ -3926,6 +3956,7 @@ export default function ProcessorPage() {
                       >
                         <option value="auto">Auto (model tự chọn giọng)</option>
                         <option value="clone">Clone (giọng từ mẫu)</option>
+                        <option value="design">Design (mô tả giọng)</option>
                       </select>
                     </div>
 
@@ -4738,7 +4769,7 @@ export default function ProcessorPage() {
                         disabled={isProcessing}
                       />
                       <button
-                        onClick={() => openAudioBrowser(videoConfig.audioPath || '', true)}
+                        onClick={() => openAudioBrowser(videoConfig.audioPath || '', true, 'main')}
                         disabled={isProcessing}
                         className="px-3 py-1.5 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50"
                       >
@@ -4929,6 +4960,96 @@ export default function ProcessorPage() {
                       <p className="text-[11px] text-faint mt-0.5 ml-5">Bỏ tích nếu muốn trộn cả tiếng từ video nguồn vào</p>
                     </div>
                   </div>
+                </div>
+
+                {/* Background music card */}
+                <div className="border rounded-lg p-4 bg-surface space-y-3">
+                  <h4 className="font-semibold text-primary-600 dark:text-primary-400 text-sm">🎵 Nhạc nền (tùy chọn)</h4>
+
+                  <div>
+                    <label className="block text-xs font-medium mb-1 text-dim">Music File Path</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={videoConfig.bgmPath}
+                        onChange={(e) => setVideoConfig(prev => ({ ...prev, bgmPath: e.target.value }))}
+                        placeholder="D:\path\to\music.mp3"
+                        className="flex-1 px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        disabled={isProcessing}
+                      />
+                      <button
+                        onClick={() => openAudioBrowser(videoConfig.bgmPath || '', true, 'bgm')}
+                        disabled={isProcessing}
+                        className="px-3 py-1.5 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50"
+                      >
+                        Browse
+                      </button>
+                      {videoConfig.bgmPath && (
+                        <button
+                          onClick={() => setVideoConfig(prev => ({ ...prev, bgmPath: '' }))}
+                          disabled={isProcessing}
+                          className="px-2 py-1.5 text-sm bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
+                          title="Xoá nhạc nền"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-faint mt-0.5">Nhạc phát dưới giọng đọc. Bỏ trống = không dùng nhạc nền.</p>
+                  </div>
+
+                  {videoConfig.bgmPath && (
+                    <>
+                      <div>
+                        <label className="block text-xs font-medium mb-1 text-dim">
+                          Âm lượng nhạc: {Math.round(videoConfig.bgm_volume * 100)}%
+                        </label>
+                        <input
+                          type="range" min="0" max="0.5" step="0.01"
+                          value={videoConfig.bgm_volume}
+                          onChange={(e) => setVideoConfig(prev => ({ ...prev, bgm_volume: parseFloat(e.target.value) }))}
+                          className="w-full"
+                          disabled={isProcessing}
+                        />
+                        <p className="text-[11px] text-faint mt-0.5">Mức âm nhạc so với giọng đọc (giọng luôn giữ nguyên 100%).</p>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium mb-1 text-dim">Fade in/out nhạc (s)</label>
+                        <input
+                          type="number"
+                          value={videoConfig.bgm_fade}
+                          onChange={(e) => setVideoConfig(prev => ({ ...prev, bgm_fade: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                          step="0.5" min="0" max="10"
+                          className="w-32 px-2 py-1.5 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          disabled={isProcessing}
+                        />
+                      </div>
+
+                      <label className="flex items-center gap-2 text-xs text-dim cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={videoConfig.bgm_loop}
+                          onChange={(e) => setVideoConfig(prev => ({ ...prev, bgm_loop: e.target.checked }))}
+                          disabled={isProcessing}
+                        />
+                        Lặp nhạc cho đủ độ dài video
+                      </label>
+
+                      <div>
+                        <label className="flex items-center gap-2 text-xs text-dim cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={videoConfig.bgm_ducking}
+                            onChange={(e) => setVideoConfig(prev => ({ ...prev, bgm_ducking: e.target.checked }))}
+                            disabled={isProcessing}
+                          />
+                          Tự động hạ nhạc khi có giọng đọc (ducking)
+                        </label>
+                        <p className="text-[11px] text-faint mt-0.5 ml-5">Nhạc tự nhỏ lại khi đang đọc, to lại ở khoảng lặng.</p>
+                      </div>
+                    </>
+                  )}
                 </div>
 
             </div>}

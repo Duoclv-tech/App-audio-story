@@ -392,6 +392,13 @@ class VideoProcessRequest(BaseModel):
     fade_out: float = 0.0  # Fade-out seconds at end (0 = none)
     mute_source_videos: bool = True  # If True, drop audio from background clips (only main audio plays)
 
+    # Background music (BGM) — mixed under the main narration. Default OFF (no path).
+    bgm_path: Optional[str] = None      # Path to a music file; None/empty = no BGM
+    bgm_volume: float = 0.12            # Music gain relative to narration (0.0 .. 1.0)
+    bgm_loop: bool = True               # Loop music to fill the whole narration
+    bgm_ducking: bool = True            # Auto lower music while narration plays (sidechain)
+    bgm_fade: float = 2.0               # Fade-in/out seconds for the music (0 = none)
+
     # Stickers (image / GIF / WebP / APNG overlays at fixed positions+time ranges)
     stickers: List[Sticker] = []
 

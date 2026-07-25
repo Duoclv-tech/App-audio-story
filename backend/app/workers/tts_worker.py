@@ -168,6 +168,7 @@ def process_segments_merge_task(story_id: str, task_id: str) -> Dict:
             db.commit()
         return {"success": False, "error": str(e)}
     finally:
+        release_story(story_id)
         db.close()
 
 

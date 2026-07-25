@@ -595,23 +595,12 @@ async def run_segments(
     if not story:
         raise HTTPException(status_code=404, detail="Story not found")
 
-    # Regenerate deletes done segments' audio; refuse while a merge is reading
-    # those same files (the merge task doesn't hold the story lock).
-    if request.regenerate_all:
-        merging = db.query(models.Task).filter(
-            models.Task.story_id == request.story_id,
-            models.Task.type == "tts_merged",
-            models.Task.status == "running",
-        ).first()
-        if merging:
-            raise HTTPException(status_code=409, detail="Đang ghép file — hãy chờ ghép xong rồi tạo lại.")
-
     statuses = ["pending", "error", "done"] if request.regenerate_all else ["pending", "error"]
-    todo = db.query(models.TtsSegment).filter(
+    targets = db.query(models.TtsSegment).filter(
         models.TtsSegment.story_id == request.story_id,
         models.TtsSegment.status.in_(statuses),
-    ).count()
-    if todo == 0:
+    ).all()
+    if not targets:
         return {"status": "idle", "message": "Tất cả câu đã xong.", "queued": 0}
 
     if not try_acquire_story(request.story_id):
@@ -622,10 +611,7 @@ async def run_segments(
         # regenerate, also reset done segments back to 'pending' and drop their
         # old audio so the worker re-synthesises everything with the new config.
         config = _build_tts_config(request)
-        targets = db.query(models.TtsSegment).filter(
-            models.TtsSegment.story_id == request.story_id,
-            models.TtsSegment.status.in_(statuses),
-        ).all()
+        reset_any = False
         for seg in targets:
             seg.config = config
             if request.regenerate_all and seg.status == "done":
@@ -633,13 +619,25 @@ async def run_segments(
                 seg.file_path = None
                 seg.status = "pending"
                 seg.error_message = None
+                reset_any = True
+        if reset_any:
+            # The previously-merged product (if any) was built from the audio we
+            # just deleted — it no longer reflects the new config. Drop it too so
+            # "chưa có" is accurate instead of silently offering the stale file
+            # for download until the user re-merges.
+            merged = db.query(models.MergedAudio).filter(
+                models.MergedAudio.story_id == request.story_id
+            ).first()
+            if merged:
+                _delete_audio_file(merged.file_path)
+                db.delete(merged)
         db.commit()
     except Exception:
         release_story(request.story_id)
         raise
 
     background_tasks.add_task(process_segments_task, request.story_id)
-    return {"status": "started", "queued": todo}
+    return {"status": "started", "queued": len(targets)}
 
 
 @router.post("/segments/cancel")
@@ -742,7 +740,7 @@ async def merge_segments_endpoint(
 
     Progress/result is reported through the existing GET /merged-status/{story_id}.
     """
-    from app.workers.tts_worker import process_segments_merge_task
+    from app.workers.tts_worker import process_segments_merge_task, try_acquire_story, release_story
     from app.services import segment_tts
 
     story = db.query(models.Story).filter(models.Story.id == request.story_id).first()
@@ -756,10 +754,20 @@ async def merge_segments_endpoint(
         raise HTTPException(status_code=400,
                             detail="Còn câu chưa xong — hãy chạy/retry hết trước khi ghép.")
 
-    task = models.Task(story_id=story.id, type="tts_merged", engine="omnivoice", status="running", total_items=1)
-    db.add(task)
-    db.commit()
-    db.refresh(task)
+    # Share the segment-generation lock with run_segments so a "Tạo lại toàn bộ"
+    # can't delete a done segment's audio while this task is reading it (and vice
+    # versa) — whichever side acquires first wins, the other gets a clean "busy".
+    if not try_acquire_story(request.story_id):
+        raise HTTPException(status_code=409, detail="Đang chạy TTS cho truyện này — hãy chờ xong rồi ghép.")
+
+    try:
+        task = models.Task(story_id=story.id, type="tts_merged", engine="omnivoice", status="running", total_items=1)
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+    except Exception:
+        release_story(request.story_id)
+        raise
 
     background_tasks.add_task(process_segments_merge_task, story.id, task.id)
     return {"task_id": task.id, "status": "started", "segment_count": stats["total"]}

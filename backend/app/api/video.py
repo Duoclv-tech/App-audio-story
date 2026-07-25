@@ -65,6 +65,15 @@ _VIZ_FIELDS = (
 )
 
 
+_BGM_FIELDS = (
+    "bgm_path", "bgm_volume", "bgm_loop", "bgm_ducking", "bgm_fade",
+)
+
+
+def _extract_bgm_options(request: schemas.VideoProcessRequest) -> dict:
+    return {f: getattr(request, f) for f in _BGM_FIELDS}
+
+
 def _extract_ad_options(request: schemas.VideoProcessRequest) -> dict:
     return {f: getattr(request, f) for f in _AD_FIELDS}
 
@@ -162,6 +171,7 @@ async def start_video_processing(
         "fade_out": request.fade_out,
         "mute_source_videos": request.mute_source_videos,
         "stickers": [s.model_dump() for s in (request.stickers or [])],
+        **_extract_bgm_options(request),
         **_extract_ad_options(request),
         **_extract_viz_options(request),
     }
@@ -241,36 +251,33 @@ async def download_merged_audio(story_id: str, db: Session = Depends(get_db)):
     )
 
 
-def _reveal_in_file_manager(path: str) -> None:
-    """Open the OS file manager with ``path`` selected (best effort)."""
+def _os_open(win_cmd: str, darwin_argv: list, other_argv: list) -> None:
+    """Best-effort cross-platform 'open this in the file manager' dispatch."""
     import subprocess
     import sys
 
     if sys.platform == "win32":
-        # Explorer's /select is quoting-sensitive: the path must be quoted and
-        # follow the comma with NO space (`/select,"C:\..."`), otherwise it
-        # silently opens the wrong folder. A list-form argv adds that space, so
-        # pass a single command-line string. Windows filenames can't contain a
-        # double quote, so this is injection-safe. explorer returns exit code 1
-        # even on success, so we don't check it.
-        subprocess.Popen(f'explorer /select,"{path}"')
+        subprocess.Popen(win_cmd)
     elif sys.platform == "darwin":
-        subprocess.Popen(["open", "-R", path])
+        subprocess.Popen(darwin_argv)
     else:
-        subprocess.Popen(["xdg-open", os.path.dirname(path)])
+        subprocess.Popen(other_argv)
+
+
+def _reveal_in_file_manager(path: str) -> None:
+    """Open the OS file manager with ``path`` selected (best effort)."""
+    # Explorer's /select is quoting-sensitive: the path must be quoted and
+    # follow the comma with NO space (`/select,"C:\..."`), otherwise it
+    # silently opens the wrong folder. A list-form argv adds that space, so
+    # pass a single command-line string. Windows filenames can't contain a
+    # double quote, so this is injection-safe. explorer returns exit code 1
+    # even on success, so we don't check it.
+    _os_open(f'explorer /select,"{path}"', ["open", "-R", path], ["xdg-open", os.path.dirname(path)])
 
 
 def _open_folder(path: str) -> None:
     """Open the OS file manager AT ``path`` (a directory), nothing selected."""
-    import subprocess
-    import sys
-
-    if sys.platform == "win32":
-        subprocess.Popen(f'explorer "{path}"')
-    elif sys.platform == "darwin":
-        subprocess.Popen(["open", path])
-    else:
-        subprocess.Popen(["xdg-open", path])
+    _os_open(f'explorer "{path}"', ["open", path], ["xdg-open", path])
 
 
 @router.post("/reveal-audio/{story_id}", dependencies=[Depends(require_localhost)])
@@ -299,6 +306,13 @@ async def reveal_merged_audio(story_id: str, db: Session = Depends(get_db)):
             logger.error(f"[video] reveal audio failed: {e}")
             raise HTTPException(status_code=500, detail="Không mở được thư mục chứa file.")
         return {"revealed": path}
+
+    # A finished product was recorded but its file is gone from disk (deleted or
+    # moved outside the app) — say so plainly instead of silently falling back
+    # to the story folder as if nothing had ever been produced.
+    if merged_audio and merged_audio.file_path:
+        raise HTTPException(status_code=404,
+                            detail="File audio hoàn chỉnh đã bị xóa hoặc di chuyển khỏi máy.")
 
     # No product yet → fall back to opening the story folder (holds segments/).
     story = db.query(models.Story).filter(models.Story.id == story_id).first()
@@ -738,6 +752,7 @@ def _preview_config_hash(cfg: dict) -> str:
         "transitions_pool", "transition_duration",
         "stickers",
         "_random_salt",
+        *_BGM_FIELDS,
         *_AD_FIELDS,
         *_VIZ_FIELDS,
     ]
@@ -858,6 +873,11 @@ def _run_preview_render(job_hash: str, cfg: dict, output_path: str) -> None:
             visualizer_waveform_mode=cfg.get("visualizer_waveform_mode", "cline"),
             visualizer_waveform_mirror=cfg.get("visualizer_waveform_mirror", False),
             stickers=cfg.get("stickers") or [],
+            bgm_path=cfg.get("bgm_path"),
+            bgm_volume=cfg.get("bgm_volume", 0.12),
+            bgm_loop=cfg.get("bgm_loop", True),
+            bgm_ducking=cfg.get("bgm_ducking", True),
+            bgm_fade=cfg.get("bgm_fade", 2.0),
             progress_cb=progress_cb,
         )
         with _PREVIEW_LOCK:
@@ -948,6 +968,7 @@ async def render_preview(request: schemas.VideoProcessRequest):
         "transition_duration": request.transition_duration,
         "max_duration": 60.0,
         "stickers": [s.model_dump() for s in (request.stickers or [])],
+        **_extract_bgm_options(request),
         **_extract_ad_options(request),
         **_extract_viz_options(request),
     }

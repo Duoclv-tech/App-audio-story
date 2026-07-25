@@ -23,7 +23,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Optional, Callable
+from typing import List, Dict, Optional, Callable, Tuple
 from loguru import logger
 
 from sqlalchemy.orm import Session
@@ -644,6 +644,113 @@ class VideoProcessor:
         else:
             error_msg = process.stderr.decode(errors='replace')[-500:]
             return {"success": False, "error": f"Audio-video merge failed: {error_msg}"}
+
+    def mix_background_music(
+        self,
+        voice_path: str,
+        bgm_path: str,
+        output_path: str,
+        *,
+        volume: float = 0.12,
+        loop: bool = True,
+        ducking: bool = True,
+        fade: float = 2.0,
+    ) -> Dict:
+        """Mix a background-music track under the main narration.
+
+        The output has exactly the narration's duration (``duration=first`` on
+        amix, plus a hard ``-t`` clamp). When ``loop`` is set the music input is
+        stream-looped so a short track fills a long narration; when it is longer
+        it is simply cut at the narration's end.
+
+        ``ducking`` runs the music through ``sidechaincompress`` keyed off the
+        voice so the music dips automatically whenever narration is present, then
+        recovers in the gaps. ``normalize=0`` on amix keeps the voice at full
+        level (amix otherwise attenuates every input by 1/n).
+        """
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+        voice_dur = self.get_media_duration(voice_path)
+        if voice_dur <= 0:
+            return {"success": False, "error": "Cannot determine narration duration for BGM mix"}
+
+        vol = max(0.0, min(1.0, volume))
+
+        cmd = ['ffmpeg', '-y', '-i', voice_path]
+        if loop:
+            cmd += ['-stream_loop', '-1']
+        cmd += ['-i', bgm_path]
+
+        # Build the music-processing chain: volume, then optional fades.
+        bgm_chain = [f'volume={vol:.4f}']
+        if fade > 0:
+            bgm_chain.append(f'afade=t=in:st=0:d={fade:.3f}')
+            fade_out_start = max(0.0, voice_dur - fade)
+            bgm_chain.append(f'afade=t=out:st={fade_out_start:.3f}:d={fade:.3f}')
+        bgm_chain_str = ','.join(bgm_chain)
+
+        if ducking:
+            filter_complex = (
+                f'[1:a]{bgm_chain_str}[bgmv];'
+                f'[bgmv][0:a]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=400[bgmd];'
+                f'[0:a][bgmd]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]'
+            )
+        else:
+            filter_complex = (
+                f'[1:a]{bgm_chain_str}[bgmv];'
+                f'[0:a][bgmv]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]'
+            )
+
+        cmd += [
+            '-filter_complex', filter_complex,
+            '-map', '[aout]',
+            '-t', f'{voice_dur:.3f}',
+            '-c:a', 'libmp3lame', '-b:a', '192k',
+            output_path,
+        ]
+
+        logger.info(f"Mixing BGM (vol={vol}, loop={loop}, ducking={ducking}, fade={fade}) -> {output_path}")
+        process = subprocess.run(cmd, capture_output=True, timeout=3600)
+
+        if process.returncode == 0:
+            return {"success": True}
+        else:
+            error_msg = process.stderr.decode(errors='replace')[-500:]
+            return {"success": False, "error": f"BGM mix failed: {error_msg}"}
+
+    def _maybe_mix_bgm(
+        self,
+        sped_audio_path: str,
+        output_dir: str,
+        bgm_path: Optional[str],
+        bgm_volume: float,
+        bgm_loop: bool,
+        bgm_ducking: bool,
+        bgm_fade: float,
+    ) -> Tuple[str, Optional[str]]:
+        """Mix BGM into the (already sped-up) narration if a valid BGM path is set.
+
+        Returns ``(path, warning)``: ``path`` is what the rest of the pipeline
+        should treat as the main audio (the mixed file when BGM applied,
+        otherwise the untouched ``sped_audio_path``); ``warning`` is a
+        user-facing message when a BGM was configured but couldn't be mixed
+        (None otherwise). The render itself is skipped-not-aborted on failure,
+        but the caller is expected to surface ``warning`` rather than silently
+        deliver a video missing the music the user asked for.
+        """
+        if not bgm_path or not os.path.exists(bgm_path):
+            return sped_audio_path, None
+        mixed_path = os.path.join(output_dir, "audio_with_bgm.mp3")
+        res = self.mix_background_music(
+            sped_audio_path, bgm_path, mixed_path,
+            volume=bgm_volume, loop=bgm_loop, ducking=bgm_ducking, fade=bgm_fade,
+        )
+        if res.get("success"):
+            logger.info(f"BGM mixed into narration -> {mixed_path}")
+            return mixed_path, None
+        warning = f"Không trộn được nhạc nền ({res.get('error')}); video dùng audio gốc không có nhạc nền."
+        logger.warning(warning)
+        return sped_audio_path, warning
 
     def trim_video(self, input_path: str, output_path: str, duration: float) -> Dict:
         """Trim video to exact duration"""
@@ -1521,6 +1628,11 @@ class VideoProcessor:
         visualizer_waveform_mode: str = "cline",
         visualizer_waveform_mirror: bool = False,
         stickers: Optional[List[Dict]] = None,
+        bgm_path: Optional[str] = None,
+        bgm_volume: float = 0.12,
+        bgm_loop: bool = True,
+        bgm_ducking: bool = True,
+        bgm_fade: float = 2.0,
     ) -> Dict:
         """
         Run the merge pipeline (speed audio -> concat bounded -> merge).
@@ -1540,6 +1652,14 @@ class VideoProcessor:
         speed_result = self.speed_up_audio(audio_path, sped_audio_path, audio_speed)
         if not speed_result["success"]:
             raise RuntimeError(f"Audio speed up failed: {speed_result.get('error')}")
+
+        # 1b. Mix background music under the narration (no-op when no BGM set).
+        # Done before measuring the target duration so BGM never lengthens the
+        # video — the mixed track is clamped to the narration's length.
+        sped_audio_path, bgm_warning = self._maybe_mix_bgm(
+            sped_audio_path, output_dir,
+            bgm_path, bgm_volume, bgm_loop, bgm_ducking, bgm_fade,
+        )
 
         sped_audio_duration = self.get_media_duration(sped_audio_path)
         logger.info(f"Sped audio duration: {self._format_duration(sped_audio_duration)}")
@@ -1748,8 +1868,9 @@ class VideoProcessor:
         final_duration = self.get_media_duration(final_output)
         final_size = os.path.getsize(final_output) if os.path.exists(final_output) else 0
 
-        # Cleanup intermediate files
-        cleanup_files = [concat_path, sped_audio_path]
+        # Cleanup intermediate files. sped_audio_path may point at the BGM-mixed
+        # file; add the pre-mix audio_sped.mp3 explicitly so it isn't left behind.
+        cleanup_files = [concat_path, sped_audio_path, os.path.join(output_dir, "audio_sped.mp3")]
         if composite_path:
             cleanup_files.append(composite_path)
         cleanup_files.extend(intermediates)
@@ -1764,7 +1885,8 @@ class VideoProcessor:
             "success": True,
             "output_path": final_output,
             "duration": final_duration,
-            "file_size": final_size
+            "file_size": final_size,
+            "bgm_warning": bgm_warning,
         }
 
     def process_story_video(
@@ -1847,6 +1969,11 @@ class VideoProcessor:
         visualizer_waveform_mode: str = "cline",
         visualizer_waveform_mirror: bool = False,
         stickers: Optional[List[Dict]] = None,
+        bgm_path: Optional[str] = None,
+        bgm_volume: float = 0.12,
+        bgm_loop: bool = True,
+        bgm_ducking: bool = True,
+        bgm_fade: float = 2.0,
     ) -> Dict:
         """
         Full pipeline with temp folder + retry:
@@ -1976,6 +2103,11 @@ class VideoProcessor:
                         visualizer_waveform_mode=visualizer_waveform_mode,
                         visualizer_waveform_mirror=visualizer_waveform_mirror,
                         stickers=stickers,
+                        bgm_path=bgm_path,
+                        bgm_volume=bgm_volume,
+                        bgm_loop=bgm_loop,
+                        bgm_ducking=bgm_ducking,
+                        bgm_fade=bgm_fade,
                     )
 
                     if result["success"]:
@@ -2008,6 +2140,11 @@ class VideoProcessor:
                         if task:
                             task.status = "completed"
                             task.progress = 100
+                            # Non-fatal: BGM was configured but couldn't be mixed in,
+                            # so the delivered video has no background music. Surface
+                            # it instead of leaving the user to notice by listening.
+                            if result.get("bgm_warning"):
+                                task.error_message = result["bgm_warning"]
                         db.commit()
 
                         logger.info(f"Video processing completed: {result['output_path']}")
@@ -2152,6 +2289,11 @@ class VideoProcessor:
         visualizer_waveform_mode: str = "cline",
         visualizer_waveform_mirror: bool = False,
         stickers: Optional[List[Dict]] = None,
+        bgm_path: Optional[str] = None,
+        bgm_volume: float = 0.12,
+        bgm_loop: bool = True,
+        bgm_ducking: bool = True,
+        bgm_fade: float = 2.0,
         progress_cb: Optional[Callable[[int], None]] = None,
     ) -> Dict:
         """Render a short preview clip applying the full pipeline.
@@ -2194,6 +2336,13 @@ class VideoProcessor:
             speed_res = self.speed_up_audio(trimmed_audio, sped_audio, audio_speed)
             if not speed_res["success"]:
                 return speed_res
+            # Mix background music under the (trimmed + sped) narration so the
+            # preview reflects the final audio. No-op when no BGM path is set.
+            sped_audio, _bgm_warning = self._maybe_mix_bgm(
+                sped_audio, work_dir,
+                bgm_path, bgm_volume, bgm_loop, bgm_ducking, bgm_fade,
+            )
+
             sped_dur = self.get_media_duration(sped_audio)
             if sped_dur <= 0:
                 return {"success": False, "error": "Sped audio has zero duration"}

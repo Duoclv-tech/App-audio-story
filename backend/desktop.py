@@ -81,7 +81,7 @@ class NativeApi:
         "All files (*.*)",
     )
     _TEXT_TYPES = (
-        "Text / Document (*.txt;*.docx)",
+        "Text Document (*.txt;*.docx)",
         "All files (*.*)",
     )
 

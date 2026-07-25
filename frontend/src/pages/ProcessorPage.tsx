@@ -4188,13 +4188,6 @@ export default function ProcessorPage() {
                         disabled={anyBusy || seg.status === 'processing'}
                         className="text-xs font-medium rounded-md px-2 py-1.5 border border-primary-300 dark:border-primary-500/40 bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400 hover:bg-primary-100 disabled:opacity-40 transition"
                       >↻ Re-TTS</button>
-                      {seg.has_audio && (
-                        <a
-                          href={`/api/v1/tts/segments/${seg.id}/audio`}
-                          download
-                          className="text-xs font-medium rounded-md px-2 py-1.5 border border-token bg-surface-2 text-dim hover:text-token transition"
-                        >⬇︎</a>
-                      )}
                       <button
                         onClick={() => handleDeleteSegment(seg.id)}
                         disabled={anyBusy || seg.status === 'processing'}

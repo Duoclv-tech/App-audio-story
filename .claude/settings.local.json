@@ -59,7 +59,8 @@
       "Skill(code-review)",
       "Workflow(code-review)",
       "mcp__ide__getDiagnostics",
-      "Bash(./dist/TruyenFullProcessor/TruyenFullProcessor.exe --selftest)"
+      "Bash(./dist/TruyenFullProcessor/TruyenFullProcessor.exe --selftest)",
+      "PowerShell(Tee-Object *)"
     ],
     "deny": [
       "Bash(sudo:*)"

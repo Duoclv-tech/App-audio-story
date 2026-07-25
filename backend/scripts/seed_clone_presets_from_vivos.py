@@ -43,22 +43,22 @@ CLIPS_PER_SPEAKER = 3
 # speakers (26 f / 20 m) roughly evenly; extend/replace freely with other
 # VIVOSSPKnn ids (see train/genders.txt inside the tarball) for more voices.
 SPEAKERS = [
-    ("VIVOSSPK01", "Thanh Tâm", "f"),
-    ("VIVOSSPK05", "Ngọc Diệp", "f"),
-    ("VIVOSSPK10", "Hồng Nhung", "f"),
-    ("VIVOSSPK16", "Mỹ Duyên", "f"),
-    ("VIVOSSPK25", "Kim Chi", "f"),
-    ("VIVOSSPK34", "Lệ Thu", "f"),
-    ("VIVOSSPK40", "Thảo Vy", "f"),
-    ("VIVOSSPK46", "Xuân Hương", "f"),
-    ("VIVOSSPK04", "Anh Tuấn", "m"),
-    ("VIVOSSPK07", "Bảo Long", "m"),
-    ("VIVOSSPK12", "Minh Đức", "m"),
-    ("VIVOSSPK18", "Quốc Huy", "m"),
-    ("VIVOSSPK22", "Thành Nam", "m"),
-    ("VIVOSSPK27", "Hoàng Phúc", "m"),
-    ("VIVOSSPK33", "Đình Khoa", "m"),
-    ("VIVOSSPK39", "Trung Hiếu", "m"),
+    ("VIVOSSPK01", "Cẩm Tú", "f"),
+    ("VIVOSSPK05", "Diễm My", "f"),
+    ("VIVOSSPK10", "Gia Hân", "f"),
+    ("VIVOSSPK16", "Thùy Dương", "f"),
+    ("VIVOSSPK25", "Ánh Tuyết", "f"),
+    ("VIVOSSPK34", "Vân Anh", "f"),
+    ("VIVOSSPK40", "Ngọc Trâm", "f"),
+    ("VIVOSSPK46", "Bảo Trâm", "f"),
+    ("VIVOSSPK04", "Duy Khang", "m"),
+    ("VIVOSSPK07", "Nhật Minh", "m"),
+    ("VIVOSSPK12", "Thanh Sơn", "m"),
+    ("VIVOSSPK18", "Vũ Long", "m"),
+    ("VIVOSSPK22", "Đăng Khoa", "m"),
+    ("VIVOSSPK27", "Chí Thanh", "m"),
+    ("VIVOSSPK33", "Phúc Nguyên", "m"),
+    ("VIVOSSPK39", "Hồng Sơn", "m"),
 ]
 
 

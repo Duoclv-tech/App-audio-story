@@ -126,6 +126,7 @@ async def start_video_processing(
     config = {
         "video_source_folder": request.video_source_folder,
         "audio_path": request.audio_path,
+        "clip_order": request.clip_order,
         "audio_speed": request.audio_speed,
         "transition_effect": random.choice(pool),
         "transitions_pool": pool,

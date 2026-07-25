@@ -4,9 +4,11 @@ Creates video from background clips + audio using FFmpeg
 Ported from tool_split_bg_video/random_video_into_folder.py
 
 Flow:
-1. Random select video clips to match audio duration
+1. Select video clips to match audio duration (order: "shuffle" random by
+   default, or "name" filename A→Z; controlled by clip_order)
 2. Copy selected clips into a temp folder (named by timestamp, numbered 0001_xxx)
-3. If temp folder already exists -> skip copy, reuse it
+3. Stale temp folders from previous runs are removed first (no reuse) — the
+   source folder is re-scanned every render
 4. Concat all clips in temp folder using ffmpeg concat demuxer (stable, no file limit)
 5. Speed up audio
 6. Merge audio + video
@@ -20,6 +22,7 @@ import shutil
 import subprocess
 import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
@@ -1896,6 +1899,7 @@ class VideoProcessor:
         db: Session,
         video_source_folder: str,
         audio_path: Optional[str] = None,
+        clip_order: str = "shuffle",
         audio_speed: float = 1.07,
         transition_effect: str = "crossfade",
         transitions_pool: Optional[List[str]] = None,
@@ -1979,7 +1983,7 @@ class VideoProcessor:
         Full pipeline with temp folder + retry:
         1. Get MergedAudio from DB
         2. Calculate target_duration = audio_duration / speed
-        3. Check if temp folder exists -> reuse, otherwise select + copy
+        3. Create a fresh temp folder (no reuse), select + copy clips into it
         4. Concat all clips from temp folder (concat demuxer)
         5. Speed up audio
         6. Merge audio + video
@@ -1987,6 +1991,7 @@ class VideoProcessor:
         8. Save VideoOutput to DB
         """
         task = None
+        temp_folder = None
         try:
             task = db.query(models.Task).filter(models.Task.id == task_id).first()
             if task:
@@ -2032,9 +2037,9 @@ class VideoProcessor:
             output_dir = os.path.join(settings.STORAGE_PATH, "videos", story_folder)
             os.makedirs(output_dir, exist_ok=True)
 
-            # 3. Check for existing temp folder or create new one
-            temp_folder = self._find_or_create_temp_folder(
-                output_dir, video_source_folder, target_duration
+            # 3. Always re-scan source folder and create a fresh temp folder
+            temp_folder = self._create_temp_folder(
+                output_dir, video_source_folder, target_duration, clip_order
             )
 
             video_paths = self.get_temp_folder_videos(temp_folder)
@@ -2191,6 +2196,14 @@ class VideoProcessor:
                 db.rollback()
 
             return {"success": False, "error": str(e)}
+
+        finally:
+            # Clean up this job's own temp folder (source clips already concatted
+            # into the output). Only this render's folder is touched, so a
+            # concurrent render for the same story is never affected.
+            if temp_folder and os.path.isdir(temp_folder):
+                logger.info(f"Removing temp folder: {temp_folder}")
+                shutil.rmtree(temp_folder, ignore_errors=True)
 
     def trim_audio(self, input_path: str, output_path: str, duration: float) -> Dict:
         # Re-encode to mp3 rather than -c copy because the input may be flac/wav
@@ -2523,35 +2536,37 @@ class VideoProcessor:
             except Exception:
                 pass
 
-    def _find_or_create_temp_folder(
-        self, output_dir: str, video_source_folder: str, target_duration: float
+    def _create_temp_folder(
+        self, output_dir: str, video_source_folder: str, target_duration: float,
+        clip_order: str = "shuffle",
     ) -> str:
         """
-        Always re-scan the source folder and create a fresh temp folder.
-        Temp folders are named like: temp_20260225_143022
+        Re-scan the source folder and create a fresh, uniquely-named temp folder.
+        Temp folders are named like: temp_20260225_143022_ab12cd34
 
-        Stale temp folders from previous runs are removed first so the source
-        folder is re-read every time (no reuse) and disk usage doesn't grow.
+        No reuse: the source folder is re-read every render. The caller deletes
+        this folder when the render finishes (see process_story_video's finally),
+        so temp clips don't accumulate on disk. The name includes a random suffix
+        so two concurrent renders for the same story never share a folder — a
+        blanket "delete all temp_* dirs" would otherwise wipe another in-flight
+        job's freshly-copied clips.
+
+        clip_order: "shuffle" (random order each render — different videos get
+        different backgrounds) or "name" (filename A→Z, reproducible).
         """
-        # Remove any leftover temp folders from previous runs — we no longer
-        # reuse them, and the copied clips can be hundreds of MB each.
-        output_path = Path(output_dir)
-        for temp_dir in output_path.iterdir():
-            if temp_dir.is_dir() and temp_dir.name.startswith('temp_'):
-                logger.info(f"Removing stale temp folder: {temp_dir}")
-                shutil.rmtree(str(temp_dir), ignore_errors=True)
-
-        # Create a new temp folder
+        # Create a new temp folder with a unique name (timestamp alone can
+        # collide within the same second across concurrent jobs).
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        temp_folder = os.path.join(output_dir, f"temp_{timestamp}")
+        temp_folder = os.path.join(output_dir, f"temp_{timestamp}_{uuid.uuid4().hex[:8]}")
 
         logger.info(f"Creating new temp folder: {temp_folder}")
 
-        # Scan source folder and select videos in folder (filename) order.
-        # Loop the list when the total duration is short of the target — final
-        # concat is trimmed to exact audio length downstream, so the last clip
-        # may be cut mid-frame. This matches the preview pipeline.
-        videos = self.get_all_videos_in_folder(video_source_folder, order="name")
+        # Scan source folder and select videos. Order is "shuffle" (random each
+        # render) or "name" (filename A→Z). Loop the list when the total duration
+        # is short of the target — final concat is trimmed to exact audio length
+        # downstream, so the last clip may be cut mid-frame.
+        order = "name" if clip_order == "name" else "shuffle"
+        videos = self.get_all_videos_in_folder(video_source_folder, order=order)
         if not videos:
             raise ValueError(f"No videos found in source folder: {video_source_folder}")
 
@@ -2567,7 +2582,7 @@ class VideoProcessor:
             if i > len(videos) * 1000:
                 break
         logger.info(
-            f"Selected {len(selected)} video clips in folder order "
+            f"Selected {len(selected)} video clips in {order} order "
             f"({total:.1f}s) for target {self._format_duration(target_duration)}"
         )
 

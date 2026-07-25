@@ -305,6 +305,7 @@ export default function ProcessorPage() {
     subtitle_x: number; subtitle_y: number; subtitle_opacity: number;
     fade_in: number; fade_out: number;
     mute_source_videos: boolean;
+    clip_order: 'shuffle'|'name';
     bgmPath: string;
     bgm_volume: number; bgm_loop: boolean; bgm_ducking: boolean; bgm_fade: number;
     visualizer_enabled: boolean;
@@ -358,6 +359,7 @@ export default function ProcessorPage() {
     fade_in: 0.0,
     fade_out: 0.0,
     mute_source_videos: true,
+    clip_order: 'shuffle',
     bgm_volume: 0.12,
     bgm_loop: true,
     bgm_ducking: true,
@@ -1430,6 +1432,7 @@ export default function ProcessorPage() {
         story_id: storyData.id,
         video_source_folder: videoConfig.folder,
         audio_path: videoConfig.audioPath || undefined,
+        clip_order: videoConfig.clip_order,
         audio_speed: videoConfig.audio_speed,
         transitions_pool: videoConfig.transitions_pool.length ? videoConfig.transitions_pool : undefined,
         transition_duration: videoConfig.transition_duration,
@@ -4814,6 +4817,44 @@ export default function ProcessorPage() {
                           : 'Invalid folder'}
                       </div>
                     )}
+
+                    {/* Cách chọn clip nền từ folder */}
+                    <div className="mt-2">
+                      <label className="block text-xs font-medium mb-1 text-dim">Cách chọn clip nền</label>
+                      <div className="flex gap-4">
+                        <label
+                          className="flex items-center gap-1.5 text-xs text-dim cursor-pointer select-none"
+                          title="Xáo trộn ngẫu nhiên thứ tự clip mỗi lần tạo video. Nhờ vậy các video khác nhau (dù cùng folder nền) sẽ có nền khác nhau. Nhược điểm: không tái lập được — cùng cài đặt mỗi lần render ra thứ tự khác."
+                        >
+                          <input
+                            type="radio"
+                            name="clip_order"
+                            checked={videoConfig.clip_order === 'shuffle'}
+                            onChange={() => setVideoConfig(prev => ({ ...prev, clip_order: 'shuffle' }))}
+                            disabled={isProcessing}
+                          />
+                          Ngẫu nhiên (mặc định)
+                        </label>
+                        <label
+                          className="flex items-center gap-1.5 text-xs text-dim cursor-pointer select-none"
+                          title="Chọn clip theo thứ tự tên file (A→Z), luôn bắt đầu từ clip đầu tiên. Kết quả tái lập được, nhưng các video cùng folder nền sẽ ra phần nền giống nhau."
+                        >
+                          <input
+                            type="radio"
+                            name="clip_order"
+                            checked={videoConfig.clip_order === 'name'}
+                            onChange={() => setVideoConfig(prev => ({ ...prev, clip_order: 'name' }))}
+                            disabled={isProcessing}
+                          />
+                          Theo thứ tự tên
+                        </label>
+                      </div>
+                      <p className="text-[11px] text-faint mt-0.5">
+                        {videoConfig.clip_order === 'shuffle'
+                          ? 'Mỗi lần render xáo trộn clip ngẫu nhiên → video khác nhau có nền khác nhau.'
+                          : 'Chọn theo tên file A→Z → video cùng folder sẽ có nền giống nhau.'}
+                      </p>
+                    </div>
                   </div>
 
                   <div>

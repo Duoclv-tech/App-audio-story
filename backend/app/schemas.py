@@ -1,5 +1,5 @@
 from pydantic import BaseModel, HttpUrl, model_validator
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 
 # Story Schemas
@@ -346,6 +346,7 @@ class VideoProcessRequest(BaseModel):
     story_id: str
     video_source_folder: str
     audio_path: Optional[str] = None  # Custom audio path (skip DB lookup if provided)
+    clip_order: Literal["shuffle", "name"] = "shuffle"  # How to pick background clips: "shuffle" (random each render) | "name" (filename A→Z, reproducible)
     audio_speed: float = 1.07
     transition_effect: str = "crossfade"
     transitions_pool: Optional[List[str]] = None  # Multi-select pool; overrides transition_effect if set

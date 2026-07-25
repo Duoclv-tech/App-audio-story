@@ -43,6 +43,7 @@ async def process_video_task(
 
         video_source_folder = config.get("video_source_folder", "")
         audio_path = config.get("audio_path")
+        clip_order = config.get("clip_order", "shuffle")
         audio_speed = config.get("audio_speed", 1.07)
         transition_effect = config.get("transition_effect", "crossfade")
         transitions_pool = config.get("transitions_pool")
@@ -141,6 +142,7 @@ async def process_video_task(
             db=db,
             video_source_folder=video_source_folder,
             audio_path=audio_path,
+            clip_order=clip_order,
             audio_speed=audio_speed,
             transition_effect=transition_effect,
             transitions_pool=transitions_pool,

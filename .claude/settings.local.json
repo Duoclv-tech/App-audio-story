@@ -60,7 +60,11 @@
       "Workflow(code-review)",
       "mcp__ide__getDiagnostics",
       "Bash(./dist/TruyenFullProcessor/TruyenFullProcessor.exe --selftest)",
-      "PowerShell(Tee-Object *)"
+      "PowerShell(Tee-Object *)",
+      "Bash(sqlite3 --version)",
+      "Bash(git diff *)",
+      "Bash(wc -l /tmp_full_diff.patch)",
+      "Bash(grep -n \"^@@\" /tmp_full_diff.patch)"
     ],
     "deny": [
       "Bash(sudo:*)"

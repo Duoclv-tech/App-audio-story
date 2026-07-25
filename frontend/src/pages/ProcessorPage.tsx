@@ -181,7 +181,7 @@ export default function ProcessorPage() {
     bitrate: 128,
     audio_type: 'mp3',
     // OmniVoice-only
-    mode: 'auto' as 'auto' | 'clone' | 'design',
+    mode: 'clone' as 'auto' | 'clone' | 'design',
     model_key: 'base' as 'base',
     preset_id: '',
     instruct: '',
@@ -260,6 +260,7 @@ export default function ProcessorPage() {
     duration: number | null
     gen_sec: number | null
     has_audio: boolean
+    config?: Record<string, any> | null
   }
   const [segments, setSegments] = useState<TtsSegment[]>([])
   const [splitMode, setSplitMode] = useState<'newline' | 'period'>('newline')
@@ -2206,6 +2207,39 @@ export default function ProcessorPage() {
     }
   }
 
+  // Re-synthesise EVERY sentence with the current voice/settings — for when the
+  // user changed the voice (or speed/bitrate/…) after some/all audio was already
+  // generated. Confirmed first because it throws away all existing audio.
+  const handleRegenerateAll = () => {
+    if (!storyData.id) return
+    setConfirmDialog({
+      isOpen: true,
+      title: '♻️ Tạo lại toàn bộ',
+      message: 'Xóa toàn bộ audio đã tạo và đọc lại TẤT CẢ câu bằng giọng/thiết lập hiện tại?\n\nDùng khi bạn vừa đổi giọng hoặc thiết lập. Không thể hoàn tác.',
+      confirmText: 'Tạo lại toàn bộ',
+      variant: 'danger',
+      onConfirm: async () => {
+        setSegBusy(true)
+        try {
+          const res = await axios.post('/api/v1/tts/segments/run', { story_id: storyData.id, ...ttsConfig, regenerate_all: true })
+          if (res.data.status === 'started') {
+            showToast(`Đang tạo lại ${res.data.queued} câu...`, 'info')
+            startSegPolling()
+          } else if (res.data.status === 'busy') {
+            showToast(res.data.message || 'Đang chạy, vui lòng chờ...', 'info')
+            startSegPolling()
+          } else {
+            showToast(res.data.message || 'Không có câu nào để tạo lại.', 'info')
+          }
+        } catch (e: any) {
+          showToast(errMessage(e, 'Lỗi khi tạo lại TTS'), 'error')
+        } finally {
+          setSegBusy(false)
+        }
+      },
+    })
+  }
+
   // Stop the batch after the current sentence. Confirmed first so an accidental
   // click can't throw away an in-progress run.
   const handleCancelSegments = () => {
@@ -3869,7 +3903,6 @@ export default function ProcessorPage() {
                       >
                         <option value="auto">Auto (model tự chọn giọng)</option>
                         <option value="clone">Clone (giọng từ mẫu)</option>
-                        <option value="design">Design (mô tả giọng)</option>
                       </select>
                     </div>
 
@@ -3891,7 +3924,17 @@ export default function ProcessorPage() {
                           <label className="text-sm font-medium">Giọng đã clone</label>
                           {ttsConfig.preset_id && (
                             <button
-                              onClick={() => handleDeletePreset(ttsConfig.preset_id)}
+                              onClick={() => {
+                                const preset = omniPresets.find((p) => p.id === ttsConfig.preset_id)
+                                setConfirmDialog({
+                                  isOpen: true,
+                                  title: '🗑️ Xóa giọng clone',
+                                  message: `Xóa giọng "${preset?.name || ''}"?\n\nKhông thể hoàn tác.`,
+                                  confirmText: 'Xóa',
+                                  variant: 'danger',
+                                  onConfirm: () => handleDeletePreset(ttsConfig.preset_id),
+                                })
+                              }}
                               className="text-xs text-red-600 dark:text-red-400 hover:underline"
                             >
                               Xóa giọng này
@@ -4093,6 +4136,16 @@ export default function ProcessorPage() {
           // processing>0 so the cancel button appears immediately on start and
           // doesn't flicker in the gap between two sentences.
           const anyBusy = segStats.processing > 0 || segRunning
+          // Detect stale audio: a done segment generated with a config that no
+          // longer matches the current settings (voice/mode/speed/bitrate/lang).
+          // Only voice-affecting fields matter — compare a compact signature.
+          const voiceSig = (c: any) => [c?.engine, c?.mode, c?.preset_id || '', c?.instruct || '', c?.language, c?.speed, c?.bitrate].join('|')
+          const currentSig = voiceSig(ttsConfig)
+          const configStale = !anyBusy && segments.some(s => s.status === 'done' && s.config && voiceSig(s.config) !== currentSig)
+          // Regenerate deletes segment files, so block it while a merge is
+          // concatenating them (merge doesn't hold the story lock).
+          const merging = mergedTtsStatus.status === 'running' || segMerging
+          const regenBlocked = segBusy || anyBusy || merging
           return (
             <div className="space-y-4">
               <audio ref={segAudioRef} onEnded={() => setSegNowPlaying(null)} className="hidden" />
@@ -4138,6 +4191,23 @@ export default function ProcessorPage() {
                 </div>
               )}
 
+              {/* Settings changed since audio was generated — offer a full re-run */}
+              {configStale && (
+                <div className="flex items-start gap-3 text-sm bg-amber-50 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/30 rounded-lg p-3">
+                  <span>🎛️</span>
+                  <div className="flex-1">
+                    <b className="text-amber-800 dark:text-amber-300">Giọng/thiết lập đã thay đổi</b> so với lúc tạo audio. Các câu “Đã xong” vẫn đang dùng giọng cũ — bấm <b>Tạo lại toàn bộ</b> để đọc lại tất cả bằng thiết lập hiện tại.
+                    <div className="mt-2">
+                      <button
+                        onClick={handleRegenerateAll}
+                        disabled={regenBlocked}
+                        className="bg-amber-600 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-amber-700 disabled:opacity-50 transition"
+                      >♻️ Tạo lại toàn bộ với thiết lập mới</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Toolbar */}
               <div className="flex flex-wrap items-center gap-2">
                 <div className="inline-flex bg-surface-2 border border-token rounded-lg p-0.5 gap-0.5">
@@ -4167,6 +4237,18 @@ export default function ProcessorPage() {
                   disabled={segBusy || anyBusy || segStats.error === 0}
                   className="text-sm font-medium rounded-lg px-3 py-2 border border-token bg-surface-2 hover:bg-surface-3 disabled:opacity-50 transition"
                 >↻ Chạy lại lỗi</button>
+                {segStats.done > 0 && (
+                  <button
+                    onClick={handleRegenerateAll}
+                    disabled={regenBlocked}
+                    title="Xóa audio cũ và đọc lại TẤT CẢ câu bằng giọng/thiết lập hiện tại"
+                    className={`text-sm font-medium rounded-lg px-3 py-2 border transition disabled:opacity-50 ${
+                      configStale
+                        ? 'border-amber-400 dark:border-amber-500/50 bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-500/25'
+                        : 'border-token bg-surface-2 hover:bg-surface-3 text-token'
+                    }`}
+                  >♻️ Tạo lại toàn bộ</button>
+                )}
                 {anyBusy && (
                   <button
                     onClick={handleCancelSegments}
@@ -4264,10 +4346,10 @@ export default function ProcessorPage() {
                 )}
               </div>
 
-              {/* Merged output — only meaningful once every segment is done (or a
-                  merge is actively running). Gating on allDone hides a stale file
-                  left over from a previous merge after the story was re-split/edited. */}
-              {(mergedTtsStatus.status === 'running' || (segStats.allDone && mergedTtsStatus.audioFile)) && (
+              {/* Merged output — always visible. Shows the product when one exists,
+                  otherwise "chưa có". Buttons stay available regardless: "Mở thư mục"
+                  falls back to the story folder, "Sang bước Video" is just navigation. */}
+              {(
                 <div className="rounded-xl border border-dashed border-token bg-surface-2 p-4 space-y-3">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-semibold">🎧 File thành phẩm</span>
@@ -4276,26 +4358,26 @@ export default function ProcessorPage() {
                         <span className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-primary-600"></span> Đang ghép…
                       </span>
                     )}
-                    {mergedTtsStatus.audioFile && (
+                    {segStats.allDone && mergedTtsStatus.audioFile ? (
                       <span className="text-xs font-mono text-dim break-all">
                         {mergedTtsStatus.audioFile.split(/[\\/]/).pop()}
                         {mergedTtsStatus.audioSize ? ` · ${(mergedTtsStatus.audioSize / 1024 / 1024).toFixed(2)} MB` : ''}
                       </span>
+                    ) : (
+                      <span className="text-xs text-dim">chưa có</span>
                     )}
                   </div>
-                  {mergedTtsStatus.audioFile && (
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={handleDownloadAudio}
-                        disabled={downloadingAudio}
-                        className="text-sm font-medium rounded-lg px-3 py-2 border border-token bg-surface hover:bg-surface-3 disabled:opacity-50 transition"
-                      >{hasNativeDialogs() ? '📂 Mở thư mục' : '⬇️ Tải audio'}</button>
-                      <button
-                        onClick={() => moveToStep(7)}
-                        className="text-sm font-medium rounded-lg px-3 py-2 bg-green-500 text-white hover:bg-green-600 transition"
-                      >➡️ Sang bước Video</button>
-                    </div>
-                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={handleDownloadAudio}
+                      disabled={downloadingAudio}
+                      className="text-sm font-medium rounded-lg px-3 py-2 border border-token bg-surface hover:bg-surface-3 disabled:opacity-50 transition"
+                    >{hasNativeDialogs() ? '📂 Mở thư mục' : '⬇️ Tải audio'}</button>
+                    <button
+                      onClick={() => moveToStep(7)}
+                      className="text-sm font-medium rounded-lg px-3 py-2 bg-green-500 text-white hover:bg-green-600 transition"
+                    >➡️ Sang bước Video</button>
+                  </div>
                   {mergedTtsStatus.error && (
                     <div className="text-sm text-red-700 dark:text-red-400">Lỗi: {mergedTtsStatus.error}</div>
                   )}

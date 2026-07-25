@@ -192,6 +192,12 @@ class TTSRequest(BaseModel):
     instruct: Optional[str] = None     # voice description (design)
     language: str = "Auto"             # Auto | Vietnamese | English
 
+    # Per-segment run only: when true, also reset already-done segments back to
+    # 'pending' (dropping their old audio) so EVERY sentence is re-synthesised
+    # with the current config — used by the "Tạo lại toàn bộ" button after a
+    # voice/setting change. Ignored by all other endpoints.
+    regenerate_all: bool = False
+
 class TTSResponse(BaseModel):
     task_id: str
     status: str

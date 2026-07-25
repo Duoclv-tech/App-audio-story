@@ -260,28 +260,59 @@ def _reveal_in_file_manager(path: str) -> None:
         subprocess.Popen(["xdg-open", os.path.dirname(path)])
 
 
+def _open_folder(path: str) -> None:
+    """Open the OS file manager AT ``path`` (a directory), nothing selected."""
+    import subprocess
+    import sys
+
+    if sys.platform == "win32":
+        subprocess.Popen(f'explorer "{path}"')
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", path])
+    else:
+        subprocess.Popen(["xdg-open", path])
+
+
 @router.post("/reveal-audio/{story_id}", dependencies=[Depends(require_localhost)])
 async def reveal_merged_audio(story_id: str, db: Session = Depends(get_db)):
-    """Open the file manager with the finished merged audio selected.
+    """Open the file manager at the story's output folder.
 
-    The desktop app already delivers the audio to the user's Downloads folder, so
-    "download" is really "show me where it is" — and WebView2 can't trigger a
-    programmatic blob download anyway. Revealing the on-disk file is reliable.
+    The desktop app already delivers everything to ``<output>/<story>/`` (the
+    finished product plus the per-sentence ``segments/`` folder), so "download"
+    is really "show me where it is" — and WebView2 can't trigger a programmatic
+    blob download anyway. If a finished product exists we reveal it (selected);
+    otherwise we just open the story folder so the user still sees the segments.
     """
+    from app.services.segment_tts import story_output_name
+    from app.services.output_delivery import get_output_folder
+
     merged_audio = db.query(models.MergedAudio).filter(
         models.MergedAudio.story_id == story_id
     ).order_by(models.MergedAudio.created_at.desc()).first()
 
-    if not merged_audio or not merged_audio.file_path or not os.path.exists(merged_audio.file_path):
-        raise HTTPException(status_code=404, detail="Chưa có audio hoàn chỉnh cho truyện này.")
+    # Happy path: a finished product exists → reveal it with the file selected.
+    if merged_audio and merged_audio.file_path and os.path.exists(merged_audio.file_path):
+        path = os.path.normpath(merged_audio.file_path)
+        try:
+            _reveal_in_file_manager(path)
+        except Exception as e:
+            logger.error(f"[video] reveal audio failed: {e}")
+            raise HTTPException(status_code=500, detail="Không mở được thư mục chứa file.")
+        return {"revealed": path}
 
-    path = os.path.normpath(merged_audio.file_path)
+    # No product yet → fall back to opening the story folder (holds segments/).
+    story = db.query(models.Story).filter(models.Story.id == story_id).first()
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+    folder = get_output_folder(db) / story_output_name(story)
+    if not folder.exists():
+        raise HTTPException(status_code=404, detail="Chưa có file audio nào cho truyện này.")
     try:
-        _reveal_in_file_manager(path)
+        _open_folder(os.path.normpath(str(folder)))
     except Exception as e:
-        logger.error(f"[video] reveal audio failed: {e}")
-        raise HTTPException(status_code=500, detail="Không mở được thư mục chứa file.")
-    return {"revealed": path}
+        logger.error(f"[video] open story folder failed: {e}")
+        raise HTTPException(status_code=500, detail="Không mở được thư mục truyện.")
+    return {"opened": str(folder)}
 
 
 @router.post("/validate-folder", response_model=schemas.VideoFolderValidateResponse)

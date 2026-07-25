@@ -514,6 +514,10 @@ def _seg_out(seg: models.TtsSegment) -> dict:
         "duration": seg.duration,
         "gen_sec": seg.gen_sec,
         "has_audio": bool(seg.file_path),
+        # Config snapshot the audio was (or will be) generated with — the UI
+        # compares this against the current settings to warn when done audio is
+        # stale (voice/speed/etc changed since it was generated).
+        "config": seg.config or None,
     }
 
 
@@ -580,6 +584,10 @@ async def run_segments(
     Applies the *current* config from the request to the segments about to be
     generated, so a voice/speed/bitrate change since split time takes effect
     without needing a re-split.
+
+    When ``regenerate_all`` is set, already-done segments are reset to 'pending'
+    (their old audio deleted) so EVERY sentence is re-synthesised with the new
+    config — the "Tạo lại toàn bộ" path after changing the voice/settings.
     """
     from app.workers.tts_worker import process_segments_task, try_acquire_story, release_story
 
@@ -587,9 +595,21 @@ async def run_segments(
     if not story:
         raise HTTPException(status_code=404, detail="Story not found")
 
+    # Regenerate deletes done segments' audio; refuse while a merge is reading
+    # those same files (the merge task doesn't hold the story lock).
+    if request.regenerate_all:
+        merging = db.query(models.Task).filter(
+            models.Task.story_id == request.story_id,
+            models.Task.type == "tts_merged",
+            models.Task.status == "running",
+        ).first()
+        if merging:
+            raise HTTPException(status_code=409, detail="Đang ghép file — hãy chờ ghép xong rồi tạo lại.")
+
+    statuses = ["pending", "error", "done"] if request.regenerate_all else ["pending", "error"]
     todo = db.query(models.TtsSegment).filter(
         models.TtsSegment.story_id == request.story_id,
-        models.TtsSegment.status.in_(["pending", "error"]),
+        models.TtsSegment.status.in_(statuses),
     ).count()
     if todo == 0:
         return {"status": "idle", "message": "Tất cả câu đã xong.", "queued": 0}
@@ -598,12 +618,21 @@ async def run_segments(
         return {"status": "busy", "message": "Đang chạy TTS cho truyện này.", "queued": 0}
 
     try:
-        # Refresh config on the segments we're about to generate.
+        # Refresh config on the segments we're about to generate. For a full
+        # regenerate, also reset done segments back to 'pending' and drop their
+        # old audio so the worker re-synthesises everything with the new config.
         config = _build_tts_config(request)
-        db.query(models.TtsSegment).filter(
+        targets = db.query(models.TtsSegment).filter(
             models.TtsSegment.story_id == request.story_id,
-            models.TtsSegment.status.in_(["pending", "error"]),
-        ).update({models.TtsSegment.config: config}, synchronize_session=False)
+            models.TtsSegment.status.in_(statuses),
+        ).all()
+        for seg in targets:
+            seg.config = config
+            if request.regenerate_all and seg.status == "done":
+                _delete_audio_file(seg.file_path)
+                seg.file_path = None
+                seg.status = "pending"
+                seg.error_message = None
         db.commit()
     except Exception:
         release_story(request.story_id)

@@ -2125,6 +2125,29 @@ export default function ProcessorPage() {
     return { total, ...by, allDone: total > 0 && by.done === total }
   }, [segments])
 
+  // Estimated time left for the remaining (pending/error/processing) segments,
+  // based on this run's own actual gen_sec/char rate — no hardcoded guess.
+  const segEtaSec = useMemo(() => {
+    let doneChars = 0, doneGenSec = 0
+    for (const s of segments) {
+      if (s.status === 'done' && s.gen_sec) { doneChars += s.text.length; doneGenSec += s.gen_sec }
+    }
+    if (doneChars === 0) return null
+    const rate = doneGenSec / doneChars
+    let remainingChars = 0
+    for (const s of segments) {
+      if (s.status === 'pending' || s.status === 'error' || s.status === 'processing') remainingChars += s.text.length
+    }
+    return remainingChars > 0 ? rate * remainingChars : null
+  }, [segments])
+
+  const formatEta = (sec: number) => {
+    const total = Math.max(1, Math.round(sec))
+    const m = Math.floor(total / 60)
+    const s = total % 60
+    return m > 0 ? `${m}m ${s}s` : `${s}s`
+  }
+
   const stopSegPolling = () => {
     if (segPollRef.current) {
       clearInterval(segPollRef.current)
@@ -4045,20 +4068,6 @@ export default function ProcessorPage() {
                     </div>
                   </div>
 
-                  {/* Language */}
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Ngôn ngữ</label>
-                    <select
-                      value={ttsConfig.language}
-                      onChange={(e) => setTtsConfig({ ...ttsConfig, language: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      disabled={loading}
-                    >
-                      <option value="Auto">Auto</option>
-                      <option value="Vietnamese">Tiếng Việt</option>
-                      <option value="English">English</option>
-                    </select>
-                  </div>
                 </div>
               )}
 
@@ -4272,7 +4281,10 @@ export default function ProcessorPage() {
               {/* Segment list */}
               <div className="flex items-baseline justify-between">
                 <h4 className="text-sm font-semibold">Danh sách câu</h4>
-                <span className="text-xs text-dim">tiến độ {progressed} / {total || 0}</span>
+                <span className="text-xs text-dim">
+                  tiến độ {progressed} / {total || 0}
+                  {segEtaSec !== null && <> · còn lại ~{formatEta(segEtaSec)}</>}
+                </span>
               </div>
 
               <div className="space-y-2 max-h-[calc(100vh-520px)] min-h-[180px] overflow-y-auto pr-1">

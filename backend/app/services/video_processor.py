@@ -2527,23 +2527,21 @@ class VideoProcessor:
         self, output_dir: str, video_source_folder: str, target_duration: float
     ) -> str:
         """
-        Find existing temp folder with videos, or create a new one.
+        Always re-scan the source folder and create a fresh temp folder.
         Temp folders are named like: temp_20260225_143022
+
+        Stale temp folders from previous runs are removed first so the source
+        folder is re-read every time (no reuse) and disk usage doesn't grow.
         """
-        # Check for existing temp folders
+        # Remove any leftover temp folders from previous runs — we no longer
+        # reuse them, and the copied clips can be hundreds of MB each.
         output_path = Path(output_dir)
-        existing_temps = sorted([
-            d for d in output_path.iterdir()
-            if d.is_dir() and d.name.startswith('temp_')
-        ], reverse=True)  # Newest first
+        for temp_dir in output_path.iterdir():
+            if temp_dir.is_dir() and temp_dir.name.startswith('temp_'):
+                logger.info(f"Removing stale temp folder: {temp_dir}")
+                shutil.rmtree(str(temp_dir), ignore_errors=True)
 
-        for temp_dir in existing_temps:
-            videos = self.get_temp_folder_videos(str(temp_dir))
-            if videos:
-                logger.info(f"Found existing temp folder with {len(videos)} clips: {temp_dir}")
-                return str(temp_dir)
-
-        # No existing temp folder -> create new one
+        # Create a new temp folder
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         temp_folder = os.path.join(output_dir, f"temp_{timestamp}")
 

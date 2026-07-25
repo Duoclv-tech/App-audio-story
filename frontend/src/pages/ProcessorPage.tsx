@@ -4930,7 +4930,6 @@ export default function ProcessorPage() {
                         disabled={videoStatus.status === 'running'}
                       >
                         <option value="1920x1080">1920x1080 (16:9 — 1080p)</option>
-                        <option value="1280x720">1280x720 (16:9 — 720p)</option>
                         <option value="1080x1920">1080x1920 (9:16 — Vertical)</option>
                       </select>
                     </div>

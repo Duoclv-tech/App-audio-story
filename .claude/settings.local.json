@@ -64,7 +64,12 @@
       "Bash(sqlite3 --version)",
       "Bash(git diff *)",
       "Bash(wc -l /tmp_full_diff.patch)",
-      "Bash(grep -n \"^@@\" /tmp_full_diff.patch)"
+      "Bash(grep -n \"^@@\" /tmp_full_diff.patch)",
+      "Bash(powershell -Command 'Get-Process | Where-Object { $_.ProcessName -match '\\\\''TruyenFull|pythonw|electron|web_app'\\\\'' } | Select-Object Id, ProcessName, Path')",
+      "Bash(powershell -Command ' *)",
+      "Bash(mkdir -p D:/Project/web_app/dist/TruyenFullProcessor/_internal/frontend/dist)",
+      "Bash(cp -r D:/Project/web_app/frontend/dist/. D:/Project/web_app/dist/TruyenFullProcessor/_internal/frontend/dist/)",
+      "Bash(python -)"
     ],
     "deny": [
       "Bash(sudo:*)"

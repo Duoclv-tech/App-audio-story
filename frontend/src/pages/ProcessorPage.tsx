@@ -1438,11 +1438,13 @@ export default function ProcessorPage() {
         transition_duration: videoConfig.transition_duration,
         resolution: videoConfig.resolution,
         banner_image: videoConfig.bannerImage || undefined,
-        banner_video_scale: videoConfig.bannerImage ? videoConfig.bannerVideoScaleX : undefined,
-        banner_video_scale_x: videoConfig.bannerImage ? videoConfig.bannerVideoScaleX : undefined,
-        banner_video_scale_y: videoConfig.bannerImage ? videoConfig.bannerVideoScaleY : undefined,
-        banner_video_offset_x: videoConfig.bannerImage ? videoConfig.bannerVideoOffsetX : undefined,
-        banner_video_offset_y: videoConfig.bannerImage ? videoConfig.bannerVideoOffsetY : undefined,
+        // Transform (scale/offset) applies with or without a banner — when no
+        // banner is set the backend composites the clip onto a black frame.
+        banner_video_scale: videoConfig.bannerVideoScaleX,
+        banner_video_scale_x: videoConfig.bannerVideoScaleX,
+        banner_video_scale_y: videoConfig.bannerVideoScaleY,
+        banner_video_offset_x: videoConfig.bannerVideoOffsetX,
+        banner_video_offset_y: videoConfig.bannerVideoOffsetY,
         overlay_opacity: videoConfig.overlay_opacity,
         watermark_image: videoConfig.watermarkImage || undefined,
         watermark_x: videoConfig.watermark_x,
@@ -4020,6 +4022,15 @@ export default function ProcessorPage() {
                             className="w-full mt-2 h-10"
                           />
                         )}
+                        {(() => {
+                          const preset = omniPresets.find((p) => p.id === ttsConfig.preset_id)
+                          if (!preset?.license) return null
+                          return (
+                            <div className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                              ⚠️ Giọng này dùng nguồn có giấy phép riêng: {preset.license}
+                            </div>
+                          )
+                        })()}
                       </div>
 
                       {/* Create a new cloned voice — collapse để đỡ chiếm diện tích, click header để mở */}
@@ -4586,8 +4597,17 @@ export default function ProcessorPage() {
         const maxW = Math.min(720, Math.max(200, previewAvailW - 10)), maxH = 540
         const previewW = ratio >= 1 ? maxW : Math.round(maxH * ratio)
         const previewH = ratio >= 1 ? Math.round(maxW / ratio) : maxH
-        const previewScaleX = videoConfig.bannerImage ? videoConfig.bannerVideoScaleX : 1
-        const previewScaleY = videoConfig.bannerImage ? videoConfig.bannerVideoScaleY : 1
+        const previewScaleX = videoConfig.bannerVideoScaleX
+        const previewScaleY = videoConfig.bannerVideoScaleY
+        // A composite pass runs when a banner is set OR the transform is non-default.
+        // Mirrors the backend: at identity + no banner the clip is letterboxed
+        // (contain on black); once composited it fills the scaleX×scaleY box (stretch).
+        const previewTransformActive =
+          Math.abs(videoConfig.bannerVideoScaleX - 1) > 0.001 ||
+          Math.abs(videoConfig.bannerVideoScaleY - 1) > 0.001 ||
+          Math.abs(videoConfig.bannerVideoOffsetX) > 0.001 ||
+          Math.abs(videoConfig.bannerVideoOffsetY) > 0.001
+        const previewCompositeMode = !!videoConfig.bannerImage || previewTransformActive
         const currentClip = clipList[currentClipIdx] || null
         const clipUrl = currentClip
           ? `/api/v1/video/preview-video?path=${encodeURIComponent(currentClip.path)}`
@@ -4886,9 +4906,11 @@ export default function ProcessorPage() {
                         </button>
                       )}
                     </div>
-                    {videoConfig.bannerImage && (
-                      <>
-                        <div className="mt-2 flex items-center gap-2">
+                    {/* Kích thước & vị trí video — độc lập với banner. Khi không có
+                        banner, video thu nhỏ/dời chỗ sẽ nằm trên nền đen. */}
+                    <>
+                        <div className="mt-3 mb-1 text-xs font-medium text-dim">Kích thước & vị trí video</div>
+                        <div className="mt-1 flex items-center gap-2">
                           <label className="text-xs text-dim whitespace-nowrap w-20">Rộng: {Math.round(videoConfig.bannerVideoScaleX * 100)}%</label>
                           <input
                             type="range" min="0.5" max="3" step="0.05"
@@ -4919,6 +4941,7 @@ export default function ProcessorPage() {
                         <div className="mt-1 flex items-center justify-between">
                           <span className="text-[11px] text-faint">
                             💡 Kéo thân để di chuyển · kéo góc/cạnh để resize (cạnh = riêng rộng/cao). Áp cho mọi clip.
+                            {!videoConfig.bannerImage && ' Không có banner → phần trống là nền đen.'}
                           </span>
                           {(Math.abs(videoConfig.bannerVideoOffsetX) > 0.001 || Math.abs(videoConfig.bannerVideoOffsetY) > 0.001) && (
                             <button
@@ -4931,8 +4954,7 @@ export default function ProcessorPage() {
                             </button>
                           )}
                         </div>
-                      </>
-                    )}
+                    </>
                   </div>
                 </div>
 
@@ -6107,7 +6129,10 @@ export default function ProcessorPage() {
                       onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                     />
                   ) : (
-                    <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-900" />
+                    // No banner: black background — matches the backend, which
+                    // letterbox-pads on black (non-composite) or composites the clip
+                    // onto a black frame (when the transform is active).
+                    <div className="absolute inset-0 bg-black" />
                   )}
                   {/* Video clip layer */}
                   {(() => {
@@ -6141,29 +6166,22 @@ export default function ProcessorPage() {
                           pendingClipOffsetRef.current = 0
                           setCurrentClipIdx(next)
                         }}
-                        style={videoConfig.bannerImage
+                        style={previewCompositeMode
                           // object-fill so the clip stretches to exactly fill the
                           // scaleX×scaleY box, matching the backend's per-axis scale.
                           ? { width: '100%', height: '100%', objectFit: 'fill', display: 'block', pointerEvents: 'none', ...adVideoStyle }
-                          : { maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', ...adVideoStyle }}
+                          : { maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', pointerEvents: 'none', ...adVideoStyle }}
                       />
                     ) : null
 
-                    if (!videoConfig.bannerImage) {
-                      // No banner: video fills the frame (not movable/resizable).
-                      return (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          {clipVideo || clipPlaceholder}
-                        </div>
-                      )
-                    }
-
-                    // Banner mode: video is a movable + resizable box on top of the
+                    // Video is always a movable + resizable box — drag the body to
+                    // move, corners/edges to resize width/height — with or without a
                     // banner. Offset + per-axis scale are a single shared transform,
                     // so adjusting this sample clip adjusts EVERY clip. The box is
-                    // exactly scaleX×scaleY of the frame and the video fills it
-                    // (object-fill), matching the backend — so the handles sit right
-                    // on the visible video edges.
+                    // exactly scaleX×scaleY of the frame. At identity + no banner the
+                    // clip is letterboxed (object-contain, matching the backend's
+                    // pad); once the transform is touched it fills the box
+                    // (object-fill), matching the composite pass.
                     const boxW = previewScaleX * previewW
                     const boxH = previewScaleY * previewH
                     // dx/dy pick which axis a handle resizes (0 = leave that axis).
@@ -6189,6 +6207,12 @@ export default function ProcessorPage() {
                           transform: 'translate(-50%, -50%)',
                           cursor: isProcessing ? 'default' : 'move',
                           touchAction: 'none',
+                          // Center the clip in the box so a letterboxed (object-contain)
+                          // clip sits centered like the backend's pad; absolute handles
+                          // and outline are unaffected.
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
                         }}
                         onPointerDown={isProcessing ? undefined : startBannerVideoMove}
                       >
@@ -6712,8 +6736,8 @@ export default function ProcessorPage() {
                   </div>
                 </div>
                 <p className="text-xs text-dim mt-3 text-center max-w-md">
-                  {videoConfig.bannerImage
-                    ? `Banner nền · video ${Math.round(previewScaleX * 100)}×${Math.round(previewScaleY * 100)}%${
+                  {previewCompositeMode
+                    ? `${videoConfig.bannerImage ? 'Banner nền' : 'Nền đen'} · video ${Math.round(previewScaleX * 100)}×${Math.round(previewScaleY * 100)}%${
                         (Math.abs(videoConfig.bannerVideoOffsetX) > 0.001 || Math.abs(videoConfig.bannerVideoOffsetY) > 0.001)
                           ? ` @ ${Math.round(videoConfig.bannerVideoOffsetX * 100)},${Math.round(videoConfig.bannerVideoOffsetY * 100)}`
                           : ' · canh giữa'} · kéo thân/góc/cạnh`

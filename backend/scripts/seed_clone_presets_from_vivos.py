@@ -23,12 +23,10 @@ Usage:
 """
 import argparse
 import json
-import re
 import subprocess
 import sys
 import tarfile
 import time
-import unicodedata
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -62,15 +60,11 @@ SPEAKERS = [
 ]
 
 
-def _slugify(name: str) -> str:
-    nfkd = unicodedata.normalize("NFD", name)
-    ascii_ = "".join(c for c in nfkd if not unicodedata.combining(c))
-    ascii_ = ascii_.replace("Đ", "D").replace("đ", "d")
-    s = re.sub(r"[^a-zA-Z0-9_-]+", "-", ascii_.strip()).strip("-").lower()
-    return s or "preset"
-
-
 def _sentence_case(s: str) -> str:
+    # The corpus prompts are ALL CAPS with no case info at all, so proper nouns
+    # (place/person names) mid-sentence end up lowercased same as everything
+    # else — there's no reliable way to recover them without an NER pass, and
+    # this text is only alignment reference for OmniVoice, not shown to users.
     s = s.strip().lower()
     return s[:1].upper() + s[1:] if s else s
 
@@ -99,56 +93,70 @@ def main() -> int:
 
     tf = tarfile.open(tarball, mode="r:gz")
     ok = 0
-    for index, (speaker_id, name, gender) in enumerate(SPEAKERS):
-        preset_id = f"vivos-{index:02d}-{_slugify(name)}"
-        dest = out_root / preset_id
-        if (dest / "meta.json").exists() and not args.force:
-            print(f"  [skip] {preset_id} (already exists)")
-            ok += 1
-            continue
+    try:
+        for index, (speaker_id, name, gender) in enumerate(SPEAKERS):
+            # Stable across reruns even if ``name`` is later edited — keyed on
+            # the corpus's own (immutable) speaker id, not the display name.
+            # This also matches how seed_default_presets()'s "already seeded"
+            # marker is keyed (by directory name), so renaming an entry in
+            # SPEAKERS never leaves an orphaned duplicate preset behind.
+            preset_id = f"vivos-{index:02d}-{speaker_id.lower()}"
+            dest = out_root / preset_id
+            if (dest / "meta.json").exists() and not args.force:
+                print(f"  [skip] {preset_id} (already exists)")
+                ok += 1
+                continue
 
-        clip_ids = sorted(cid for cid in prompts if cid.startswith(speaker_id + "_"))[:CLIPS_PER_SPEAKER]
-        if len(clip_ids) < CLIPS_PER_SPEAKER:
-            print(f"  [FAIL] {speaker_id}: only {len(clip_ids)} clips found in prompts file")
-            continue
+            clip_ids = sorted(cid for cid in prompts if cid.startswith(speaker_id + "_"))[:CLIPS_PER_SPEAKER]
+            if len(clip_ids) < CLIPS_PER_SPEAKER:
+                print(f"  [FAIL] {speaker_id}: only {len(clip_ids)} clips found in prompts file")
+                continue
 
-        dest.mkdir(parents=True, exist_ok=True)
-        wav_paths = []
-        for cid in clip_ids:
-            f = tf.extractfile(f"vivos/train/waves/{speaker_id}/{cid}.wav")
-            wav_path = dest / f"_{cid}.wav"
-            wav_path.write_bytes(f.read())
-            wav_paths.append(wav_path)
+            dest.mkdir(parents=True, exist_ok=True)
+            wav_paths = []
+            try:
+                for cid in clip_ids:
+                    member = f"vivos/train/waves/{speaker_id}/{cid}.wav"
+                    extracted = tf.extractfile(member)
+                    if extracted is None:
+                        raise FileNotFoundError(f"{member} not found in tarball")
+                    wav_path = dest / f"_{cid}.wav"
+                    wav_path.write_bytes(extracted.read())
+                    wav_paths.append(wav_path)
 
-        list_file = dest / "_concat.txt"
-        list_file.write_text("\n".join(f"file '{p.name}'" for p in wav_paths), encoding="utf-8")
-        audio_path = dest / "reference.mp3"
-        subprocess.run(
-            [str(ffmpeg), "-y", "-f", "concat", "-safe", "0", "-i", str(list_file),
-             "-ac", "1", "-ar", "22050", "-b:a", "128k", str(audio_path)],
-            cwd=str(dest), capture_output=True, check=True,
-        )
-        for p in wav_paths:
-            p.unlink(missing_ok=True)
-        list_file.unlink(missing_ok=True)
+                list_file = dest / "_concat.txt"
+                list_file.write_text("\n".join(f"file '{p.name}'" for p in wav_paths), encoding="utf-8")
+                audio_path = dest / "reference.mp3"
+                subprocess.run(
+                    [str(ffmpeg), "-y", "-f", "concat", "-safe", "0", "-i", str(list_file),
+                     "-ac", "1", "-ar", "22050", "-b:a", "128k", str(audio_path)],
+                    cwd=str(dest), capture_output=True, check=True,
+                )
 
-        ref_text = " ".join(_sentence_case(prompts[cid]) + "." for cid in clip_ids)
-        meta = {
-            "id": preset_id,
-            "name": f"VIVOS - {name}",
-            "audio_file": "reference.mp3",
-            "ref_text": ref_text,
-            "created_at": int(time.time()),
-            "source": "vivos",
-            "license": LICENSE_NOTE,
-            "speaker_id": speaker_id,
-            "gender": gender,
-        }
-        (dest / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"  [ ok ] {preset_id}  ({audio_path.stat().st_size // 1024} KB)")
-        ok += 1
+                ref_text = " ".join(_sentence_case(prompts[cid]) + "." for cid in clip_ids)
+                meta = {
+                    "id": preset_id,
+                    "name": f"VIVOS - {name}",
+                    "audio_file": "reference.mp3",
+                    "ref_text": ref_text,
+                    "created_at": int(time.time()),
+                    "source": "vivos",
+                    "license": LICENSE_NOTE,
+                    "speaker_id": speaker_id,
+                    "gender": gender,
+                }
+                (dest / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+                print(f"  [ ok ] {preset_id}  ({audio_path.stat().st_size // 1024} KB)")
+                ok += 1
+            except Exception as e:  # noqa: BLE001 — one bad speaker shouldn't abort the batch
+                print(f"  [FAIL] {preset_id}: {e}")
+            finally:
+                for p in wav_paths:
+                    p.unlink(missing_ok=True)
+                (dest / "_concat.txt").unlink(missing_ok=True)
+    finally:
+        tf.close()
 
-    tf.close()
     print(f"\nDone: {ok}/{len(SPEAKERS)} presets ready in {out_root}")
     return 0 if ok == len(SPEAKERS) else 2
 

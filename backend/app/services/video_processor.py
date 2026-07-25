@@ -774,10 +774,28 @@ class VideoProcessor:
             error_msg = process.stderr.decode(errors='replace')[-500:]
             return {"success": False, "error": f"Video trim failed: {error_msg}"}
 
+    @staticmethod
+    def _video_transform_active(
+        video_scale: float = 1.0,
+        offset_x: float = 0.0,
+        offset_y: float = 0.0,
+        scale_x: Optional[float] = None,
+        scale_y: Optional[float] = None,
+    ) -> bool:
+        """True when the per-clip scale/offset differ from the identity transform
+        (100% size, centered). Used to decide whether a composite pass is needed
+        even without a banner — at identity the raw concat is used unchanged."""
+        sx = video_scale if scale_x is None else scale_x
+        sy = video_scale if scale_y is None else scale_y
+        return (
+            abs(sx - 1.0) > 1e-3 or abs(sy - 1.0) > 1e-3
+            or abs(offset_x) > 1e-3 or abs(offset_y) > 1e-3
+        )
+
     def overlay_on_banner(
         self,
         video_path: str,
-        banner_path: str,
+        banner_path: Optional[str],
         output_path: str,
         resolution: str = "1920x1080",
         duration: float = 0,
@@ -787,8 +805,11 @@ class VideoProcessor:
         scale_x: Optional[float] = None,
         scale_y: Optional[float] = None
     ) -> Dict:
-        """Overlay video on top of a banner image background.
-        Banner scales to full resolution. The video is scaled to
+        """Overlay the video on top of a background, scaled/positioned per the
+        transform params. The background is the banner image when banner_path is
+        given (and exists); otherwise a solid black frame — so scaling/repositioning
+        works with or without a banner (a shrunk/moved clip is letterboxed on black).
+        Background fills the full resolution. The video is scaled to
         scale_x * frame_width by scale_y * frame_height — independent per
         axis, so the clip can be stretched (aspect-distorted) to any size.
         When scale_x/scale_y are omitted both fall back to video_scale
@@ -796,6 +817,7 @@ class VideoProcessor:
         frame, 0 = centered) shift it horizontally/vertically."""
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         width, height = resolution.split('x')
+        has_banner = bool(banner_path) and os.path.exists(banner_path)
         # Independent per-axis scale; fall back to the uniform video_scale.
         sx = video_scale if scale_x is None else scale_x
         sy = video_scale if scale_y is None else scale_y
@@ -820,7 +842,15 @@ class VideoProcessor:
             f"[bg][vid]overlay={pos_x}:{pos_y}:shortest=1[outv]"
         )
 
-        cmd = ['ffmpeg', '-y', '-loop', '1', '-i', banner_path]
+        if has_banner:
+            # Still image looped as the background layer.
+            cmd = ['ffmpeg', '-y', '-loop', '1', '-i', banner_path]
+        else:
+            # No banner: generate a solid black background at the target size so
+            # a shrunk/repositioned clip is letterboxed on black.
+            bg_dur = duration if duration > 0 else 1
+            cmd = ['ffmpeg', '-y', '-f', 'lavfi',
+                   '-i', f'color=c=black:s={width}x{height}:r=30:d={bg_dur}']
         if self.nvenc_available:
             cmd.extend(['-hwaccel', 'auto'])
         cmd.extend([
@@ -838,7 +868,9 @@ class VideoProcessor:
             cmd.extend(['-t', str(duration)])
         cmd.append(output_path)
 
-        logger.info(f"Overlaying video on banner: {banner_path}")
+        logger.info(
+            f"Overlaying video on {'banner ' + banner_path if has_banner else 'black background'}"
+        )
         process = subprocess.run(cmd, capture_output=True, timeout=7200)
 
         if process.returncode == 0:
@@ -1671,11 +1703,21 @@ class VideoProcessor:
             task.progress = 30
             db.commit()
 
+        # A composite pass (scale/position the clip on a background) runs when a
+        # banner is set OR the transform is non-default — the latter lets the
+        # size/position controls work without a banner (clip on a black frame).
+        has_banner = bool(banner_image) and os.path.exists(banner_image)
+        needs_composite = has_banner or self._video_transform_active(
+            banner_video_scale, banner_video_offset_x, banner_video_offset_y,
+            banner_video_scale_x, banner_video_scale_y,
+        )
+
         # 2. Concat videos, bounded to sped_audio_duration so the encoder stops
         # at the right moment and the last clip is cut mid-frame as needed.
-        # When banner is used, concat at source aspect ratio (no black padding)
+        # For the composite pass, concat at source aspect ratio (no black padding)
+        # so the overlay scales the raw clip cleanly onto the background.
         concat_resolution = resolution
-        if banner_image and os.path.exists(banner_image):
+        if needs_composite:
             src_w, src_h = self.get_video_dimensions(video_paths[0])
             if src_w > 0 and src_h > 0:
                 out_w, out_h = [int(x) for x in resolution.split('x')]
@@ -1684,7 +1726,7 @@ class VideoProcessor:
                 concat_w = int(src_w * scale) // 2 * 2  # ensure even
                 concat_h = int(src_h * scale) // 2 * 2
                 concat_resolution = f"{concat_w}x{concat_h}"
-                logger.info(f"Banner mode: concat at {concat_resolution} (source {src_w}x{src_h})")
+                logger.info(f"Composite mode: concat at {concat_resolution} (source {src_w}x{src_h})")
 
         logger.info(f"Concatenating {len(video_paths)} videos (bounded to {sped_audio_duration:.2f}s)...")
 
@@ -1712,14 +1754,14 @@ class VideoProcessor:
             task.progress = 75
             db.commit()
 
-        # 3.5. Overlay on banner if provided
+        # 3.5. Composite the clip onto the background (banner image, or black
+        # when only the transform is set) so scale/position are applied.
         video_for_merge = concat_path
         composite_path = None
-        if banner_image and os.path.exists(banner_image):
+        if needs_composite:
             composite_path = os.path.join(output_dir, "bg_video_composite.mp4")
-            logger.info(f"Overlaying video on banner: {banner_image}")
             overlay_result = self.overlay_on_banner(
-                concat_path, banner_image, composite_path,
+                concat_path, banner_image if has_banner else None, composite_path,
                 resolution, sped_audio_duration, banner_video_scale,
                 banner_video_offset_x, banner_video_offset_y,
                 scale_x=banner_video_scale_x, scale_y=banner_video_scale_y
@@ -2376,10 +2418,16 @@ class VideoProcessor:
             logger.info(f"Preview: picked {len(picked)} clips in order, total {total:.2f}s for {sped_dur:.2f}s sped audio")
             progress(30)
 
-            # When a banner is used, concat at source aspect ratio so clips don't
-            # bake black bars. Matches the production pipeline.
+            # A composite pass runs when a banner is set OR the transform is
+            # non-default. Concat at source aspect ratio so clips don't bake
+            # black bars. Matches the production pipeline.
+            has_banner = bool(banner_image) and os.path.exists(banner_image)
+            needs_composite = has_banner or self._video_transform_active(
+                banner_video_scale, banner_video_offset_x, banner_video_offset_y,
+                banner_video_scale_x, banner_video_scale_y,
+            )
             concat_resolution = resolution
-            if banner_image and os.path.exists(banner_image):
+            if needs_composite:
                 src_w, src_h = self.get_video_dimensions(picked[0])
                 if src_w > 0 and src_h > 0:
                     out_w, out_h = [int(x) for x in resolution.split('x')]
@@ -2413,10 +2461,10 @@ class VideoProcessor:
             progress(65)
 
             video_for_merge = concat_path
-            if banner_image and os.path.exists(banner_image):
+            if needs_composite:
                 composite = os.path.join(work_dir, "preview_composite.mp4")
                 overlay_res = self.overlay_on_banner(
-                    concat_path, banner_image, composite,
+                    concat_path, banner_image if has_banner else None, composite,
                     resolution, sped_dur, banner_video_scale,
                     banner_video_offset_x, banner_video_offset_y,
                     scale_x=banner_video_scale_x, scale_y=banner_video_scale_y,

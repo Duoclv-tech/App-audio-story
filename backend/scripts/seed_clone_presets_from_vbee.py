@@ -23,7 +23,6 @@ app.db (primary) with the .env values as fallback.
 import argparse
 import asyncio
 import json
-import re
 import sys
 import time
 from pathlib import Path
@@ -33,7 +32,9 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
 from app import paths                                    # noqa: E402
+from app import seed as app_seed                          # noqa: E402
 from app.database import SessionLocal                    # noqa: E402
+from app.services.clone_preset_store import _slugify      # noqa: E402
 from app.services.tts_processor import VbeeTTSProcessor  # noqa: E402
 
 # One fixed, neutral paragraph (~13s of speech) used as the clone reference for
@@ -44,7 +45,14 @@ REF_TEXT = (
     "để đọc truyện và thuyết minh nội dung một cách tự nhiên."
 )
 
-# (voice_code, display name) — the full 25-voice VN catalog, mirrors app/seed.py.
+# (voice_code, display name) — the full 25-voice VN catalog.
+#
+# The codes are the authoritative catalog in app/seed.py (_VOICES); we deliberately
+# keep an EXPLICIT list here (not derived) because several seed.py voices share a
+# display name (two "SG - Thảo Trinh", two "HN - Anh Khôi", …) and we disambiguate
+# them here so the clone dropdown shows unique labels and preset ids stay stable.
+# ``_check_catalog_drift`` cross-checks these codes against app/seed.py so a code
+# renamed there fails loudly instead of silently generating the wrong voice.
 VOICES = [
     ("hn_female_ngochuyen_full_24k-st", "Ngọc Huyền 2.0"),
     ("hn_female_ngochuyen_full_48k-fhg", "HN - Ngọc Huyền"),
@@ -74,13 +82,17 @@ VOICES = [
 ]
 
 
-def _slugify(name: str) -> str:
-    s = re.sub(r"[^a-zA-Z0-9_-]+", "-", name.strip()).strip("-").lower()
-    return s or "preset"
+def _check_catalog_drift() -> None:
+    """Fail loudly if a voice code here no longer exists in app/seed.py."""
+    seed_codes = {v[0] for v in app_seed._VOICES}
+    missing = [code for code, _ in VOICES if code not in seed_codes]
+    if missing:
+        raise SystemExit(
+            "voice codes not found in app/seed.py (catalog drift): " + ", ".join(missing))
 
 
 async def seed_one(proc: VbeeTTSProcessor, index: int, code: str, name: str,
-                   out_root: Path, force: bool) -> bool:
+                   out_root: Path, force: bool) -> str:
     # Stable, collision-free id (some display names repeat across voices).
     preset_id = f"vbee-{index:02d}-{_slugify(name)}"
     dest = out_root / preset_id
@@ -89,7 +101,7 @@ async def seed_one(proc: VbeeTTSProcessor, index: int, code: str, name: str,
 
     if meta_path.exists() and audio_path.exists() and not force:
         print(f"  [skip] {preset_id} (already exists)")
-        return True
+        return "skip"
 
     print(f"  [gen ] {preset_id}  voice={code}")
     tts = await proc.text_to_speech(
@@ -97,17 +109,17 @@ async def seed_one(proc: VbeeTTSProcessor, index: int, code: str, name: str,
     )
     if not tts or not tts.get("request_id"):
         print(f"  [FAIL] {preset_id}: no request_id from VBEE")
-        return False
+        return "fail"
 
     link = await proc.get_audio_link(tts["request_id"])
     if not link:
         print(f"  [FAIL] {preset_id}: no audio link (timeout/failure)")
-        return False
+        return "fail"
 
     dest.mkdir(parents=True, exist_ok=True)
     if not await proc.download_audio(link, str(audio_path)):
         print(f"  [FAIL] {preset_id}: download failed")
-        return False
+        return "fail"
 
     meta = {
         "id": preset_id,
@@ -120,7 +132,7 @@ async def seed_one(proc: VbeeTTSProcessor, index: int, code: str, name: str,
     }
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"  [ ok ] {preset_id}  ({audio_path.stat().st_size // 1024} KB)")
-    return True
+    return "ok"
 
 
 async def main() -> int:
@@ -129,6 +141,8 @@ async def main() -> int:
     ap.add_argument("--only", type=str, default=None, help="only seed this voice_code")
     ap.add_argument("--force", action="store_true", help="overwrite existing presets")
     args = ap.parse_args()
+
+    _check_catalog_drift()
 
     out_root = paths.DEFAULT_CLONE_PRESETS_DIR
     out_root.mkdir(parents=True, exist_ok=True)
@@ -140,7 +154,7 @@ async def main() -> int:
         if not voices:
             print(f"No voice with code {args.only}")
             return 1
-    elif args.limit:
+    elif args.limit is not None:
         voices = voices[: args.limit]
 
     db = SessionLocal()
@@ -151,13 +165,18 @@ async def main() -> int:
             return 1
 
         ok = 0
-        for index, (code, name) in voices:
+        for pos, (index, (code, name)) in enumerate(voices):
+            status = "fail"
             try:
-                if await seed_one(proc, index, code, name, out_root, args.force):
-                    ok += 1
+                status = await seed_one(proc, index, code, name, out_root, args.force)
             except Exception as e:  # keep going on a single-voice failure
                 print(f"  [FAIL] index={index} code={code}: {e}")
-            await asyncio.sleep(2)  # be gentle on the VBEE rate limit
+            if status in ("ok", "skip"):
+                ok += 1
+            # Only rate-limit between ACTUAL VBEE calls — skips make none, and the
+            # last voice has nothing after it to throttle against.
+            if status == "ok" and pos < len(voices) - 1:
+                await asyncio.sleep(2)
 
         print(f"\nDone: {ok}/{len(voices)} presets ready in {out_root}")
         return 0 if ok == len(voices) else 2

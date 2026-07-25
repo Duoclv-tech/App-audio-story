@@ -362,10 +362,12 @@ class OmniVoiceProcessor:
                 merged_audio.file_size = file_size
                 merged_audio.duration = duration
                 merged_audio.format = "mp3"
+                merged_audio.engine = "omnivoice"
             else:
                 merged_audio = models.MergedAudio(
                     story_id=story_id, file_path=final_path,
                     file_size=file_size, duration=duration, format="mp3",
+                    engine="omnivoice",
                 )
                 db.add(merged_audio)
             db.commit()

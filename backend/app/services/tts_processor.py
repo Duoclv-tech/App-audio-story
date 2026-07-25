@@ -644,13 +644,15 @@ class VbeeTTSProcessor:
                 merged_audio.file_path = final_path
                 merged_audio.file_size = file_size
                 merged_audio.format = audio_type
+                merged_audio.engine = "vbee"
             else:
                 # Create new
                 merged_audio = models.MergedAudio(
                     story_id=story_id,
                     file_path=final_path,
                     file_size=file_size,
-                    format=audio_type
+                    format=audio_type,
+                    engine="vbee"
                 )
                 db.add(merged_audio)
 

@@ -82,6 +82,7 @@ class MergedAudio(Base):
     duration = Column(Float)
     format = Column(String(10), default='mp3')
     total_chapters = Column(Integer)
+    engine = Column(String(20))  # 'vbee' | 'omnivoice' — which TTS engine produced this file
     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
 
     # Relationships
@@ -93,6 +94,7 @@ class Task(Base):
     id = Column(String(36), primary_key=True, default=generate_uuid)
     story_id = Column(String(36), ForeignKey('stories.id', ondelete='CASCADE'))
     type = Column(String(50), nullable=False)
+    engine = Column(String(20))  # 'vbee' | 'omnivoice' — which TTS engine this task belongs to
     status = Column(String(50), default='queued')
     progress = Column(Integer, default=0)
     total_items = Column(Integer)

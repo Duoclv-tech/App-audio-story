@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from app import models
 from app.config import settings
+from app.services.output_delivery import get_output_folder, safe_file_stem
 
 # Segments shorter than this get glued onto the previous one so period-splitting
 # doesn't produce tiny fragments ("Vâng.", "Ừ.") that waste a whole generation.
@@ -77,8 +78,39 @@ def story_folder_name(story: models.Story) -> str:
     return (story.title or f"story_{story.id}").replace(' ', '_').replace('/', '_')
 
 
-def segments_dir(story: models.Story) -> Path:
-    return Path(settings.STORAGE_PATH) / "audio" / story_folder_name(story) / "segments"
+def story_output_name(story: models.Story) -> str:
+    """Delivery sub-folder name for a story — MUST match the ``subfolder`` that
+    ``deliver_final`` uses in :func:`merge_segments`, so the per-segment files and
+    the finished product land in the same ``<output>/<story>/`` directory."""
+    return safe_file_stem(story.title if story.title else story.id, story.id)
+
+
+def _next_omnivoice_seq(folder: Path, stem: str) -> int:
+    """Next sequence number for an OmniVoice product in ``folder``.
+
+    Scans for existing ``omnivoice_<n>_<stem>.mp3`` files and returns max+1 (1 if
+    none). This gives each merge a distinct, ordered name so re-merges don't
+    overwrite each other and OmniVoice output is told apart from VBEE's.
+    """
+    if not folder.exists():
+        return 1
+    pat = re.compile(rf"^omnivoice_(\d+)_{re.escape(stem)}\.mp3$", re.IGNORECASE)
+    mx = 0
+    for p in folder.iterdir():
+        m = pat.match(p.name)
+        if m:
+            mx = max(mx, int(m.group(1)))
+    return mx + 1
+
+
+def segments_dir(story: models.Story, db: Session) -> Path:
+    """Where per-sentence mp3s live: ``<output folder>/<story>/segments/``.
+
+    This sits inside the user's delivery folder (Downloads by default) — the same
+    folder the merged product is delivered to — so opening it shows both the short
+    per-sentence files and the final ``<story>.mp3`` side by side.
+    """
+    return get_output_folder(db) / story_output_name(story) / "segments"
 
 
 def _delete_file(path: Optional[str]) -> None:
@@ -155,7 +187,7 @@ def synthesize_segment(db: Session, seg: models.TtsSegment) -> Dict:
     if not story:
         return {"success": False, "error": "Story not found"}
 
-    out_dir = segments_dir(story)
+    out_dir = segments_dir(story, db)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"seg_{seg.seg_index:04d}.mp3"
 
@@ -196,7 +228,7 @@ def merge_segments(db: Session, story: models.Story) -> Dict:
     the output lands in the user's Downloads sub-folder like the one-shot path.
     """
     import subprocess
-    from app.services.output_delivery import deliver_final, safe_file_stem
+    from app.services.output_delivery import deliver_final
 
     segs = db.query(models.TtsSegment).filter(
         models.TtsSegment.story_id == story.id
@@ -241,8 +273,11 @@ def merge_segments(db: Session, story: models.Story) -> Dict:
     file_size = os.path.getsize(out_path)
     total_duration = sum((s.duration or 0.0) for s in segs)
 
-    name = safe_file_stem(story.title if story.title else story.id, story.id)
-    final_path = deliver_final(str(out_path), db, filename=f"{name}.mp3", subfolder=name)
+    # Prefix the product with the engine + a running number so it's told apart
+    # from any VBEE file and successive re-merges don't clobber each other.
+    name = story_output_name(story)
+    seq = _next_omnivoice_seq(get_output_folder(db) / name, name)
+    final_path = deliver_final(str(out_path), db, filename=f"omnivoice_{seq}_{name}.mp3", subfolder=name)
 
     merged = db.query(models.MergedAudio).filter(
         models.MergedAudio.story_id == story.id
@@ -253,10 +288,12 @@ def merge_segments(db: Session, story: models.Story) -> Dict:
         merged.duration = total_duration
         merged.format = "mp3"
         merged.total_chapters = len(segs)
+        merged.engine = "omnivoice"
     else:
         merged = models.MergedAudio(
             story_id=story.id, file_path=final_path, file_size=file_size,
             duration=total_duration, format="mp3", total_chapters=len(segs),
+            engine="omnivoice",
         )
         db.add(merged)
     db.commit()

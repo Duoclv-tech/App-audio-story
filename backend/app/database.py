@@ -56,12 +56,37 @@ def get_db():
     finally:
         db.close()
 
+def _ensure_column(table: str, column: str, ddl_type: str) -> None:
+    """Add a column to an existing table if it's missing.
+
+    ``create_all`` only creates tables that don't exist yet — it never alters
+    an existing table's schema. This app ships as a packaged desktop exe with
+    users' SQLite files already on disk, so new columns on old tables need an
+    in-app migration instead of a manual SQL script.
+    """
+    with engine.connect() as conn:
+        if _is_sqlite:
+            cols = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))}
+        else:
+            cols = {row[0] for row in conn.execute(text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = :t AND table_schema = DATABASE()"
+            ), {"t": table})}
+        if column in cols:
+            return
+        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
+        conn.commit()
+        logger.info(f"[migrate] added {table}.{column}")
+
+
 def init_db():
     """Initialize database (create tables if not exist)"""
     logger.info("Initializing database...")
     # Import models so every table is registered on Base.metadata before create_all.
     from app import models  # noqa: F401
     Base.metadata.create_all(bind=engine)
+    _ensure_column("merged_audio", "engine", "VARCHAR(20)")
+    _ensure_column("tasks", "engine", "VARCHAR(20)")
     logger.info("Database initialized successfully")
 
 def test_connection():

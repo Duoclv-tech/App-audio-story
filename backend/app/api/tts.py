@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Form, Fi
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from loguru import logger
-from typing import List
+from typing import List, Optional
 
 from app.database import get_db
 from app import models, schemas
@@ -277,24 +277,6 @@ def search_vbee_voices(q: str = "", limit: int = 30):
     return {"voices": voices_list}
 
 
-@router.post("/pause")
-async def pause_tts(task_id: str, db: Session = Depends(get_db)):
-    """Pause TTS"""
-    # TODO: Implement pause logic
-    return {"message": "TTS paused"}
-
-@router.post("/resume")
-async def resume_tts(task_id: str, db: Session = Depends(get_db)):
-    """Resume TTS"""
-    # TODO: Implement resume logic
-    return {"message": "TTS resumed"}
-
-@router.post("/cancel")
-async def cancel_tts(task_id: str, db: Session = Depends(get_db)):
-    """Cancel TTS"""
-    # TODO: Implement cancel logic
-    return {"message": "TTS cancelled"}
-
 @router.post("/prepare")
 async def prepare_tts_records(
     request: schemas.TTSRequest,
@@ -454,6 +436,7 @@ async def start_tts_merged(
     task = models.Task(
         story_id=request.story_id,
         type="tts_merged",
+        engine="vbee",
         status="running",
         total_items=1
     )
@@ -477,23 +460,34 @@ async def start_tts_merged(
 
 
 @router.get("/merged-status/{story_id}")
-async def get_merged_tts_status(story_id: str, db: Session = Depends(get_db)):
-    """Get TTS status for merged content"""
+async def get_merged_tts_status(story_id: str, engine: Optional[str] = None, db: Session = Depends(get_db)):
+    """Get TTS status for merged content.
+
+    ``engine`` (optional) scopes the result to the caller's currently selected
+    TTS engine ('vbee' | 'omnivoice') — a story can carry a leftover
+    merged_audio row from whichever engine ran last, and without this filter
+    the UI would show a VBEE-produced file while the user is mid-run on
+    OmniVoice (or vice versa).
+    """
     # Get story
     story = db.query(models.Story).filter(models.Story.id == story_id).first()
     if not story:
         raise HTTPException(status_code=404, detail="Story not found")
 
     # Get merged audio
-    merged_audio = db.query(models.MergedAudio).filter(
-        models.MergedAudio.story_id == story_id
-    ).first()
+    query = db.query(models.MergedAudio).filter(models.MergedAudio.story_id == story_id)
+    if engine:
+        query = query.filter(models.MergedAudio.engine == engine)
+    merged_audio = query.order_by(models.MergedAudio.created_at.desc()).first()
 
     # Get latest task
-    task = db.query(models.Task).filter(
+    task_query = db.query(models.Task).filter(
         models.Task.story_id == story_id,
         models.Task.type == "tts_merged"
-    ).order_by(models.Task.created_at.desc()).first()
+    )
+    if engine:
+        task_query = task_query.filter(models.Task.engine == engine)
+    task = task_query.order_by(models.Task.created_at.desc()).first()
 
     return {
         "story_id": story_id,
@@ -552,6 +546,7 @@ async def split_segments(request: schemas.SegmentSplitRequest, db: Session = Dep
 async def list_segments(story_id: str, db: Session = Depends(get_db)):
     """List a story's segments + whether the source story changed since split."""
     from app.services import segment_tts
+    from app.workers.tts_worker import is_story_active
 
     story = db.query(models.Story).filter(models.Story.id == story_id).first()
     if not story:
@@ -565,6 +560,10 @@ async def list_segments(story_id: str, db: Session = Depends(get_db)):
         "story_id": story_id,
         "split_mode": segs[0].split_mode if segs else None,
         "source_changed": segment_tts.source_changed(db, story),
+        # Authoritative "a generation batch/retry is running" flag — the poller
+        # keys off this to stop, since after a cancel some segments stay 'pending'
+        # with nothing actually running.
+        "running": is_story_active(story_id),
         "segments": [_seg_out(s) for s in segs],
         "stats": segment_tts.segment_stats(db, story_id),
     }
@@ -612,6 +611,22 @@ async def run_segments(
 
     background_tasks.add_task(process_segments_task, request.story_id)
     return {"status": "started", "queued": todo}
+
+
+@router.post("/segments/cancel")
+async def cancel_segments(request: schemas.SegmentMergeRequest, db: Session = Depends(get_db)):
+    """Ask the running per-segment generation to stop after the current sentence.
+
+    A single GPU generation can't be interrupted mid-way, so this is a graceful
+    stop: the in-flight segment finishes, then no further segments start. Already
+    done segments stay done; the rest remain 'pending' so a later run resumes.
+    """
+    from app.workers.tts_worker import request_cancel
+
+    if request_cancel(request.story_id):
+        return {"status": "cancelling",
+                "message": "Đang dừng sau khi câu hiện tại sinh xong…"}
+    return {"status": "idle", "message": "Không có tiến trình TTS nào đang chạy."}
 
 
 @router.post("/segments/{segment_id}/retry")
@@ -712,7 +727,7 @@ async def merge_segments_endpoint(
         raise HTTPException(status_code=400,
                             detail="Còn câu chưa xong — hãy chạy/retry hết trước khi ghép.")
 
-    task = models.Task(story_id=story.id, type="tts_merged", status="running", total_items=1)
+    task = models.Task(story_id=story.id, type="tts_merged", engine="omnivoice", status="running", total_items=1)
     db.add(task)
     db.commit()
     db.refresh(task)

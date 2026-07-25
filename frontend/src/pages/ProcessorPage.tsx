@@ -208,6 +208,10 @@ export default function ProcessorPage() {
   // unmount/story-change cleanup always sees the current timer (a state value
   // captured by a []-deps cleanup would be stale and never clear).
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // True only while we're actively watching a merge we just kicked off — gates
+  // the "TTS hoàn thành!" toast so it fires on the run's completion, not every
+  // time step 6 is (re)opened on a story that was already merged before.
+  const watchingMergeRef = useRef(false)
   const [toast, setToast] = useState<ToastState>({
     isVisible: false,
     message: '',
@@ -261,6 +265,7 @@ export default function ProcessorPage() {
   const [splitMode, setSplitMode] = useState<'newline' | 'period'>('newline')
   const [segSourceChanged, setSegSourceChanged] = useState(false)
   const [segBusy, setSegBusy] = useState(false)   // a split/run/merge request is in flight
+  const [segRunning, setSegRunning] = useState(false)  // server says a generation batch/retry is active
   const [segMerging, setSegMerging] = useState(false)
   const [segNowPlaying, setSegNowPlaying] = useState<string | null>(null)
   const segAudioRef = useRef<HTMLAudioElement | null>(null)
@@ -2053,6 +2058,7 @@ export default function ProcessorPage() {
       clearInterval(pollingRef.current)
       pollingRef.current = null
     }
+    watchingMergeRef.current = false
   }
 
   // Fetch merged TTS status
@@ -2060,7 +2066,9 @@ export default function ProcessorPage() {
     if (!storyData.id) return
 
     try {
-      const response = await axios.get(`/api/v1/tts/merged-status/${storyData.id}`)
+      const response = await axios.get(`/api/v1/tts/merged-status/${storyData.id}`, {
+        params: { engine: ttsConfig.engine },
+      })
       const data = response.data
 
       setMergedTtsStatus({
@@ -2071,12 +2079,15 @@ export default function ProcessorPage() {
         error: data.task_error
       })
 
-      // Stop polling if completed or failed
+      // Announce the result only when we were actively watching a merge we just
+      // started (stopPolling clears the flag, so capture it first). Without this,
+      // merely opening step 6 on an already-merged story would re-fire the toast.
       if (data.task_status === 'completed' || data.task_status === 'failed') {
+        const wasWatching = watchingMergeRef.current
         stopPolling()
-        if (data.task_status === 'completed') {
+        if (wasWatching && data.task_status === 'completed') {
           showToast('TTS hoàn thành!', 'success')
-        } else if (data.task_status === 'failed') {
+        } else if (wasWatching && data.task_status === 'failed') {
           showToast(`TTS thất bại: ${data.task_error}`, 'error')
         }
       }
@@ -2091,6 +2102,10 @@ export default function ProcessorPage() {
     if (pollingRef.current) {
       clearInterval(pollingRef.current)
     }
+
+    // We initiated this merge → allow its completion toast to fire (set before
+    // the immediate fetch below so a fast-completing run still announces).
+    watchingMergeRef.current = true
 
     // Poll immediately
     fetchMergedTtsStatus()
@@ -2124,12 +2139,19 @@ export default function ProcessorPage() {
       setSegments(segs)
       setSegSourceChanged(!!res.data.source_changed)
       if (res.data.split_mode) setSplitMode(res.data.split_mode)
-      // Keep polling while a run is still working through the queue: a batch
-      // leaves segments 'pending' until each is generated, and right after
-      // /run returns nothing is 'processing' yet — so we must NOT stop just
-      // because processing===0, or we'd kill the interval the instant it starts.
-      const active = segs.some(s => s.status === 'processing' || s.status === 'pending')
-      if (segPollRef.current && !active) stopSegPolling()
+      // Stop polling once the backend reports no batch/retry is running. We rely
+      // on the server's `running` flag rather than segment statuses because after
+      // a cancel some segments stay 'pending' with nothing actually generating —
+      // keying off 'pending' would poll forever. `running` is true from the moment
+      // /run acquires the story (before the first 'processing'), so no startup race.
+      // `running` is authoritative: the server sets it true the moment /run or a
+      // retry acquires the story and keeps it true until the task's finally
+      // releases it, so it's true for the whole generation. We deliberately do
+      // NOT also treat a 'processing' segment as running — a row left stuck in
+      // 'processing' by a crashed process would otherwise make this poll forever.
+      const running = !!res.data.running
+      setSegRunning(running)
+      if (segPollRef.current && !running) stopSegPolling()
       return res.data
     } catch (e) {
       if (!opts?.silent) console.error('fetchSegments error', e)
@@ -2182,6 +2204,28 @@ export default function ProcessorPage() {
     } finally {
       setSegBusy(false)
     }
+  }
+
+  // Stop the batch after the current sentence. Confirmed first so an accidental
+  // click can't throw away an in-progress run.
+  const handleCancelSegments = () => {
+    if (!storyData.id) return
+    setConfirmDialog({
+      isOpen: true,
+      title: '⏸ Dừng chạy TTS',
+      message: 'Dừng sinh audio cho các câu còn lại?\n\nCâu đang chạy sẽ được sinh nốt cho xong. Các câu chưa chạy giữ nguyên để bạn có thể "Chạy TTS tất cả" tiếp sau này.',
+      confirmText: 'Dừng lại',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          const res = await axios.post('/api/v1/tts/segments/cancel', { story_id: storyData.id })
+          showToast(res.data?.message || 'Đang dừng…', 'info')
+          fetchSegments({ silent: true })   // reflect the current segment finishing then stopping
+        } catch (e: any) {
+          showToast(errMessage(e, 'Lỗi khi dừng TTS'), 'error')
+        }
+      },
+    })
   }
 
   const handleRetrySegment = async (segId: string) => {
@@ -2273,7 +2317,7 @@ export default function ProcessorPage() {
           const segs = data.segments ?? []
           if (segs.length === 0 && !data.source_changed) {
             handleSplitSegments()
-          } else if (segs.some((s: TtsSegment) => s.status === 'processing')) {
+          } else if (data.running || segs.some((s: TtsSegment) => s.status === 'processing')) {
             // A run was still in flight when we left — resume live polling.
             startSegPolling()
           }
@@ -4044,7 +4088,11 @@ export default function ProcessorPage() {
           const total = segStats.total
           const progressed = segStats.done + segStats.error
           const pct = total ? Math.round((progressed / total) * 100) : 0
-          const anyBusy = segStats.processing > 0
+          // "A generation batch/retry is active." Prefer the server `running`
+          // flag (set from the moment /run acquires the story) over just
+          // processing>0 so the cancel button appears immediately on start and
+          // doesn't flicker in the gap between two sentences.
+          const anyBusy = segStats.processing > 0 || segRunning
           return (
             <div className="space-y-4">
               <audio ref={segAudioRef} onEnded={() => setSegNowPlaying(null)} className="hidden" />
@@ -4119,6 +4167,12 @@ export default function ProcessorPage() {
                   disabled={segBusy || anyBusy || segStats.error === 0}
                   className="text-sm font-medium rounded-lg px-3 py-2 border border-token bg-surface-2 hover:bg-surface-3 disabled:opacity-50 transition"
                 >↻ Chạy lại lỗi</button>
+                {anyBusy && (
+                  <button
+                    onClick={handleCancelSegments}
+                    className="text-sm font-medium rounded-lg px-3 py-2 border border-red-300 dark:border-red-500/40 bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 transition"
+                  >⏸ Dừng tất cả</button>
+                )}
               </div>
 
               {/* Progress + stats */}
@@ -4210,8 +4264,10 @@ export default function ProcessorPage() {
                 )}
               </div>
 
-              {/* Merged output */}
-              {(mergedTtsStatus.status === 'running' || mergedTtsStatus.audioFile) && (
+              {/* Merged output — only meaningful once every segment is done (or a
+                  merge is actively running). Gating on allDone hides a stale file
+                  left over from a previous merge after the story was re-split/edited. */}
+              {(mergedTtsStatus.status === 'running' || (segStats.allDone && mergedTtsStatus.audioFile)) && (
                 <div className="rounded-xl border border-dashed border-token bg-surface-2 p-4 space-y-3">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-semibold">🎧 File thành phẩm</span>

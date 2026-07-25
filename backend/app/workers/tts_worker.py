@@ -25,6 +25,11 @@ def _engine(config: Optional[Dict]) -> str:
 # tasks from each iterating the same pending rows; this does. Endpoints acquire
 # synchronously (closing the schedule-time race) and the task releases when done.
 _active_stories: set = set()
+# Stories the user asked to stop. Checked before each segment in the run loop, so
+# "cancel" stops after the current sentence finishes (a single GPU generation is
+# blocking and can't be interrupted mid-way). Remaining segments stay 'pending'
+# so a later run resumes from where it left off.
+_cancel_stories: set = set()
 _active_lock = threading.Lock()
 
 
@@ -34,17 +39,36 @@ def try_acquire_story(story_id: str) -> bool:
         if story_id in _active_stories:
             return False
         _active_stories.add(story_id)
+        _cancel_stories.discard(story_id)  # clear any stale cancel from a prior run
         return True
 
 
 def release_story(story_id: str) -> None:
     with _active_lock:
         _active_stories.discard(story_id)
+        _cancel_stories.discard(story_id)
 
 
 def is_story_active(story_id: str) -> bool:
     with _active_lock:
         return story_id in _active_stories
+
+
+def request_cancel(story_id: str) -> bool:
+    """Ask a running generation to stop after its current segment.
+
+    Returns False if no generation is active for this story (nothing to cancel).
+    """
+    with _active_lock:
+        if story_id not in _active_stories:
+            return False
+        _cancel_stories.add(story_id)
+        return True
+
+
+def is_cancel_requested(story_id: str) -> bool:
+    with _active_lock:
+        return story_id in _cancel_stories
 
 
 def process_segments_task(story_id: str) -> Dict:
@@ -66,12 +90,20 @@ def process_segments_task(story_id: str) -> Dict:
 
         logger.info(f"[segment-tts] story {story_id}: running {len(pending)} segment(s)")
         ok = 0
+        processed = 0
         for seg in pending:
+            # Stop before starting the next sentence if the user hit cancel. The
+            # already-generated ones keep their 'done' status; the rest remain
+            # 'pending' so a later run picks up where this stopped.
+            if is_cancel_requested(story_id):
+                logger.info(f"[segment-tts] story {story_id}: cancelled after {processed}/{len(pending)}")
+                return {"success": True, "processed": processed, "ok": ok, "cancelled": True}
             result = segment_tts.synthesize_segment(db, seg)
+            processed += 1
             if result.get("success"):
                 ok += 1
         logger.info(f"[segment-tts] story {story_id}: done, {ok}/{len(pending)} succeeded")
-        return {"success": True, "processed": len(pending), "ok": ok}
+        return {"success": True, "processed": processed, "ok": ok}
     except Exception as e:  # noqa: BLE001
         logger.error(f"[segment-tts] batch failed for story {story_id}: {e}")
         return {"success": False, "error": str(e)}

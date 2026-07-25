@@ -3977,6 +3977,15 @@ export default function ProcessorPage() {
                             <option key={p.id} value={p.id}>{p.name}</option>
                           ))}
                         </select>
+                        {ttsConfig.preset_id && (
+                          <audio
+                            key={ttsConfig.preset_id}
+                            controls
+                            preload="metadata"
+                            src={`/api/v1/tts/omnivoice/presets/${ttsConfig.preset_id}/audio`}
+                            className="w-full mt-2 h-10"
+                          />
+                        )}
                       </div>
 
                       {/* Create a new cloned voice — collapse để đỡ chiếm diện tích, click header để mở */}

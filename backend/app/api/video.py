@@ -127,6 +127,7 @@ async def start_video_processing(
         "video_source_folder": request.video_source_folder,
         "audio_path": request.audio_path,
         "clip_order": request.clip_order,
+        "clip_seed": request.clip_seed,
         "audio_speed": request.audio_speed,
         "transition_effect": random.choice(pool),
         "transitions_pool": pool,
@@ -727,14 +728,18 @@ async def sample_clip(folder: str):
 
 
 @router.get("/folder-clips", dependencies=[Depends(require_localhost)])
-async def folder_clips(folder: str, limit: int = 200):
-    """List clips in a folder (sorted by filename) with durations. Used by the
-    frontend to build a playback schedule for the real-time preview."""
+async def folder_clips(folder: str, limit: int = 200, clip_order: str = "name", seed: Optional[int] = None):
+    """List clips in a folder with durations. Used by the frontend to build a
+    playback schedule for the real-time preview.
+
+    clip_order + seed mirror the final render's clip ordering so the live
+    preview shows the same sequence the output will use (pass the same seed)."""
     folder_path = Path(folder)
     if not folder_path.exists() or not folder_path.is_dir():
         return {"clips": [], "total_duration": 0}
     processor = VideoProcessor()
-    clips = processor.get_all_videos_in_folder(str(folder_path), order="name")
+    order = "name" if clip_order == "name" else "shuffle"
+    clips = processor.get_all_videos_in_folder(str(folder_path), order=order, seed=seed)
     if not clips:
         return {"clips": [], "total_duration": 0}
     clips = clips[:max(1, limit)]
@@ -778,6 +783,7 @@ def _preview_config_hash(cfg: dict) -> str:
         "subtitle_x", "subtitle_y", "subtitle_opacity",
         "fade_in", "fade_out", "max_duration",
         "mute_source_videos",
+        "clip_order", "clip_seed",
         "transitions_pool", "transition_duration",
         "stickers",
         "_random_salt",
@@ -830,6 +836,8 @@ def _run_preview_render(job_hash: str, cfg: dict, output_path: str) -> None:
             audio_path=cfg["audio_path"],
             output_path=output_path,
             max_duration=cfg.get("max_duration", 60.0),
+            clip_order=cfg.get("clip_order", "name"),
+            clip_seed=cfg.get("clip_seed"),
             audio_speed=cfg.get("audio_speed", 1.07),
             resolution=cfg.get("resolution", "1920x1080"),
             banner_image=cfg.get("banner_image"),
@@ -952,6 +960,8 @@ async def render_preview(request: schemas.VideoProcessRequest):
     cfg = {
         "video_source_folder": request.video_source_folder,
         "audio_path": audio_path,
+        "clip_order": request.clip_order,
+        "clip_seed": request.clip_seed,
         "audio_speed": request.audio_speed,
         "resolution": request.resolution,
         "banner_image": request.banner_image,

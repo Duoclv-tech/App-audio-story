@@ -327,6 +327,7 @@ export default function ProcessorPage() {
     fade_in: number; fade_out: number;
     mute_source_videos: boolean;
     clip_order: 'shuffle'|'name';
+    clip_seed: number;
     bgmPath: string;
     bgm_volume: number; bgm_loop: boolean; bgm_ducking: boolean; bgm_fade: number;
     visualizer_enabled: boolean;
@@ -355,6 +356,10 @@ export default function ProcessorPage() {
 
   type VideoCfgPreset = Omit<VideoConfig, 'folder'|'audioPath'|'bannerImage'|'bannerVideoScaleX'|'bannerVideoScaleY'|'bannerVideoOffsetX'|'bannerVideoOffsetY'|'watermarkImage'|'bgmPath'>
 
+  // Seed shared by the preview and the final render so "Ngẫu nhiên" shows the
+  // exact clip order the output will use. "Trộn lại" generates a fresh one.
+  const genClipSeed = () => Math.floor(Math.random() * 1_000_000_000)
+
   const DEFAULT_VIDEO_CFG: VideoCfgPreset = {
     audio_speed: 1.0,
     transitions_pool: ['fade', 'crossfade', 'slideleft'],
@@ -381,6 +386,7 @@ export default function ProcessorPage() {
     fade_out: 0.0,
     mute_source_videos: true,
     clip_order: 'shuffle',
+    clip_seed: 0,
     bgm_volume: 0.12,
     bgm_loop: true,
     bgm_ducking: true,
@@ -469,6 +475,8 @@ export default function ProcessorPage() {
       bgmPath: savedBgm,
       ...DEFAULT_VIDEO_CFG,
       ...migrateOldCfg(savedCfg),
+      // Ensure a non-zero seed exists (old saved configs won't have one).
+      clip_seed: savedCfg?.clip_seed || genClipSeed(),
     }
   })
 
@@ -650,6 +658,8 @@ export default function ProcessorPage() {
       story_id: storyData.id || 'preview',
       video_source_folder: videoConfig.folder,
       audio_path: videoConfig.audioPath,
+      clip_order: videoConfig.clip_order,
+      clip_seed: videoConfig.clip_seed,
       audio_speed: videoConfig.audio_speed,
       transitions_pool: videoConfig.transitions_pool,
       transition_duration: videoConfig.transition_duration,
@@ -992,7 +1002,8 @@ export default function ProcessorPage() {
     return false
   }, [currentClipIdx, videoConfig.ad_flip_all, videoConfig.ad_flip_random])
 
-  // Fetch the full clip schedule (in folder order) when the video folder changes
+  // Fetch the clip schedule when the folder / order / seed changes. Passing
+  // clip_order + seed makes this preview list match the final render's order.
   useEffect(() => {
     if (currentStep !== 7 || !videoConfig.folder.trim()) {
       setClipList([])
@@ -1000,7 +1011,12 @@ export default function ProcessorPage() {
       return
     }
     axios.get('/api/v1/video/folder-clips', {
-      params: { folder: videoConfig.folder, limit: 200 }
+      params: {
+        folder: videoConfig.folder,
+        limit: 200,
+        clip_order: videoConfig.clip_order,
+        seed: videoConfig.clip_order === 'shuffle' ? videoConfig.clip_seed : undefined,
+      }
     })
       .then(r => {
         const list: ClipInfo[] = r.data?.clips || []
@@ -1009,7 +1025,7 @@ export default function ProcessorPage() {
         pendingClipOffsetRef.current = 0
       })
       .catch(() => { setClipList([]); setCurrentClipIdx(0) })
-  }, [currentStep, videoConfig.folder])
+  }, [currentStep, videoConfig.folder, videoConfig.clip_order, videoConfig.clip_seed])
 
   // Show toast notification
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -1470,6 +1486,7 @@ export default function ProcessorPage() {
         video_source_folder: videoConfig.folder,
         audio_path: videoConfig.audioPath || undefined,
         clip_order: videoConfig.clip_order,
+        clip_seed: videoConfig.clip_seed,
         audio_speed: videoConfig.audio_speed,
         transitions_pool: videoConfig.transitions_pool.length ? videoConfig.transitions_pool : undefined,
         transition_duration: videoConfig.transition_duration,
@@ -4073,15 +4090,6 @@ export default function ProcessorPage() {
                             className="w-full mt-2 h-10"
                           />
                         )}
-                        {(() => {
-                          const preset = omniPresets.find((p) => p.id === ttsConfig.preset_id)
-                          if (!preset?.license) return null
-                          return (
-                            <div className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                              ⚠️ Giọng này dùng nguồn có giấy phép riêng: {preset.license}
-                            </div>
-                          )
-                        })()}
                       </div>
 
                       {/* Create a new cloned voice — collapse để đỡ chiếm diện tích, click header để mở */}
@@ -4786,7 +4794,7 @@ export default function ProcessorPage() {
                         // DEFAULT_VIDEO_CFG is typed Omit<…, file-path keys> so the
                         // spread leaves folder/audioPath/bannerImage/watermarkImage
                         // intact — those are the painful inputs to re-pick.
-                        setVideoConfig(prev => ({ ...prev, ...DEFAULT_VIDEO_CFG }))
+                        setVideoConfig(prev => ({ ...prev, ...DEFAULT_VIDEO_CFG, clip_seed: genClipSeed() }))
                         setSubtitleSegments(null)
                       },
                     })
@@ -4895,7 +4903,7 @@ export default function ProcessorPage() {
                       <div className="flex gap-4">
                         <label
                           className="flex items-center gap-1.5 text-xs text-dim cursor-pointer select-none"
-                          title="Xáo trộn ngẫu nhiên thứ tự clip mỗi lần tạo video. Nhờ vậy các video khác nhau (dù cùng folder nền) sẽ có nền khác nhau. Nhược điểm: không tái lập được — cùng cài đặt mỗi lần render ra thứ tự khác."
+                          title="Xáo trộn thứ tự clip nền. Preview và video xuất ra dùng chung một thứ tự (khớp nhau). Bấm 'Trộn lại' để đổi sang thứ tự khác."
                         >
                           <input
                             type="radio"
@@ -4919,10 +4927,21 @@ export default function ProcessorPage() {
                           />
                           Theo thứ tự tên
                         </label>
+                        {videoConfig.clip_order === 'shuffle' && (
+                          <button
+                            type="button"
+                            onClick={() => setVideoConfig(prev => ({ ...prev, clip_seed: genClipSeed() }))}
+                            disabled={isProcessing}
+                            title="Đổi sang một thứ tự trộn khác (cả preview lẫn video xuất ra sẽ đổi theo)"
+                            className="flex items-center gap-1 text-xs px-2 py-0.5 rounded border border-token hover:bg-surface-2 disabled:opacity-50"
+                          >
+                            🎲 Trộn lại
+                          </button>
+                        )}
                       </div>
                       <p className="text-[11px] text-faint mt-0.5">
                         {videoConfig.clip_order === 'shuffle'
-                          ? 'Mỗi lần render xáo trộn clip ngẫu nhiên → video khác nhau có nền khác nhau.'
+                          ? 'Clip được xáo trộn — preview và video xuất ra khớp nhau. Bấm “Trộn lại” để đổi thứ tự.'
                           : 'Chọn theo tên file A→Z → video cùng folder sẽ có nền giống nhau.'}
                       </p>
                     </div>

@@ -195,11 +195,13 @@ class VideoProcessor:
             logger.error(f"Error getting video dimensions for {file_path}: {e}")
         return (0, 0)
 
-    def get_all_videos_in_folder(self, folder: str, order: str = "shuffle") -> List[Dict]:
+    def get_all_videos_in_folder(self, folder: str, order: str = "shuffle", seed: Optional[int] = None) -> List[Dict]:
         """Scan folder for video files with durations.
 
-        order: "shuffle" (random — used by main pipeline) or "name" (sorted —
-        used by preview, which plays clips in deterministic order).
+        order: "shuffle" (random) or "name" (sorted A→Z).
+        seed: when shuffling, a fixed seed makes the order deterministic so the
+        preview and the final render can share the exact same clip sequence
+        (pass the same seed to both). ``None`` shuffles with the global RNG.
 
         ffprobes are run in parallel — large folders (~hundreds of clips) used
         to take seconds of mostly-idle wall time when probed serially.
@@ -210,6 +212,11 @@ class VideoProcessor:
 
         if order == "name":
             files.sort()
+        elif seed is not None:
+            # Sort first so the shuffle input is deterministic regardless of the
+            # filesystem's iteration order, then shuffle with a seeded RNG.
+            files.sort()
+            random.Random(seed).shuffle(files)
         else:
             random.shuffle(files)
 
@@ -1942,6 +1949,7 @@ class VideoProcessor:
         video_source_folder: str,
         audio_path: Optional[str] = None,
         clip_order: str = "shuffle",
+        clip_seed: Optional[int] = None,
         audio_speed: float = 1.07,
         transition_effect: str = "crossfade",
         transitions_pool: Optional[List[str]] = None,
@@ -2081,7 +2089,7 @@ class VideoProcessor:
 
             # 3. Always re-scan source folder and create a fresh temp folder
             temp_folder = self._create_temp_folder(
-                output_dir, video_source_folder, target_duration, clip_order
+                output_dir, video_source_folder, target_duration, clip_order, clip_seed
             )
 
             video_paths = self.get_temp_folder_videos(temp_folder)
@@ -2272,6 +2280,8 @@ class VideoProcessor:
         audio_path: str,
         output_path: str,
         max_duration: float = 60.0,
+        clip_order: str = "name",
+        clip_seed: Optional[int] = None,
         audio_speed: float = 1.07,
         resolution: str = "1920x1080",
         banner_image: Optional[str] = None,
@@ -2403,7 +2413,8 @@ class VideoProcessor:
                 return {"success": False, "error": "Sped audio has zero duration"}
             progress(20)
 
-            videos = self.get_all_videos_in_folder(video_source_folder, order="name")
+            _order = "name" if clip_order == "name" else "shuffle"
+            videos = self.get_all_videos_in_folder(video_source_folder, order=_order, seed=clip_seed)
             if not videos:
                 return {"success": False, "error": "No video clips in folder"}
 
@@ -2586,7 +2597,7 @@ class VideoProcessor:
 
     def _create_temp_folder(
         self, output_dir: str, video_source_folder: str, target_duration: float,
-        clip_order: str = "shuffle",
+        clip_order: str = "shuffle", clip_seed: Optional[int] = None,
     ) -> str:
         """
         Re-scan the source folder and create a fresh, uniquely-named temp folder.
@@ -2614,7 +2625,7 @@ class VideoProcessor:
         # is short of the target — final concat is trimmed to exact audio length
         # downstream, so the last clip may be cut mid-frame.
         order = "name" if clip_order == "name" else "shuffle"
-        videos = self.get_all_videos_in_folder(video_source_folder, order=order)
+        videos = self.get_all_videos_in_folder(video_source_folder, order=order, seed=clip_seed)
         if not videos:
             raise ValueError(f"No videos found in source folder: {video_source_folder}")
 

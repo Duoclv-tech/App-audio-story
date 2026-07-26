@@ -126,6 +126,16 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
   // Import-from-server-path (long video produced upstream)
   const [importPath, setImportPath] = useState(sourceVideoPath ?? '')
 
+  // In-app confirm dialog (replaces native window.confirm)
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    confirmText: string
+    variant: 'danger' | 'primary'
+    onConfirm: () => void
+  }>({ isOpen: false, title: '', message: '', confirmText: 'OK', variant: 'primary', onConfirm: () => {} })
+
   // Upload state
   const [file, setFile] = useState<File | null>(null)
   const [fileUrl, setFileUrl] = useState<string>(
@@ -615,7 +625,15 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
 
   const resetAll = () => {
     if (processStatus === 'running') {
-      if (!window.confirm('Đang xử lý video, xoá tất cả bây giờ?')) return
+      setConfirmDialog({
+        isOpen: true,
+        title: 'Xoá tất cả?',
+        message: 'Đang xử lý video, xoá tất cả bây giờ?',
+        confirmText: 'Xoá tất cả',
+        variant: 'danger',
+        onConfirm: doReset,
+      })
+      return
     }
     doReset()
   }
@@ -623,12 +641,17 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
   // Clear only this trim section (video + segments + settings). Leaves the
   // upstream "Nạp video dài vừa tạo" import field untouched.
   const clearVideoSelection = () => {
-    const msg =
-      processStatus === 'running'
-        ? 'Đang xử lý video. Gỡ video và xoá các lựa chọn cắt ở phần này?'
-        : 'Gỡ video này và xoá các đoạn/cài đặt đã chọn? (Không ảnh hưởng ô "Nạp video dài vừa tạo" ở trên.)'
-    if (!window.confirm(msg)) return
-    doReset()
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Xóa video này?',
+      message:
+        processStatus === 'running'
+          ? 'Đang xử lý video. Gỡ video và xoá các lựa chọn cắt ở phần này?'
+          : 'Gỡ video này và xoá các đoạn/cài đặt đã chọn? (Không ảnh hưởng ô "Nạp video dài vừa tạo" ở trên.)',
+      confirmText: 'Xóa video',
+      variant: 'danger',
+      onConfirm: doReset,
+    })
   }
 
   // ─── render ──────────────────────────────────────────────────────────────
@@ -1064,6 +1087,48 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
             )}
           </section>
         </>
+      )}
+
+      {/* Confirm Dialog */}
+      {confirmDialog.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-surface rounded-lg w-full max-w-md flex flex-col">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold">{confirmDialog.title}</h3>
+              <button
+                onClick={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+                className="text-faint hover:text-dim text-xl"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-4">
+              <p className="text-sm text-dim whitespace-pre-line">{confirmDialog.message}</p>
+            </div>
+            <div className="p-4 border-t flex gap-2 justify-end">
+              <button
+                onClick={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition text-sm"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={() => {
+                  const cb = confirmDialog.onConfirm
+                  setConfirmDialog(prev => ({ ...prev, isOpen: false }))
+                  cb()
+                }}
+                className={`px-4 py-2 text-white rounded-md transition text-sm font-semibold ${
+                  confirmDialog.variant === 'danger'
+                    ? 'bg-red-500 hover:bg-red-600'
+                    : 'bg-primary-500 hover:bg-primary-600'
+                }`}
+              >
+                {confirmDialog.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

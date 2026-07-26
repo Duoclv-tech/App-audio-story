@@ -111,10 +111,6 @@ def list_presets() -> List[Dict]:
             "audio_file": audio_name,
             "ref_text": meta.get("ref_text", ""),
             "created_at": meta.get("created_at"),
-            # Non-VBEE sources (e.g. the VIVOS corpus) carry a usage license that
-            # doesn't apply to VBEE's own catalog — surface it so the picker can
-            # warn before a non-commercial-only voice ends up in paid output.
-            "license": meta.get("license"),
         })
     return items
 

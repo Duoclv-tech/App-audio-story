@@ -34,7 +34,6 @@ sys.path.insert(0, str(BACKEND_DIR))
 
 from app import paths  # noqa: E402
 
-LICENSE_NOTE = "CC BY-NC-SA 4.0 (non-commercial) — https://creativecommons.org/licenses/by-nc-sa/4.0/"
 CLIPS_PER_SPEAKER = 3
 
 # (speaker_id, display name, gender) — picked to span the corpus' 46 train
@@ -141,7 +140,6 @@ def main() -> int:
                     "ref_text": ref_text,
                     "created_at": int(time.time()),
                     "source": "vivos",
-                    "license": LICENSE_NOTE,
                     "speaker_id": speaker_id,
                     "gender": gender,
                 }

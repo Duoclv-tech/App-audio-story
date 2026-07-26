@@ -136,7 +136,7 @@ def main() -> int:
                 ref_text = " ".join(_sentence_case(prompts[cid]) + "." for cid in clip_ids)
                 meta = {
                     "id": preset_id,
-                    "name": f"VIVOS - {name}",
+                    "name": name,
                     "audio_file": "reference.mp3",
                     "ref_text": ref_text,
                     "created_at": int(time.time()),

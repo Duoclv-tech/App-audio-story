@@ -289,9 +289,11 @@ export default function ProcessorPage() {
   const [segBusy, setSegBusy] = useState(false)   // a split/run/merge request is in flight
   const [segRunning, setSegRunning] = useState(false)  // server says a generation batch/retry is active
   const [segMerging, setSegMerging] = useState(false)
+  const [autoMergeAfterTts, setAutoMergeAfterTts] = useState(true)  // gộp tự động sau khi TTS xong
   const [segNowPlaying, setSegNowPlaying] = useState<string | null>(null)
   const segAudioRef = useRef<HTMLAudioElement | null>(null)
   const segPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const prevSegRunningRef = useRef(false)  // theo dõi chuyển trạng thái đang chạy -> xong để auto-gộp
 
   // Video processing state for Step 7
   const VIDEO_TRANSITIONS = [
@@ -2463,6 +2465,23 @@ export default function ProcessorPage() {
     }
   }
 
+  // Tự động gộp thành 1 file ngay khi một đợt TTS vừa chạy xong (segRunning: true -> false)
+  // và tất cả câu đã "Đã xong". Chỉ chạy khi user bật tuỳ chọn autoMergeAfterTts.
+  // Bám vào lần chuyển trạng thái nên không tự gộp lại mỗi khi mở lại bước 6.
+  useEffect(() => {
+    const wasRunning = prevSegRunningRef.current
+    prevSegRunningRef.current = segRunning
+    if (
+      wasRunning && !segRunning &&
+      autoMergeAfterTts &&
+      segStats.allDone &&
+      !segMerging &&
+      mergedTtsStatus.status !== 'running'
+    ) {
+      handleMergeSegments()
+    }
+  }, [segRunning])
+
   const toggleSegPlay = (seg: TtsSegment) => {
     if (!seg.has_audio) return
     const el = segAudioRef.current
@@ -4494,6 +4513,15 @@ export default function ProcessorPage() {
 
               {/* Merge */}
               <div className="flex flex-wrap items-center gap-3">
+                <label className="inline-flex items-center gap-2 cursor-pointer select-none text-sm text-token">
+                  <input
+                    type="checkbox"
+                    checked={autoMergeAfterTts}
+                    onChange={e => setAutoMergeAfterTts(e.target.checked)}
+                    className="w-4 h-4 rounded border-token text-primary-500 focus:ring-primary-500 cursor-pointer"
+                  />
+                  <span>Tự động gộp thành 1 file sau khi TTS xong</span>
+                </label>
                 <button
                   onClick={handleMergeSegments}
                   disabled={!segStats.allDone || segMerging || anyBusy}
@@ -4501,6 +4529,9 @@ export default function ProcessorPage() {
                 >🔗 Ghép tất cả thành 1 file</button>
                 {!segStats.allDone && total > 0 && (
                   <span className="text-xs text-dim">chỉ ghép được khi tất cả câu “Đã xong”</span>
+                )}
+                {segStats.allDone && !autoMergeAfterTts && mergedTtsStatus.status !== 'running' && (
+                  <span className="text-xs text-dim">bấm nút để gộp thủ công</span>
                 )}
               </div>
 

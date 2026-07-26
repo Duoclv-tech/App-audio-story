@@ -69,7 +69,10 @@
       "Bash(powershell -Command ' *)",
       "Bash(mkdir -p D:/Project/web_app/dist/TruyenFullProcessor/_internal/frontend/dist)",
       "Bash(cp -r D:/Project/web_app/frontend/dist/. D:/Project/web_app/dist/TruyenFullProcessor/_internal/frontend/dist/)",
-      "Bash(python -)"
+      "Bash(python -)",
+      "Bash(ls -1 *.spec *.bat *.ps1 build*.*)",
+      "Bash(ls -1 scripts/ desktop/ installer/)",
+      "PowerShell(& \"D:\\\\Project\\\\web_app\\\\packaging\\\\build.ps1\" -Fast)"
     ],
     "deny": [
       "Bash(sudo:*)"

@@ -4928,6 +4928,56 @@ export default function ProcessorPage() {
                     </div>
                   </div>
 
+                  {/* Kích thước & vị trí của SOURCE VIDEO — độc lập với banner.
+                      Đặt trên Banner Background để tránh hiểu lầm là chỉnh banner. */}
+                  <div>
+                    <label className="block text-xs font-medium mb-1 text-dim">Kích thước & vị trí video</label>
+                    <div className="mt-1 flex items-center gap-2">
+                      <label className="text-xs text-dim whitespace-nowrap w-20">Rộng: {Math.round(videoConfig.bannerVideoScaleX * 100)}%</label>
+                      <input
+                        type="range" min="0.5" max="3" step="0.05"
+                        value={videoConfig.bannerVideoScaleX}
+                        onChange={(e) => setVideoConfig(prev => ({ ...prev, bannerVideoScaleX: parseFloat(e.target.value) }))}
+                        className="flex-1"
+                        disabled={isProcessing}
+                      />
+                    </div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <label className="text-xs text-dim whitespace-nowrap w-20">Cao: {Math.round(videoConfig.bannerVideoScaleY * 100)}%</label>
+                      <input
+                        type="range" min="0.5" max="3" step="0.05"
+                        value={videoConfig.bannerVideoScaleY}
+                        onChange={(e) => setVideoConfig(prev => ({ ...prev, bannerVideoScaleY: parseFloat(e.target.value) }))}
+                        className="flex-1"
+                        disabled={isProcessing}
+                      />
+                      <button
+                        onClick={() => setVideoConfig(prev => ({ ...prev, bannerVideoScaleY: prev.bannerVideoScaleX }))}
+                        disabled={isProcessing}
+                        className="text-[11px] text-primary-600 dark:text-primary-400 hover:underline disabled:opacity-50 whitespace-nowrap"
+                        title="Đặt chiều cao bằng chiều rộng (khôi phục tỉ lệ vuông theo cạnh rộng)"
+                      >
+                        = Rộng
+                      </button>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="text-[11px] text-faint">
+                        💡 Kéo thân để di chuyển · kéo góc/cạnh để resize (cạnh = riêng rộng/cao). Áp cho mọi clip.
+                        {!videoConfig.bannerImage && ' Không có banner → phần trống là nền đen.'}
+                      </span>
+                      {(Math.abs(videoConfig.bannerVideoOffsetX) > 0.001 || Math.abs(videoConfig.bannerVideoOffsetY) > 0.001) && (
+                        <button
+                          onClick={() => setVideoConfig(prev => ({ ...prev, bannerVideoOffsetX: 0, bannerVideoOffsetY: 0 }))}
+                          disabled={isProcessing}
+                          className="text-[11px] text-primary-600 dark:text-primary-400 hover:underline disabled:opacity-50 whitespace-nowrap ml-2"
+                          title="Đưa video về giữa khung"
+                        >
+                          Về giữa
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block text-xs font-medium mb-1 text-dim">Banner Background (Optional)</label>
                     <div className="flex gap-2">
@@ -4957,55 +5007,6 @@ export default function ProcessorPage() {
                         </button>
                       )}
                     </div>
-                    {/* Kích thước & vị trí video — độc lập với banner. Khi không có
-                        banner, video thu nhỏ/dời chỗ sẽ nằm trên nền đen. */}
-                    <>
-                        <div className="mt-3 mb-1 text-xs font-medium text-dim">Kích thước & vị trí video</div>
-                        <div className="mt-1 flex items-center gap-2">
-                          <label className="text-xs text-dim whitespace-nowrap w-20">Rộng: {Math.round(videoConfig.bannerVideoScaleX * 100)}%</label>
-                          <input
-                            type="range" min="0.5" max="3" step="0.05"
-                            value={videoConfig.bannerVideoScaleX}
-                            onChange={(e) => setVideoConfig(prev => ({ ...prev, bannerVideoScaleX: parseFloat(e.target.value) }))}
-                            className="flex-1"
-                            disabled={isProcessing}
-                          />
-                        </div>
-                        <div className="mt-1 flex items-center gap-2">
-                          <label className="text-xs text-dim whitespace-nowrap w-20">Cao: {Math.round(videoConfig.bannerVideoScaleY * 100)}%</label>
-                          <input
-                            type="range" min="0.5" max="3" step="0.05"
-                            value={videoConfig.bannerVideoScaleY}
-                            onChange={(e) => setVideoConfig(prev => ({ ...prev, bannerVideoScaleY: parseFloat(e.target.value) }))}
-                            className="flex-1"
-                            disabled={isProcessing}
-                          />
-                          <button
-                            onClick={() => setVideoConfig(prev => ({ ...prev, bannerVideoScaleY: prev.bannerVideoScaleX }))}
-                            disabled={isProcessing}
-                            className="text-[11px] text-primary-600 dark:text-primary-400 hover:underline disabled:opacity-50 whitespace-nowrap"
-                            title="Đặt chiều cao bằng chiều rộng (khôi phục tỉ lệ vuông theo cạnh rộng)"
-                          >
-                            = Rộng
-                          </button>
-                        </div>
-                        <div className="mt-1 flex items-center justify-between">
-                          <span className="text-[11px] text-faint">
-                            💡 Kéo thân để di chuyển · kéo góc/cạnh để resize (cạnh = riêng rộng/cao). Áp cho mọi clip.
-                            {!videoConfig.bannerImage && ' Không có banner → phần trống là nền đen.'}
-                          </span>
-                          {(Math.abs(videoConfig.bannerVideoOffsetX) > 0.001 || Math.abs(videoConfig.bannerVideoOffsetY) > 0.001) && (
-                            <button
-                              onClick={() => setVideoConfig(prev => ({ ...prev, bannerVideoOffsetX: 0, bannerVideoOffsetY: 0 }))}
-                              disabled={isProcessing}
-                              className="text-[11px] text-primary-600 dark:text-primary-400 hover:underline disabled:opacity-50 whitespace-nowrap ml-2"
-                              title="Đưa video về giữa khung"
-                            >
-                              Về giữa
-                            </button>
-                          )}
-                        </div>
-                    </>
                   </div>
                 </div>
 

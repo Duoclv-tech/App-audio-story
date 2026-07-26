@@ -788,15 +788,18 @@ class VideoProcessor:
         offset_y: float = 0.0,
         scale_x: Optional[float] = None,
         scale_y: Optional[float] = None,
+        rotation: float = 0.0,
     ) -> bool:
-        """True when the per-clip scale/offset differ from the identity transform
-        (100% size, centered). Used to decide whether a composite pass is needed
-        even without a banner — at identity the raw concat is used unchanged."""
+        """True when the per-clip scale/offset/rotation differ from the identity
+        transform (100% size, centered, 0°). Used to decide whether a composite
+        pass is needed even without a banner — at identity the raw concat is used
+        unchanged."""
         sx = video_scale if scale_x is None else scale_x
         sy = video_scale if scale_y is None else scale_y
         return (
             abs(sx - 1.0) > 1e-3 or abs(sy - 1.0) > 1e-3
             or abs(offset_x) > 1e-3 or abs(offset_y) > 1e-3
+            or abs(rotation) > 0.5
         )
 
     def overlay_on_banner(
@@ -810,7 +813,8 @@ class VideoProcessor:
         offset_x: float = 0.0,
         offset_y: float = 0.0,
         scale_x: Optional[float] = None,
-        scale_y: Optional[float] = None
+        scale_y: Optional[float] = None,
+        rotation: float = 0.0,
     ) -> Dict:
         """Overlay the video on top of a background, scaled/positioned per the
         transform params. The background is the banner image when banner_path is
@@ -843,9 +847,21 @@ class VideoProcessor:
         pos_x = f"(W-w)/2+({offset_x:.5f})*W"
         pos_y = f"(H-h)/2+({offset_y:.5f})*H"
 
+        rot = max(-180.0, min(180.0, float(rotation)))
+        if abs(rot) > 0.5:
+            rad = rot * math.pi / 180.0
+            # Rotate the scaled clip on a transparent canvas enlarged to the
+            # rotated bounding box (diagonal via hypot) so corners aren't clipped.
+            # overlay's w/h then refer to that box, keeping the centering valid.
+            vid_chain = (
+                f"[1:v]scale={vid_w}:{vid_h},setsar=1,format=rgba,"
+                f"rotate={rad:.6f}:c=none:ow=hypot(iw\\,ih):oh=hypot(iw\\,ih)[vid]"
+            )
+        else:
+            vid_chain = f"[1:v]scale={vid_w}:{vid_h},setsar=1[vid]"
         filter_complex = (
             f"[0:v]scale={width}:{height},setsar=1[bg];"
-            f"[1:v]scale={vid_w}:{vid_h},setsar=1[vid];"
+            f"{vid_chain};"
             f"[bg][vid]overlay={pos_x}:{pos_y}:shortest=1[outv]"
         )
 
@@ -1606,6 +1622,7 @@ class VideoProcessor:
         banner_video_offset_y: float = 0.0,
         banner_video_scale_x: Optional[float] = None,
         banner_video_scale_y: Optional[float] = None,
+        banner_video_rotation: float = 0.0,
         overlay_opacity: float = 0.0,
         watermark_image: Optional[str] = None,
         watermark_x: float = 0.92,
@@ -1717,6 +1734,7 @@ class VideoProcessor:
         needs_composite = has_banner or self._video_transform_active(
             banner_video_scale, banner_video_offset_x, banner_video_offset_y,
             banner_video_scale_x, banner_video_scale_y,
+            rotation=banner_video_rotation,
         )
 
         # 2. Concat videos, bounded to sped_audio_duration so the encoder stops
@@ -1771,7 +1789,8 @@ class VideoProcessor:
                 concat_path, banner_image if has_banner else None, composite_path,
                 resolution, sped_audio_duration, banner_video_scale,
                 banner_video_offset_x, banner_video_offset_y,
-                scale_x=banner_video_scale_x, scale_y=banner_video_scale_y
+                scale_x=banner_video_scale_x, scale_y=banner_video_scale_y,
+                rotation=banner_video_rotation,
             )
             if not overlay_result["success"]:
                 raise RuntimeError(f"Banner overlay failed: {overlay_result.get('error')}")
@@ -1961,6 +1980,7 @@ class VideoProcessor:
         banner_video_offset_y: float = 0.0,
         banner_video_scale_x: Optional[float] = None,
         banner_video_scale_y: Optional[float] = None,
+        banner_video_rotation: float = 0.0,
         overlay_opacity: float = 0.0,
         watermark_image: Optional[str] = None,
         watermark_x: float = 0.92,
@@ -2114,6 +2134,7 @@ class VideoProcessor:
                         audio_speed, resolution, task, db, banner_image, banner_video_scale,
                         banner_video_offset_x, banner_video_offset_y,
                         banner_video_scale_x, banner_video_scale_y,
+                        banner_video_rotation,
                         overlay_opacity,
                         watermark_image, watermark_x, watermark_y,
                         watermark_w, watermark_h, watermark_shape, watermark_opacity,
@@ -2290,6 +2311,7 @@ class VideoProcessor:
         banner_video_offset_y: float = 0.0,
         banner_video_scale_x: Optional[float] = None,
         banner_video_scale_y: Optional[float] = None,
+        banner_video_rotation: float = 0.0,
         overlay_opacity: float = 0.0,
         watermark_image: Optional[str] = None,
         watermark_x: float = 0.92,
@@ -2479,6 +2501,7 @@ class VideoProcessor:
                     resolution, sped_dur, banner_video_scale,
                     banner_video_offset_x, banner_video_offset_y,
                     scale_x=banner_video_scale_x, scale_y=banner_video_scale_y,
+                    rotation=banner_video_rotation,
                 )
                 if not overlay_res["success"]:
                     return overlay_res

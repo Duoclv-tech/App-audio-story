@@ -56,6 +56,7 @@ async def process_video_task(
         banner_video_offset_y = config.get("banner_video_offset_y", 0.0)
         banner_video_scale_x = config.get("banner_video_scale_x")
         banner_video_scale_y = config.get("banner_video_scale_y")
+        banner_video_rotation = config.get("banner_video_rotation", 0.0)
         overlay_opacity = config.get("overlay_opacity", 0.0)
         watermark_image = config.get("watermark_image")
         watermark_x = config.get("watermark_x", 0.92)
@@ -156,6 +157,7 @@ async def process_video_task(
             banner_video_offset_y=banner_video_offset_y,
             banner_video_scale_x=banner_video_scale_x,
             banner_video_scale_y=banner_video_scale_y,
+            banner_video_rotation=banner_video_rotation,
             overlay_opacity=overlay_opacity,
             watermark_image=watermark_image,
             watermark_x=watermark_x,

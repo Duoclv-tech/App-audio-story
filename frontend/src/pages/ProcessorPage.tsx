@@ -306,6 +306,7 @@ export default function ProcessorPage() {
   type VideoConfig = {
     folder: string; audioPath: string; bannerImage: string;
     bannerVideoScaleX: number; bannerVideoScaleY: number;
+    bannerVideoRotation: number;
     bannerVideoOffsetX: number; bannerVideoOffsetY: number;
     watermarkImage: string;
     audio_speed: number; transitions_pool: string[]; transition_duration: number;
@@ -354,7 +355,7 @@ export default function ProcessorPage() {
     stickers: Sticker[];
   }
 
-  type VideoCfgPreset = Omit<VideoConfig, 'folder'|'audioPath'|'bannerImage'|'bannerVideoScaleX'|'bannerVideoScaleY'|'bannerVideoOffsetX'|'bannerVideoOffsetY'|'watermarkImage'|'bgmPath'>
+  type VideoCfgPreset = Omit<VideoConfig, 'folder'|'audioPath'|'bannerImage'|'bannerVideoScaleX'|'bannerVideoScaleY'|'bannerVideoRotation'|'bannerVideoOffsetX'|'bannerVideoOffsetY'|'watermarkImage'|'bgmPath'>
 
   // Seed shared by the preview and the final render so "Ngẫu nhiên" shows the
   // exact clip order the output will use. "Trộn lại" generates a fresh one.
@@ -462,6 +463,7 @@ export default function ProcessorPage() {
     const savedSY = rawSY === null ? legacyScale : parseFloat(rawSY)
     const savedOffX = parseFloat(localStorage.getItem('videoConfig_bannerVideoOffsetX') || '0')
     const savedOffY = parseFloat(localStorage.getItem('videoConfig_bannerVideoOffsetY') || '0')
+    const savedRot = parseFloat(localStorage.getItem('videoConfig_bannerVideoRotation') || '0')
     const savedCfg = (() => { try { return JSON.parse(localStorage.getItem('videoConfig_cfg') || '{}') } catch { return {} } })()
     return {
       folder: savedFolder,
@@ -471,6 +473,7 @@ export default function ProcessorPage() {
       bannerVideoScaleY: isNaN(savedSY) ? 1.0 : Math.max(0.1, Math.min(3, savedSY)),
       bannerVideoOffsetX: isNaN(savedOffX) ? 0 : Math.max(-0.5, Math.min(0.5, savedOffX)),
       bannerVideoOffsetY: isNaN(savedOffY) ? 0 : Math.max(-0.5, Math.min(0.5, savedOffY)),
+      bannerVideoRotation: isNaN(savedRot) ? 0 : Math.max(-180, Math.min(180, savedRot)),
       watermarkImage: savedWatermark,
       bgmPath: savedBgm,
       ...DEFAULT_VIDEO_CFG,
@@ -668,6 +671,7 @@ export default function ProcessorPage() {
       banner_video_scale: videoConfig.bannerVideoScaleX,
       banner_video_scale_x: videoConfig.bannerVideoScaleX,
       banner_video_scale_y: videoConfig.bannerVideoScaleY,
+      banner_video_rotation: videoConfig.bannerVideoRotation,
       banner_video_offset_x: videoConfig.bannerVideoOffsetX,
       banner_video_offset_y: videoConfig.bannerVideoOffsetY,
       overlay_opacity: videoConfig.overlay_opacity,
@@ -805,13 +809,13 @@ export default function ProcessorPage() {
   // keeps tracking even when the cursor leaves the window, and tears down on
   // BOTH pointerup and pointercancel so an interrupted gesture can't leave a
   // dangling "video follows the cursor" listener.
-  const beginPointerDrag = (e: React.PointerEvent, update: (cx: number, cy: number) => void) => {
+  const beginPointerDrag = (e: React.PointerEvent, update: (cx: number, cy: number, ev: PointerEvent) => void) => {
     e.preventDefault()
     e.stopPropagation()
     const el = e.currentTarget as HTMLElement
     const pointerId = e.pointerId
     try { el.setPointerCapture(pointerId) } catch { /* capture unsupported — fall back to listeners */ }
-    const onMove = (ev: PointerEvent) => update(ev.clientX, ev.clientY)
+    const onMove = (ev: PointerEvent) => update(ev.clientX, ev.clientY, ev)
     const end = () => {
       el.removeEventListener('pointermove', onMove)
       el.removeEventListener('pointerup', end)
@@ -891,10 +895,37 @@ export default function ProcessorPage() {
       setVideoConfig(prev => {
         let sx = prev.bannerVideoScaleX
         let sy = prev.bannerVideoScaleY
-        if (dirX !== 0) sx = Math.max(0.1, Math.min(3, (2 * (cx - centerX) * dirX) / r.width))
-        if (dirY !== 0) sy = Math.max(0.1, Math.min(3, (2 * (cy - centerY) * dirY) / r.height))
+        // Project the cursor→center vector onto the box's own (unrotated) axes so
+        // edge/corner drags stay correct even when the box is rotated.
+        const rad = (prev.bannerVideoRotation * Math.PI) / 180
+        const dx = cx - centerX
+        const dy = cy - centerY
+        const localDX = dx * Math.cos(rad) + dy * Math.sin(rad)
+        const localDY = -dx * Math.sin(rad) + dy * Math.cos(rad)
+        if (dirX !== 0) sx = Math.max(0.1, Math.min(3, (2 * localDX * dirX) / r.width))
+        if (dirY !== 0) sy = Math.max(0.1, Math.min(3, (2 * localDY * dirY) / r.height))
         return { ...prev, bannerVideoScaleX: sx, bannerVideoScaleY: sy }
       })
+    })
+  }
+
+  // Banner video ROTATE — grab the round handle above the box and swing it.
+  // Angle = direction from box center to cursor; the handle rests at the top
+  // (−90° in atan2), so +90 reads 0° at rest. Hold Shift to snap to 15°.
+  const startBannerVideoRotate = (e: React.PointerEvent) => {
+    const frame = previewFrameRef.current
+    if (!frame) return
+    const offX = videoConfig.bannerVideoOffsetX
+    const offY = videoConfig.bannerVideoOffsetY
+    beginPointerDrag(e, (cx, cy, ev) => {
+      const r = frame.getBoundingClientRect()
+      const centerX = r.left + (0.5 + offX) * r.width
+      const centerY = r.top + (0.5 + offY) * r.height
+      let deg = (Math.atan2(cy - centerY, cx - centerX) * 180) / Math.PI + 90
+      if (deg > 180) deg -= 360
+      if (deg < -180) deg += 360
+      if (ev?.shiftKey) deg = Math.round(deg / 15) * 15
+      setVideoConfig(prev => ({ ...prev, bannerVideoRotation: Math.round(deg) }))
     })
   }
   const [availableFonts, setAvailableFonts] = useState<string[]>(['DejaVu Sans (system default)'])
@@ -1497,6 +1528,7 @@ export default function ProcessorPage() {
         banner_video_scale: videoConfig.bannerVideoScaleX,
         banner_video_scale_x: videoConfig.bannerVideoScaleX,
         banner_video_scale_y: videoConfig.bannerVideoScaleY,
+        banner_video_rotation: videoConfig.bannerVideoRotation,
         banner_video_offset_x: videoConfig.bannerVideoOffsetX,
         banner_video_offset_y: videoConfig.bannerVideoOffsetY,
         overlay_opacity: videoConfig.overlay_opacity,
@@ -1787,9 +1819,10 @@ export default function ProcessorPage() {
     localStorage.setItem('videoConfig_bannerVideoScaleY', String(videoConfig.bannerVideoScaleY))
     localStorage.setItem('videoConfig_bannerVideoOffsetX', String(videoConfig.bannerVideoOffsetX))
     localStorage.setItem('videoConfig_bannerVideoOffsetY', String(videoConfig.bannerVideoOffsetY))
+    localStorage.setItem('videoConfig_bannerVideoRotation', String(videoConfig.bannerVideoRotation))
     localStorage.setItem('videoConfig_watermarkImage', videoConfig.watermarkImage)
     localStorage.setItem('videoConfig_bgmPath', videoConfig.bgmPath)
-    const { folder, audioPath, bannerImage, bannerVideoScaleX, bannerVideoScaleY, bannerVideoOffsetX, bannerVideoOffsetY, watermarkImage, bgmPath, ...cfg } = videoConfig
+    const { folder, audioPath, bannerImage, bannerVideoScaleX, bannerVideoScaleY, bannerVideoRotation, bannerVideoOffsetX, bannerVideoOffsetY, watermarkImage, bgmPath, ...cfg } = videoConfig
     localStorage.setItem('videoConfig_cfg', JSON.stringify(cfg))
   }, [videoConfig])
 
@@ -1804,7 +1837,7 @@ export default function ProcessorPage() {
   }, [])
 
   const extractCfgFromConfig = () => {
-    const { folder, audioPath, bannerImage, bannerVideoScaleX, bannerVideoScaleY, bannerVideoOffsetX, bannerVideoOffsetY, watermarkImage, bgmPath, ...cfg } = videoConfig
+    const { folder, audioPath, bannerImage, bannerVideoScaleX, bannerVideoScaleY, bannerVideoRotation, bannerVideoOffsetX, bannerVideoOffsetY, watermarkImage, bgmPath, ...cfg } = videoConfig
     return cfg
   }
 
@@ -4665,7 +4698,8 @@ export default function ProcessorPage() {
           Math.abs(videoConfig.bannerVideoScaleX - 1) > 0.001 ||
           Math.abs(videoConfig.bannerVideoScaleY - 1) > 0.001 ||
           Math.abs(videoConfig.bannerVideoOffsetX) > 0.001 ||
-          Math.abs(videoConfig.bannerVideoOffsetY) > 0.001
+          Math.abs(videoConfig.bannerVideoOffsetY) > 0.001 ||
+          Math.abs(videoConfig.bannerVideoRotation) > 0.5
         const previewCompositeMode = !!videoConfig.bannerImage || previewTransformActive
         const currentClip = clipList[currentClipIdx] || null
         const clipUrl = currentClip
@@ -4977,6 +5011,24 @@ export default function ProcessorPage() {
                         title="Đặt chiều cao bằng chiều rộng (khôi phục tỉ lệ vuông theo cạnh rộng)"
                       >
                         = Rộng
+                      </button>
+                    </div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <label className="text-xs text-dim whitespace-nowrap w-20">Xoay: {videoConfig.bannerVideoRotation}°</label>
+                      <input
+                        type="range" min="-180" max="180" step="1"
+                        value={videoConfig.bannerVideoRotation}
+                        onChange={(e) => setVideoConfig(prev => ({ ...prev, bannerVideoRotation: parseInt(e.target.value, 10) }))}
+                        className="flex-1"
+                        disabled={isProcessing}
+                      />
+                      <button
+                        onClick={() => setVideoConfig(prev => ({ ...prev, bannerVideoRotation: 0 }))}
+                        disabled={isProcessing}
+                        className="text-[11px] text-primary-600 dark:text-primary-400 hover:underline disabled:opacity-50 whitespace-nowrap"
+                        title="Đặt lại về 0°"
+                      >
+                        = 0°
                       </button>
                     </div>
                     <div className="mt-1 flex items-center justify-between">
@@ -6282,7 +6334,7 @@ export default function ProcessorPage() {
                           top: `${(0.5 + videoConfig.bannerVideoOffsetY) * 100}%`,
                           width: `${boxW}px`,
                           height: `${boxH}px`,
-                          transform: 'translate(-50%, -50%)',
+                          transform: `translate(-50%, -50%) rotate(${videoConfig.bannerVideoRotation}deg)`,
                           cursor: isProcessing ? 'default' : 'move',
                           touchAction: 'none',
                           // Center the clip in the box so a letterboxed (object-contain)
@@ -6316,6 +6368,23 @@ export default function ProcessorPage() {
                                 }}
                               />
                             ))}
+                            {/* rotate handle: round grip above the box + connector line */}
+                            <div style={{ position: 'absolute', left: '50%', top: -24, width: 2, height: 24, marginLeft: -1, background: 'rgba(56,189,248,0.9)', pointerEvents: 'none' }} />
+                            <div
+                              onPointerDown={startBannerVideoRotate}
+                              title="Kéo để xoay video (giữ Shift để bám 15°)"
+                              style={{
+                                position: 'absolute',
+                                left: '50%', top: -34, marginLeft: -8,
+                                width: 16, height: 16,
+                                background: '#38bdf8',
+                                border: '2px solid #fff',
+                                borderRadius: '50%',
+                                cursor: 'grab',
+                                touchAction: 'none',
+                                boxShadow: '0 0 2px rgba(0,0,0,0.5)',
+                              }}
+                            />
                           </>
                         )}
                       </div>

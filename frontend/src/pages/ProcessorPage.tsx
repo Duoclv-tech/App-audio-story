@@ -467,8 +467,8 @@ export default function ProcessorPage() {
       folder: savedFolder,
       audioPath: '',
       bannerImage: savedBanner,
-      bannerVideoScaleX: isNaN(savedSX) ? 1.0 : Math.max(0.5, Math.min(3, savedSX)),
-      bannerVideoScaleY: isNaN(savedSY) ? 1.0 : Math.max(0.5, Math.min(3, savedSY)),
+      bannerVideoScaleX: isNaN(savedSX) ? 1.0 : Math.max(0.1, Math.min(3, savedSX)),
+      bannerVideoScaleY: isNaN(savedSY) ? 1.0 : Math.max(0.1, Math.min(3, savedSY)),
       bannerVideoOffsetX: isNaN(savedOffX) ? 0 : Math.max(-0.5, Math.min(0.5, savedOffX)),
       bannerVideoOffsetY: isNaN(savedOffY) ? 0 : Math.max(-0.5, Math.min(0.5, savedOffY)),
       watermarkImage: savedWatermark,
@@ -891,8 +891,8 @@ export default function ProcessorPage() {
       setVideoConfig(prev => {
         let sx = prev.bannerVideoScaleX
         let sy = prev.bannerVideoScaleY
-        if (dirX !== 0) sx = Math.max(0.5, Math.min(3, (2 * (cx - centerX) * dirX) / r.width))
-        if (dirY !== 0) sy = Math.max(0.5, Math.min(3, (2 * (cy - centerY) * dirY) / r.height))
+        if (dirX !== 0) sx = Math.max(0.1, Math.min(3, (2 * (cx - centerX) * dirX) / r.width))
+        if (dirY !== 0) sy = Math.max(0.1, Math.min(3, (2 * (cy - centerY) * dirY) / r.height))
         return { ...prev, bannerVideoScaleX: sx, bannerVideoScaleY: sy }
       })
     })
@@ -4954,7 +4954,7 @@ export default function ProcessorPage() {
                     <div className="mt-1 flex items-center gap-2">
                       <label className="text-xs text-dim whitespace-nowrap w-20">Rộng: {Math.round(videoConfig.bannerVideoScaleX * 100)}%</label>
                       <input
-                        type="range" min="0.5" max="3" step="0.05"
+                        type="range" min="0.1" max="3" step="0.05"
                         value={videoConfig.bannerVideoScaleX}
                         onChange={(e) => setVideoConfig(prev => ({ ...prev, bannerVideoScaleX: parseFloat(e.target.value) }))}
                         className="flex-1"
@@ -4964,7 +4964,7 @@ export default function ProcessorPage() {
                     <div className="mt-1 flex items-center gap-2">
                       <label className="text-xs text-dim whitespace-nowrap w-20">Cao: {Math.round(videoConfig.bannerVideoScaleY * 100)}%</label>
                       <input
-                        type="range" min="0.5" max="3" step="0.05"
+                        type="range" min="0.1" max="3" step="0.05"
                         value={videoConfig.bannerVideoScaleY}
                         onChange={(e) => setVideoConfig(prev => ({ ...prev, bannerVideoScaleY: parseFloat(e.target.value) }))}
                         className="flex-1"
@@ -6891,18 +6891,18 @@ export default function ProcessorPage() {
               <div className="bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30 p-4 rounded-md">
                 <p className="text-green-700 dark:text-green-400 font-semibold">Video processing completed!</p>
                 {videoStatus.outputPath && (
-                  <p className="text-sm text-green-600 dark:text-green-400 mt-1">Output: {videoStatus.outputPath}</p>
-                )}
-                {videoStatus.outputPath && (
-                  <button
-                    onClick={handleOpenVideoFolder}
-                    className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md bg-green-600 hover:bg-green-700 text-white transition-colors"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
-                    </svg>
-                    Mở thư mục
-                  </button>
+                  <div className="mt-1 flex items-center gap-3 flex-wrap">
+                    <p className="text-sm text-green-600 dark:text-green-400 break-all">Output: {videoStatus.outputPath}</p>
+                    <button
+                      onClick={handleOpenVideoFolder}
+                      className="shrink-0 inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md bg-green-600 hover:bg-green-700 text-white transition-colors"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                      </svg>
+                      Mở thư mục
+                    </button>
+                  </div>
                 )}
               </div>
             )}

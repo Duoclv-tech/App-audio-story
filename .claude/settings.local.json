@@ -72,7 +72,8 @@
       "Bash(python -)",
       "Bash(ls -1 *.spec *.bat *.ps1 build*.*)",
       "Bash(ls -1 scripts/ desktop/ installer/)",
-      "PowerShell(& \"D:\\\\Project\\\\web_app\\\\packaging\\\\build.ps1\" -Fast)"
+      "PowerShell(& \"D:\\\\Project\\\\web_app\\\\packaging\\\\build.ps1\" -Fast)",
+      "Bash(ls scratch_bg)"
     ],
     "deny": [
       "Bash(sudo:*)"

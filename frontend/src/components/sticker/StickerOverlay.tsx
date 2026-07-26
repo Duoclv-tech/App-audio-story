@@ -110,7 +110,8 @@ export function StickerOverlay({
               src={stickerFileUrl(s.image_path)}
               alt=""
               draggable={false}
-              style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }}
+              /* Backend stretches to exactly w×h (scale=w:h); 'fill' mirrors it. */
+              style={{ width: '100%', height: '100%', objectFit: 'fill', pointerEvents: 'none' }}
             />
             {isSel && onResize && (
               <div

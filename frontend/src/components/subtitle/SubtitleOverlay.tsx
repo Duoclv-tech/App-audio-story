@@ -135,7 +135,14 @@ export function SubtitleOverlay({
     }
     return offsets.join(',')
   }
-  const textShadow = stroke(outlinePx, style.subtitle_outline_color)
+  // ASS BorderStyle=1 also draws a drop shadow (BackColour ≈ 50% black),
+  // offset down-right by the Shadow value. Mirror it so the preview matches.
+  const shadowPx = Math.max(0, Math.round(style.subtitle_shadow * scale))
+  const outlineShadow = stroke(outlinePx, style.subtitle_outline_color)
+  const dropShadow = shadowPx > 0 ? `${shadowPx}px ${shadowPx}px 0 rgba(0,0,0,0.5)` : ''
+  const textShadow = [outlineShadow === 'none' ? '' : outlineShadow, dropShadow]
+    .filter(Boolean)
+    .join(',') || 'none'
 
   // Anchor: ASS \an4/5/6 = middle-left/center/right. Mirror with translate.
   const tx = style.subtitle_align === 'left' ? '0%'

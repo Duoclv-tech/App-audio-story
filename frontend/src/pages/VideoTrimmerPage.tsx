@@ -584,7 +584,16 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
           {/* Step 2: Preview + selection */}
           <section className="bg-surface p-6 rounded-lg shadow space-y-4">
             <h2 className="text-lg font-semibold">2. Xem trước & chọn đoạn</h2>
-            <VideoPreview ref={videoRef} src={fileUrl} />
+            <VideoPreview
+              ref={videoRef}
+              src={fileUrl}
+              outputAspect={outputAspect}
+              aspectMode={aspectRatio.mode}
+              cropMode={cropMode}
+              speed={speed}
+              mute={mute}
+              volume={volume}
+            />
             <Waveform
               peaks={waveform}
               duration={metadata.duration}

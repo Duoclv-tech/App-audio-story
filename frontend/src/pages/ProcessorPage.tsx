@@ -26,6 +26,27 @@ const WORKFLOW_STEPS = [
 // Visible steps for UI (filter out hidden ones)
 const VISIBLE_STEPS = WORKFLOW_STEPS.filter(step => !step.hidden)
 
+// CSS-gradient approximations of FFmpeg's showspectrum color presets, so the
+// live preview reflects the chosen preset instead of a single hardcoded rainbow.
+// Colors run low→high intensity, matching the horizontal gradient in the preview.
+const SPECTRUM_PRESET_GRADIENTS: Record<string, string> = {
+  channel:   '#000428, #004e92, #00b09b, #96c93d, #ffd200',
+  intensity: '#000033, #0000ff, #00ffff, #ffff00, #ff0000',
+  rainbow:   '#110033, #003d66, #00ccaa, #ffee00, #ff3300, #aa00ff',
+  moreland:  '#3b4cc0, #b4c8f0, #f7f7f7, #f0b4a0, #b40426',
+  nebulae:   '#0d0221, #240046, #5a189a, #c8005a, #ff5d8f',
+  fire:      '#000000, #7a0000, #ff3d00, #ffae00, #ffffcc',
+  fiery:     '#000000, #8b0000, #ff4500, #ff8c00, #ffd700',
+  fruit:     '#12005e, #7b2ff7, #f107a3, #ffd93d, #6bcB77',
+  cool:      '#00ffff, #0088ff, #0000ff, #8800ff, #ff00ff',
+  magma:     '#000004, #3b0f70, #8c2981, #de4968, #fe9f6d, #fcfdbf',
+  green:     '#000000, #003b00, #007a00, #33cc33, #ccffcc',
+  viridis:   '#440154, #414487, #2a788e, #22a884, #7ad151, #fde725',
+  plasma:    '#0d0887, #6a00a8, #b12a90, #e16462, #fca636, #f0f921',
+  cividis:   '#00224e, #35577d, #666970, #97823d, #e1cc55, #fee838',
+  terrain:   '#333399, #0099ff, #00cc66, #ffff66, #cc9966, #ffffff',
+}
+
 // Prompt gợi ý để người dùng tự kiểm tra chính tả miễn phí trên AI Studio / Gemini
 // (thay vì gọi API tốn phí). Copy prompt này kèm nội dung truyện rồi dán vào chat.
 const SPELLCHECK_PROMPT =
@@ -1057,6 +1078,22 @@ export default function ProcessorPage() {
     }
   }
 
+  // Open Explorer (or the OS file manager) at the finished video, with it
+  // selected. Works both in the packaged desktop app and dev — the backend
+  // runs the file-manager command on the same machine as the server.
+  const handleOpenVideoFolder = async () => {
+    const id = storyData.id
+    if (!id) {
+      showToast('Không tìm thấy truyện để mở thư mục.', 'error')
+      return
+    }
+    try {
+      await axios.post(`/api/v1/video/reveal-video/${id}`)
+    } catch (err: any) {
+      showToast(errMessage(err, 'Không mở được thư mục chứa video.'), 'error')
+    }
+  }
+
   // Refs for line numbers and highlight sync
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const lineNumbersRef = useRef<HTMLDivElement>(null)
@@ -1461,6 +1498,20 @@ export default function ProcessorPage() {
         watermark_text_x: videoConfig.watermark_text_x,
         watermark_text_y: videoConfig.watermark_text_y,
         watermark_text_opacity: videoConfig.watermark_text_opacity,
+        subtitle_srt_path: videoConfig.subtitle_srt_path || undefined,
+        subtitle_animation: videoConfig.subtitle_animation,
+        subtitle_font: videoConfig.subtitle_font,
+        subtitle_font_size: videoConfig.subtitle_font_size,
+        subtitle_color: videoConfig.subtitle_color,
+        subtitle_outline_color: videoConfig.subtitle_outline_color,
+        subtitle_outline_width: videoConfig.subtitle_outline_width,
+        subtitle_shadow: videoConfig.subtitle_shadow,
+        subtitle_bold: videoConfig.subtitle_bold,
+        subtitle_italic: videoConfig.subtitle_italic,
+        subtitle_align: videoConfig.subtitle_align,
+        subtitle_x: videoConfig.subtitle_x,
+        subtitle_y: videoConfig.subtitle_y,
+        subtitle_opacity: videoConfig.subtitle_opacity,
         fade_in: videoConfig.fade_in,
         fade_out: videoConfig.fade_out,
         mute_source_videos: videoConfig.mute_source_videos,
@@ -5647,8 +5698,15 @@ export default function ProcessorPage() {
                       const s = videoConfig.visualizer_style
                       // spectrum has its own preset
                       if (s === 'spectrum') return null
+                      // CQT (showcqt) uses a fixed cscheme in the render — neither
+                      // color is honored, so don't offer color pickers here.
+                      if (s === 'cqt') return (
+                        <div className="text-xs text-dim italic">
+                          CQT dùng bảng màu cố định (đỏ→xanh), không chỉnh được màu.
+                        </div>
+                      )
                       // Styles that use both color1 + color2 gradient
-                      const usesC2 = s === 'bars' || s === 'cqt'
+                      const usesC2 = s === 'bars'
                       return (
                         <div className="grid grid-cols-2 gap-2">
                           <div>
@@ -6449,7 +6507,7 @@ export default function ProcessorPage() {
                             className="absolute inset-0"
                             style={{
                               opacity: op,
-                              background: `linear-gradient(90deg, #110033, #003d66, #00ccaa, #ffee00, #ff3300, #aa00ff)`,
+                              background: `linear-gradient(90deg, ${SPECTRUM_PRESET_GRADIENTS[videoConfig.visualizer_spectrum_preset] || SPECTRUM_PRESET_GRADIENTS.rainbow})`,
                               backgroundSize: '200% 100%',
                               animation: 'vizSpectrum 4s linear infinite',
                             }}
@@ -6465,12 +6523,14 @@ export default function ProcessorPage() {
                                 key={i}
                                 style={{
                                   width: `${100 / 52}%`,
-                                  background: `linear-gradient(to top, ${c1}, ${c2})`,
+                                  // showcqt uses a fixed cscheme (low→red, high→green);
+                                  // color1/color2 are ignored by the render, so mirror that.
+                                  background: `linear-gradient(to top, #ff2a2a, #2aff2a)`,
                                   height: `${30 + Math.abs(Math.sin((i + 1) * 0.4)) * 60}%`,
                                   animation: `vizBar 0.${5 + (i % 5)}s ease-in-out infinite alternate`,
                                   animationDelay: `${(i % 12) * 0.04}s`,
                                   borderRadius: '2px 2px 0 0',
-                                  boxShadow: `0 0 4px ${c2}`,
+                                  boxShadow: `0 0 4px #2aff2a`,
                                 }}
                               />
                             ))}
@@ -6528,7 +6588,9 @@ export default function ProcessorPage() {
                           transform: 'translate(-50%, -50%)',
                           width: `${wPx}px`,
                           height: `${hPx}px`,
-                          objectFit: 'cover',
+                          // Backend stretches the logo to exactly w×h (scale=w:h,
+                          // no aspect preserve) — 'fill' mirrors that.
+                          objectFit: 'fill',
                           opacity: videoConfig.watermark_opacity,
                           cursor: 'move',
                           userSelect: 'none',
@@ -6810,6 +6872,17 @@ export default function ProcessorPage() {
                 <p className="text-green-700 dark:text-green-400 font-semibold">Video processing completed!</p>
                 {videoStatus.outputPath && (
                   <p className="text-sm text-green-600 dark:text-green-400 mt-1">Output: {videoStatus.outputPath}</p>
+                )}
+                {videoStatus.outputPath && (
+                  <button
+                    onClick={handleOpenVideoFolder}
+                    className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md bg-green-600 hover:bg-green-700 text-white transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+                    </svg>
+                    Mở thư mục
+                  </button>
                 )}
               </div>
             )}

@@ -330,6 +330,34 @@ async def reveal_merged_audio(story_id: str, db: Session = Depends(get_db)):
     return {"opened": str(folder)}
 
 
+@router.post("/reveal-video/{story_id}", dependencies=[Depends(require_localhost)])
+async def reveal_video_output(story_id: str, db: Session = Depends(get_db)):
+    """Open the file manager at the story's finished video, with it selected.
+
+    Mirrors ``reveal-audio``: if the finished .mp4 still exists we reveal it
+    (selected); if it was recorded but has since been deleted/moved we say so;
+    otherwise we report there is no video yet.
+    """
+    video_output = db.query(models.VideoOutput).filter(
+        models.VideoOutput.story_id == story_id
+    ).order_by(models.VideoOutput.created_at.desc()).first()
+
+    if video_output and video_output.output_path and os.path.exists(video_output.output_path):
+        path = os.path.normpath(video_output.output_path)
+        try:
+            _reveal_in_file_manager(path)
+        except Exception as e:
+            logger.error(f"[video] reveal video failed: {e}")
+            raise HTTPException(status_code=500, detail="Không mở được thư mục chứa video.")
+        return {"revealed": path}
+
+    if video_output and video_output.output_path:
+        raise HTTPException(status_code=404,
+                            detail="File video đã bị xóa hoặc di chuyển khỏi máy.")
+
+    raise HTTPException(status_code=404, detail="Chưa có video hoàn chỉnh cho truyện này.")
+
+
 @router.post("/validate-folder", response_model=schemas.VideoFolderValidateResponse)
 async def validate_video_folder(request: schemas.VideoFolderValidateRequest):
     """Validate a folder containing background videos"""

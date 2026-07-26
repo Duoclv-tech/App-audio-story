@@ -4809,7 +4809,7 @@ export default function ProcessorPage() {
                       className="text-xs px-2 py-1.5 bg-surface-3 hover:bg-primary-100 dark:hover:bg-primary-500/25 text-dim hover:text-primary-700 dark:hover:text-primary-400 rounded border disabled:opacity-50"
                       title="Cập nhật preset đã chọn với config hiện tại"
                     >
-                      
+                      🔄
                     </button>
                     <button
                       onClick={renamePreset}
@@ -4817,7 +4817,7 @@ export default function ProcessorPage() {
                       className="text-xs px-2 py-1.5 bg-surface-3 hover:bg-yellow-100 dark:hover:bg-yellow-500/25 text-dim hover:text-yellow-700 dark:hover:text-yellow-400 rounded border disabled:opacity-50"
                       title="Đổi tên preset đã chọn"
                     >
-                      
+                      ✏️
                     </button>
                     <button
                       onClick={() => {
@@ -4836,7 +4836,7 @@ export default function ProcessorPage() {
                       className="text-xs px-2 py-1.5 bg-surface-3 hover:bg-red-100 dark:hover:bg-red-500/25 text-dim hover:text-red-600 rounded border disabled:opacity-50"
                       title="Xoá preset đã chọn"
                     >
-                      
+                      🗑️
                     </button>
                   </>
                 )}

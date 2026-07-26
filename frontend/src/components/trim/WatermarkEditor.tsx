@@ -286,28 +286,29 @@ function WatermarkPreview({ wm, aspect, onDrag }: PreviewProps) {
   }
 
   const rot = wm.rotation
-  const rotExpr = rot ? `rotate(${rot}deg)` : ''
 
+  // Anchor placement only — NO rotation baked in. The export draws the text at
+  // this anchor on a full canvas-sized layer, then rotates that whole layer
+  // about the frame center; we mirror that with a rotated full-box wrapper
+  // below instead of spinning the text about its own anchor.
   const presetStyles: Record<Exclude<WatermarkPosition, 'custom'>, CSSProperties> = {
-    'top-left': { top: margin, left: margin, transform: rotExpr, transformOrigin: 'top left' },
-    'top-center': { top: margin, left: '50%', transform: `translateX(-50%) ${rotExpr}`, transformOrigin: 'top center' },
-    'top-right': { top: margin, right: margin, transform: rotExpr, transformOrigin: 'top right' },
-    'middle-left': { top: '50%', left: margin, transform: `translateY(-50%) ${rotExpr}`, transformOrigin: 'center left' },
-    'center': { top: '50%', left: '50%', transform: `translate(-50%,-50%) ${rotExpr}`, transformOrigin: 'center' },
-    'middle-right': { top: '50%', right: margin, transform: `translateY(-50%) ${rotExpr}`, transformOrigin: 'center right' },
-    'bottom-left': { bottom: margin, left: margin, transform: rotExpr, transformOrigin: 'bottom left' },
-    'bottom-center': { bottom: margin, left: '50%', transform: `translateX(-50%) ${rotExpr}`, transformOrigin: 'bottom center' },
-    'bottom-right': { bottom: margin, right: margin, transform: rotExpr, transformOrigin: 'bottom right' },
+    'top-left': { top: margin, left: margin },
+    'top-center': { top: margin, left: '50%', transform: 'translateX(-50%)' },
+    'top-right': { top: margin, right: margin },
+    'middle-left': { top: '50%', left: margin, transform: 'translateY(-50%)' },
+    'center': { top: '50%', left: '50%', transform: 'translate(-50%,-50%)' },
+    'middle-right': { top: '50%', right: margin, transform: 'translateY(-50%)' },
+    'bottom-left': { bottom: margin, left: margin },
+    'bottom-center': { bottom: margin, left: '50%', transform: 'translateX(-50%)' },
+    'bottom-right': { bottom: margin, right: margin },
   }
 
   // Match FFmpeg semantics `x=(w-text_w)*cx`: element's right edge touches parent's
   // right edge when cx=1, regardless of text width.
-  const customTranslate = `translate(${-wm.custom_x * 100}%, ${-wm.custom_y * 100}%)`
   const customStyle: CSSProperties = {
     left: `${wm.custom_x * 100}%`,
     top: `${wm.custom_y * 100}%`,
-    transform: rotExpr ? `${customTranslate} ${rotExpr}` : customTranslate,
-    transformOrigin: 'top left',
+    transform: `translate(${-wm.custom_x * 100}%, ${-wm.custom_y * 100}%)`,
   }
 
   const posStyle = isCustom ? customStyle : presetStyles[wm.position as Exclude<WatermarkPosition, 'custom'>]
@@ -369,18 +370,37 @@ function WatermarkPreview({ wm, aspect, onDrag }: PreviewProps) {
               'repeating-linear-gradient(45deg, #fff 0, #fff 1px, transparent 1px, transparent 18px)',
           }}
         />
-        {wm.text && (
-          <div
-            ref={textRef}
-            style={{ ...base, ...posStyle }}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-          >
-            {wm.text}
-          </div>
-        )}
+        {wm.text && (() => {
+          const textEl = (
+            <div
+              ref={textRef}
+              style={{ ...base, ...posStyle }}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+            >
+              {wm.text}
+            </div>
+          )
+          if (!rot) return textEl
+          // Rotate the whole frame-sized layer about its center, exactly like the
+          // export's `rotate=` on the canvas layer. Wrapper is pointer-transparent
+          // so the (child) text keeps its own drag hit-area.
+          return (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                transform: `rotate(${rot}deg)`,
+                transformOrigin: 'center',
+                pointerEvents: 'none',
+              }}
+            >
+              {textEl}
+            </div>
+          )
+        })()}
       </div>
     </div>
   )

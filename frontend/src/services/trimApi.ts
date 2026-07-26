@@ -77,6 +77,12 @@ export interface TrimProcessRequest {
   output_filename: string
 }
 
+/** Accept only files that look like a supported video (MIME or extension).
+ *  Shared by the drop zone and the in-place "replace video" control. */
+export function isVideoFile(file: File): boolean {
+  return file.type.startsWith('video/') || /\.(mp4|mov|mkv|avi|webm)$/i.test(file.name)
+}
+
 export async function uploadVideo(
   file: File,
   onProgress?: (pct: number) => void
@@ -95,6 +101,39 @@ export async function uploadVideo(
 
 export async function importVideoFromPath(path: string): Promise<TrimUploadResponse> {
   const { data } = await axios.post<TrimUploadResponse>(`${BASE}/import`, { path })
+  return data
+}
+
+export interface FolderValidation {
+  valid: boolean
+  video_count: number
+  total_duration: number
+  total_duration_formatted: string
+  error?: string | null
+}
+
+export async function validateVideoFolder(folder: string): Promise<FolderValidation> {
+  const { data } = await axios.post<FolderValidation>('/api/v1/video/validate-folder', {
+    folder_path: folder,
+  })
+  return data
+}
+
+export interface FromFolderRequest {
+  folder: string
+  target_duration: number
+  width: number
+  height: number
+  clip_order: string
+  clip_seed?: number | null
+}
+
+/** Randomly concat clips from a folder into a source video of the given
+ *  duration, registered into trim_temp like an upload. */
+export async function generateFromFolder(
+  req: FromFolderRequest
+): Promise<TrimUploadResponse> {
+  const { data } = await axios.post<TrimUploadResponse>(`${BASE}/from-folder`, req)
   return data
 }
 

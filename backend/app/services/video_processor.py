@@ -270,22 +270,60 @@ class VideoProcessor:
         ])
         return files
 
+    def scan_video_folder(
+        self, folder: str, order: str = "shuffle", seed: Optional[int] = None
+    ) -> Tuple[List[Dict], Optional[str]]:
+        """Scan a folder for usable video clips in a single pass.
+
+        Returns ``(videos, error)``. ``videos`` is the ordered list from
+        get_all_videos_in_folder; ``error`` is a human-readable message (and
+        ``videos`` is ``[]``) when the folder is missing, is not a directory, or
+        contains no videos. Single source of the folder-validation rules shared
+        by validate_video_folder and the trim /from-folder endpoint.
+        """
+        folder_path = Path(folder)
+        if not folder_path.exists():
+            return [], f"Folder not found: {folder}"
+        if not folder_path.is_dir():
+            return [], f"Not a directory: {folder}"
+        videos = self.get_all_videos_in_folder(folder, order=order, seed=seed)
+        if not videos:
+            return [], "No video files found in folder"
+        return videos, None
+
+    def select_clips_for_duration(
+        self, videos: List[Dict], target_duration: float, max_clips: Optional[int] = None
+    ) -> Tuple[List[Dict], float]:
+        """Accumulate clips from ``videos`` (already ordered), looping the list,
+        until the total reaches ``target_duration``.
+
+        Clips from get_all_videos_in_folder all have duration>0 so this always
+        progresses; ``max_clips`` caps the count as a backstop against a
+        pathologically tiny folder ballooning the concat. When ``None`` the cap
+        defaults to ``max(5000, len(videos) * 1000)`` — never below the historic
+        ``len*1000`` bound (so the story-video render path keeps its old reach)
+        while still allowing a tiny folder to fill at least a few thousand clips.
+        Returns ``(selected, total)`` — callers compare ``total`` to
+        ``target_duration`` to detect (and log) a shortfall.
+        """
+        selected: List[Dict] = []
+        total = 0.0
+        if not videos:
+            return selected, total
+        if max_clips is None:
+            max_clips = max(5000, len(videos) * 1000)
+        while total < target_duration and len(selected) < max_clips:
+            v = videos[len(selected) % len(videos)]
+            selected.append(v)
+            total += float(v.get("duration", 0.0))
+        return selected, total
+
     def validate_video_folder(self, folder: str) -> Dict:
         """Validate that folder exists and contains videos"""
-        folder_path = Path(folder)
-
-        if not folder_path.exists():
+        videos, error = self.scan_video_folder(folder)
+        if error:
             return {"valid": False, "video_count": 0, "total_duration": 0,
-                    "total_duration_formatted": "", "error": f"Folder not found: {folder}"}
-
-        if not folder_path.is_dir():
-            return {"valid": False, "video_count": 0, "total_duration": 0,
-                    "total_duration_formatted": "", "error": f"Not a directory: {folder}"}
-
-        videos = self.get_all_videos_in_folder(folder)
-        if not videos:
-            return {"valid": False, "video_count": 0, "total_duration": 0,
-                    "total_duration_formatted": "", "error": "No video files found in folder"}
+                    "total_duration_formatted": "", "error": error}
 
         total_duration = sum(v['duration'] for v in videos)
         return {
@@ -2652,21 +2690,16 @@ class VideoProcessor:
         if not videos:
             raise ValueError(f"No videos found in source folder: {video_source_folder}")
 
-        selected: List[Dict] = []
-        total = 0.0
-        i = 0
-        while total < target_duration:
-            v = videos[i % len(videos)]
-            selected.append(v)
-            total += v.get("duration", 0.0)
-            i += 1
-            # Hard stop in case every clip has 0 duration to prevent infinite loop.
-            if i > len(videos) * 1000:
-                break
+        selected, total = self.select_clips_for_duration(videos, target_duration)
         logger.info(
             f"Selected {len(selected)} video clips in {order} order "
             f"({total:.1f}s) for target {self._format_duration(target_duration)}"
         )
+        if total < target_duration:
+            logger.warning(
+                f"Clip cap reached before target: {total:.1f}s from {len(selected)} "
+                f"clips vs target {target_duration:.1f}s — background may end early."
+            )
 
         # Copy to temp folder
         self.copy_to_temp_folder(selected, temp_folder)

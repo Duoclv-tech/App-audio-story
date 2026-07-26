@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { Upload } from 'lucide-react'
+import { isVideoFile } from '../../services/trimApi'
 
 interface Props {
   onFileSelected: (file: File) => void
@@ -16,7 +17,7 @@ export default function UploadZone({ onFileSelected, uploading, uploadProgress }
   const handleFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return
     const file = files[0]
-    if (!file.type.startsWith('video/') && !/\.(mp4|mov|mkv|avi|webm)$/i.test(file.name)) {
+    if (!isVideoFile(file)) {
       alert('File không phải định dạng video hợp lệ')
       return
     }

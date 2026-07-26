@@ -255,6 +255,105 @@ async def import_video(request: TrimImportRequest):
     )
 
 
+class TrimFromFolderRequest(BaseModel):
+    folder: str
+    # Target duration to fill — the original imported video's length. Random
+    # clips from the folder are concatenated and trimmed to exactly this.
+    target_duration: float
+    # Output frame size — defaults mirror the original video so the generated
+    # clip drops in as a replacement of the same resolution.
+    width: int = 1920
+    height: int = 1080
+    clip_order: str = "shuffle"  # "shuffle" (random) | "name" (A→Z)
+    clip_seed: Optional[int] = None
+
+
+@router.post("/from-folder", response_model=TrimUploadResponse)
+async def trim_from_folder(request: TrimFromFolderRequest):
+    """Build a trim source by randomly concatenating clips from a folder.
+
+    Mirrors the ProcessorPage "Video Source Folder" logic: scan the folder,
+    order shuffle/name (seeded), accumulate clips (looping the list when the
+    folder is shorter than the target) until the total reaches
+    ``target_duration``, concat, then trim the tail to that exact length. The
+    result is registered into trim_temp like a normal upload so the rest of the
+    trim flow (preview, segments, watermark, export) works unchanged.
+    """
+    _sweep_trim_temp()
+
+    from app.services.video_processor import VideoProcessor
+
+    folder = (request.folder or "").strip()
+    if request.target_duration <= 0:
+        raise HTTPException(status_code=400, detail="target_duration must be > 0")
+
+    svc = VideoProcessor()
+    order = "name" if request.clip_order == "name" else "shuffle"
+    videos, error = svc.scan_video_folder(folder, order=order, seed=request.clip_seed)
+    if error:
+        raise HTTPException(status_code=422, detail=error)
+
+    # Accumulate clips (looping the list if the folder is short) until we cover
+    # the target duration; the concat is trimmed to the exact length below. Log
+    # if the backstop cap leaves a shortfall so it's never silent.
+    selected, total = svc.select_clips_for_duration(videos, request.target_duration)
+    if total < request.target_duration:
+        logger.warning(
+            f"[trim] folder too short to fill {request.target_duration:.1f}s "
+            f"(got {total:.1f}s from {len(selected)} clips)"
+        )
+
+    file_id = str(uuid.uuid4())
+    dest_dir = TRIM_TEMP_DIR / file_id
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    input_path = str(dest_dir / "input.mp4")
+
+    # Repeated same-path inputs (when the list loops) are fine for ffmpeg, so we
+    # pass source paths directly instead of copying every clip to a temp folder.
+    clip_paths = [v["path"] for v in selected]
+    # H.264 / yuv420p needs even dimensions; the source video may report an odd
+    # width/height, so round each down to the nearest even value.
+    out_w = max(2, (request.width // 2) * 2)
+    out_h = max(2, (request.height // 2) * 2)
+    resolution = f"{out_w}x{out_h}"
+
+    def _build():
+        return svc.concatenate_videos_from_folder(
+            clip_paths,
+            input_path,
+            resolution=resolution,
+            keep_audio=True,
+            max_duration=request.target_duration,
+        )
+
+    try:
+        result = await asyncio.get_event_loop().run_in_executor(None, _build)
+    except Exception as e:
+        shutil.rmtree(dest_dir, ignore_errors=True)
+        logger.exception("from-folder concat failed")
+        raise HTTPException(status_code=500, detail=f"Concat failed: {e}")
+
+    if not result.get("success"):
+        shutil.rmtree(dest_dir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=result.get("error", "Concat failed"))
+
+    try:
+        meta = probe(input_path)
+    except Exception as e:
+        shutil.rmtree(dest_dir, ignore_errors=True)
+        raise HTTPException(status_code=422, detail=f"Cannot probe generated video: {e}")
+
+    return TrimUploadResponse(
+        file_id=file_id,
+        duration=meta["duration"],
+        width=meta["width"],
+        height=meta["height"],
+        video_codec=meta["video_codec"],
+        audio_codec=meta.get("audio_codec"),
+        original_filename=f"folder_{Path(folder).name}.mp4",
+    )
+
+
 @router.get("/waveform/{file_id}")
 async def get_waveform(file_id: str):
     """Return audio waveform as JSON array of floats [0..1]."""
@@ -399,9 +498,14 @@ async def clear_temp(file_id: str):
     return {"cleared": True}
 
 
-@router.get("/video/{file_id}")
+@router.api_route("/video/{file_id}", methods=["GET", "HEAD"])
 async def serve_input_video(file_id: str):
-    """Serve the uploaded source video (for preview restore after page reload)."""
+    """Serve the uploaded source video (for preview restore after page reload).
+
+    HEAD is included so the frontend's checkFileExists() (a HEAD probe) can
+    confirm a persisted file_id still exists; without it the probe 405s and the
+    trimmer wrongly wipes restored state on every reload.
+    """
     dest_dir = TRIM_TEMP_DIR / file_id
     if not dest_dir.exists():
         raise HTTPException(status_code=404, detail="file_id not found")

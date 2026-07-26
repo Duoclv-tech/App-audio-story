@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Scissors, Play, RotateCcw, Plus, Trash2 } from 'lucide-react'
+import { Scissors, Play, RotateCcw, Plus, Trash2, Upload, X } from 'lucide-react'
 import UploadZone from '../components/trim/UploadZone'
 import VideoPreview from '../components/trim/VideoPreview'
 import Waveform from '../components/trim/Waveform'
@@ -17,10 +17,15 @@ import {
   checkFileExists,
   clearTemp,
   defaultWatermark,
+  isVideoFile,
+  validateVideoFolder,
+  generateFromFolder,
   type AspectRatioParams,
+  type FolderValidation,
   type TrimUploadResponse,
   type WatermarkParams,
 } from '../services/trimApi'
+import { pickFolderNative } from '../services/nativeDialog'
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
@@ -135,6 +140,18 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [waveform, setWaveform] = useState<number[]>(persistedInitial?.waveform ?? [])
+  // Drag-over highlight for the compact "replace current video" drop target
+  const [dragOverReplace, setDragOverReplace] = useState(false)
+
+  // ── Video Source Folder (override current video with a random shuffle-concat
+  //    of clips from a folder, cut to the imported video's exact duration) ──
+  const [sourceFolder, setSourceFolder] = useState('')
+  const [folderValidation, setFolderValidation] = useState<FolderValidation | null>(null)
+  const [clipOrder, setClipOrder] = useState<'shuffle' | 'name'>('shuffle')
+  const [folderBusy, setFolderBusy] = useState(false)
+  // The target length to fill — captured from the ORIGINAL imported video so it
+  // stays fixed across re-shuffles (the generated clip replaces `metadata`).
+  const [folderTargetDuration, setFolderTargetDuration] = useState<number | null>(null)
 
   // Trim selection (current timeline selection)
   const [startSec, setStartSec] = useState(persistedInitial?.startSec ?? 0)
@@ -295,6 +312,14 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
     return map[mode] ?? fallback
   }, [metadata, aspectRatio])
 
+  // Output canvas height in px — mirrors backend video_trimmer.py: quality maps
+  // to a fixed height (else source height for original/custom). The watermark
+  // overlay uses this to scale font_size/margin (both output-pixel units).
+  const outputHeight = useMemo(() => {
+    const map: Record<string, number> = { '1080p': 1080, '720p': 720, '480p': 480 }
+    return map[quality] ?? metadata?.height ?? 1080
+  }, [quality, metadata])
+
   const validationError = useMemo(() => {
     if (!metadata) return 'Chưa upload video'
     if (segments.length === 0) {
@@ -337,6 +362,7 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
     setStartSec(0)
     setEndSec(0)
     setSegments([])
+    setFolderTargetDuration(null)
     setJobId(null)
     setProcessProgress(0)
     setProcessStatus('idle')
@@ -358,6 +384,17 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
     }
   }
 
+  // Replace the current video from the compact card (button or drag-drop),
+  // keeping the video-type guard the UploadZone enforces on first load.
+  const handleReplaceFile = (f: File | null | undefined) => {
+    if (!f || uploading || folderBusy) return
+    if (!isVideoFile(f)) {
+      alert('File không phải định dạng video hợp lệ')
+      return
+    }
+    handleFileSelected(f)
+  }
+
   const handleImportPath = async (path: string) => {
     const p = path.trim()
     if (!p) return
@@ -374,6 +411,7 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
     setStartSec(0)
     setEndSec(0)
     setSegments([])
+    setFolderTargetDuration(null)
     setJobId(null)
     setProcessProgress(0)
     setProcessStatus('idle')
@@ -393,6 +431,78 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
       alert(`Nạp video thất bại: ${msg}`)
     } finally {
       setUploading(false)
+    }
+  }
+
+  const handleBrowseFolder = async () => {
+    const picked = await pickFolderNative(sourceFolder || '')
+    if (picked) {
+      setSourceFolder(picked)
+      setFolderValidation(null)
+    }
+  }
+
+  const handleValidateFolder = async () => {
+    const folder = sourceFolder.trim()
+    if (!folder) return
+    try {
+      const v = await validateVideoFolder(folder)
+      setFolderValidation(v)
+      if (!v.valid) alert(v.error || 'Thư mục không hợp lệ')
+    } catch {
+      setFolderValidation({
+        valid: false, video_count: 0, total_duration: 0,
+        total_duration_formatted: '', error: 'Không kiểm tra được thư mục',
+      })
+    }
+  }
+
+  // Build a source video from the folder that fills the original imported
+  // video's duration, then swap it in as the current trim video. Each call in
+  // shuffle mode uses a fresh random order, so clicking again gives a new mix.
+  const handleGenerateFromFolder = async () => {
+    const folder = sourceFolder.trim()
+    if (!folder) { alert('Nhập đường dẫn thư mục video'); return }
+    if (!metadata) { alert('Cần import/upload video gốc trước để lấy thời lượng đích'); return }
+
+    const target = folderTargetDuration ?? metadata.duration
+    const width = metadata.width
+    const height = metadata.height
+    const seed = clipOrder === 'shuffle' ? Math.floor(Math.random() * 1_000_000_000) : null
+
+    const prevFileId = metadata.file_id
+    setFolderBusy(true)
+    try {
+      const meta = await generateFromFolder({
+        folder,
+        target_duration: target,
+        width,
+        height,
+        clip_order: clipOrder,
+        clip_seed: seed,
+      })
+      if (fileUrl.startsWith('blob:')) URL.revokeObjectURL(fileUrl)
+      setFolderTargetDuration(target)
+      setFile(null)
+      setFileSizeBytes(null)
+      setMetadata(meta)
+      setFileUrl(getVideoUrl(meta.file_id))
+      setStartSec(0)
+      setEndSec(meta.duration)
+      setSegments([])
+      setWaveform([])
+      setJobId(null)
+      setProcessProgress(0)
+      setProcessStatus('idle')
+      setProcessError(null)
+      fetchWaveform(meta.file_id).then(setWaveform).catch(() => setWaveform([]))
+      if (prevFileId && prevFileId !== meta.file_id) clearTemp(prevFileId).catch(() => {})
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      const msg = detail || (err instanceof Error ? err.message : String(err))
+      alert(`Tạo video từ folder thất bại: ${msg}`)
+    } finally {
+      setFolderBusy(false)
     }
   }
 
@@ -465,10 +575,7 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
     vid.play()
   }
 
-  const resetAll = () => {
-    if (processStatus === 'running') {
-      if (!window.confirm('Đang xử lý video, xoá tất cả bây giờ?')) return
-    }
+  const doReset = () => {
     if (metadata) clearTemp(metadata.file_id).catch(() => {})
     if (esRef.current) { esRef.current.close(); esRef.current = null }
     if (fileUrl) URL.revokeObjectURL(fileUrl)
@@ -485,6 +592,9 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
     setStartSec(0)
     setEndSec(0)
     setSegments([])
+    setSourceFolder('')
+    setFolderValidation(null)
+    setFolderTargetDuration(null)
     setQuality('720p')
     setCustomBitrate(5000)
     setAspectRatio({ mode: 'original' })
@@ -501,6 +611,24 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
     setProcessStatus('idle')
     setProcessError(null)
     setSavedPath(null)
+  }
+
+  const resetAll = () => {
+    if (processStatus === 'running') {
+      if (!window.confirm('Đang xử lý video, xoá tất cả bây giờ?')) return
+    }
+    doReset()
+  }
+
+  // Clear only this trim section (video + segments + settings). Leaves the
+  // upstream "Nạp video dài vừa tạo" import field untouched.
+  const clearVideoSelection = () => {
+    const msg =
+      processStatus === 'running'
+        ? 'Đang xử lý video. Gỡ video và xoá các lựa chọn cắt ở phần này?'
+        : 'Gỡ video này và xoá các đoạn/cài đặt đã chọn? (Không ảnh hưởng ô "Nạp video dài vừa tạo" ở trên.)'
+    if (!window.confirm(msg)) return
+    doReset()
   }
 
   // ─── render ──────────────────────────────────────────────────────────────
@@ -552,38 +680,186 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
               </button>
             </div>
             <p className="text-xs text-dim">
-              Cắt trực tiếp video dài — khỏi phải tải file lên lại. Hoặc kéo thả file khác bên dưới.
+              Cắt trực tiếp video dài — khỏi phải tải file lên lại. Hoặc chọn file khác bên dưới.
             </p>
           </div>
         )}
 
-        <UploadZone
-          onFileSelected={handleFileSelected}
-          uploading={uploading}
-          uploadProgress={uploadProgress}
-        />
-        {metadata && (
-          <div className="mt-3 text-sm text-dim space-y-0.5">
-            <div>
-              <b>File:</b> {metadata.original_filename}
-              {fileSizeBytes !== null && (
-                <> · <b>Kích thước:</b> {(fileSizeBytes / 1024 / 1024).toFixed(1)} MB</>
-              )}
+        {/* Before a video is loaded (or while uploading) show the drop zone;
+            once loaded, collapse it into a compact card to reduce clutter. */}
+        {!metadata ? (
+          <UploadZone
+            onFileSelected={handleFileSelected}
+            uploading={uploading}
+            uploadProgress={uploadProgress}
+          />
+        ) : (
+          <div
+            onDragOver={(e) => {
+              e.preventDefault()
+              if (!uploading && !folderBusy) setDragOverReplace(true)
+            }}
+            onDragLeave={() => setDragOverReplace(false)}
+            onDrop={(e) => {
+              e.preventDefault()
+              setDragOverReplace(false)
+              handleReplaceFile(e.dataTransfer.files?.[0])
+            }}
+            className={`flex items-center justify-between gap-3 p-4 border rounded-lg bg-surface-2 transition ${
+              dragOverReplace ? 'border-primary-500 bg-primary-50 dark:bg-primary-500/10' : 'border-token'
+            }`}
+          >
+            <div className="min-w-0 text-sm text-dim space-y-0.5">
+              <div className="truncate">
+                <b className="text-strong">File:</b> {metadata.original_filename}
+                {fileSizeBytes !== null && (
+                  <> · <b>Kích thước:</b> {(fileSizeBytes / 1024 / 1024).toFixed(1)} MB</>
+                )}
+              </div>
+              <div>
+                <b>Thời lượng:</b> {metadata.duration.toFixed(1)}s · <b>Độ phân giải:</b>{' '}
+                {metadata.width}×{metadata.height} · <b>Codec:</b> {metadata.video_codec}
+                {metadata.audio_codec && ` / ${metadata.audio_codec}`}
+              </div>
+              <div className="text-xs text-faint">Kéo thả video khác vào đây để đổi</div>
             </div>
-            <div>
-              <b>Thời lượng:</b> {metadata.duration.toFixed(1)}s · <b>Độ phân giải:</b>{' '}
-              {metadata.width}×{metadata.height} · <b>Codec:</b> {metadata.video_codec}
-              {metadata.audio_codec && ` / ${metadata.audio_codec}`}
-            </div>
+            <label
+              className={`shrink-0 flex items-center gap-2 px-3 py-1.5 text-sm border border-token rounded transition ${
+                uploading || folderBusy ? 'opacity-50 cursor-not-allowed' : 'hover:bg-surface cursor-pointer'
+              }`}
+              title="Chọn file video khác thay thế"
+            >
+              <Upload size={16} /> Đổi video khác
+              <input
+                type="file"
+                accept=".mp4,.mov,.mkv,.avi,.webm,video/*"
+                className="hidden"
+                disabled={uploading || folderBusy}
+                onChange={(e) => {
+                  handleReplaceFile(e.target.files?.[0])
+                  e.target.value = ''
+                }}
+              />
+            </label>
           </div>
         )}
       </section>
+
+      {/* Video Source Folder — override the current video with a random
+          shuffle-concat of clips from a folder, cut to the original duration. */}
+      {metadata && (
+        <section className="bg-surface p-6 rounded-lg shadow space-y-3">
+          <div>
+            <h2 className="text-lg font-semibold">Nguồn từ thư mục (tuỳ chọn)</h2>
+            <p className="text-sm text-dim mt-1">
+              Chọn ngẫu nhiên các video trong thư mục, nối lại và cắt đúng{' '}
+              <b>{(folderTargetDuration ?? metadata.duration).toFixed(1)}s</b>{' '}
+              (thời lượng video gốc) — thay cho video hiện tại.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm text-dim mb-1">Video Source Folder</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={sourceFolder}
+                onChange={(e) => {
+                  setSourceFolder(e.target.value)
+                  setFolderValidation(null)
+                }}
+                placeholder="D:\path\to\video\folder"
+                className="flex-1 px-3 py-1.5 border rounded bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                disabled={folderBusy}
+              />
+              <button
+                type="button"
+                onClick={handleBrowseFolder}
+                disabled={folderBusy}
+                className="px-3 py-1.5 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50"
+              >
+                Browse
+              </button>
+              <button
+                type="button"
+                onClick={handleValidateFolder}
+                disabled={!sourceFolder.trim() || folderBusy}
+                className="px-3 py-1.5 text-sm bg-primary-500 text-white rounded hover:bg-primary-600 disabled:opacity-50"
+              >
+                Validate
+              </button>
+            </div>
+            {folderValidation && (
+              <div
+                className={`mt-1 text-xs ${
+                  folderValidation.valid
+                    ? 'text-green-600 dark:text-green-400'
+                    : 'text-red-600 dark:text-red-400'
+                }`}
+              >
+                {folderValidation.valid
+                  ? `✓ ${folderValidation.video_count} video (${folderValidation.total_duration_formatted})`
+                  : folderValidation.error || 'Thư mục không hợp lệ'}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-4 flex-wrap">
+            <span className="text-sm text-dim">Cách chọn clip:</span>
+            <label className="flex items-center gap-1.5 text-sm text-dim cursor-pointer select-none">
+              <input
+                type="radio"
+                name="trim_clip_order"
+                checked={clipOrder === 'shuffle'}
+                onChange={() => setClipOrder('shuffle')}
+                disabled={folderBusy}
+              />
+              Ngẫu nhiên (mặc định)
+            </label>
+            <label className="flex items-center gap-1.5 text-sm text-dim cursor-pointer select-none">
+              <input
+                type="radio"
+                name="trim_clip_order"
+                checked={clipOrder === 'name'}
+                onChange={() => setClipOrder('name')}
+                disabled={folderBusy}
+              />
+              Theo thứ tự tên (A→Z)
+            </label>
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              type="button"
+              onClick={handleGenerateFromFolder}
+              disabled={folderBusy || !sourceFolder.trim()}
+              className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50"
+            >
+              <Scissors size={16} />
+              {folderBusy ? 'Đang tạo…' : 'Tạo video từ folder'}
+            </button>
+            {clipOrder === 'shuffle' && folderTargetDuration !== null && !folderBusy && (
+              <span className="text-xs text-dim">Bấm lại để tạo bản ngẫu nhiên khác cùng thời lượng.</span>
+            )}
+          </div>
+        </section>
+      )}
 
       {metadata && fileUrl && (
         <>
           {/* Step 2: Preview + selection */}
           <section className="bg-surface p-6 rounded-lg shadow space-y-4">
-            <h2 className="text-lg font-semibold">2. Xem trước & chọn đoạn</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">2. Xem trước & chọn đoạn</h2>
+              <button
+                type="button"
+                onClick={clearVideoSelection}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 rounded transition"
+                title="Gỡ video này và xoá các đoạn/cài đặt đã chọn"
+              >
+                <X size={16} /> Xóa video này
+              </button>
+            </div>
             <VideoPreview
               ref={videoRef}
               src={fileUrl}
@@ -593,6 +869,8 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
               speed={speed}
               mute={mute}
               volume={volume}
+              watermark={watermark}
+              outputHeight={outputHeight}
             />
             <Waveform
               peaks={waveform}

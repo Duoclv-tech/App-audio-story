@@ -156,6 +156,24 @@ interface AudioRecord {
   updated_at: string | null
 }
 
+// Default "Cấu hình TTS" state. Extracted so loadStory can reset a story that
+// has no saved config back to these defaults instead of letting it inherit —
+// and then persist — the previously-open story's config.
+const DEFAULT_DB_VOICE = 'hn_female_ngochuyen_full_48k-fhg'
+const DEFAULT_TTS_CONFIG = {
+  engine: 'vbee' as 'vbee' | 'omnivoice',
+  voice_code: DEFAULT_DB_VOICE,
+  speed: 1.0,
+  bitrate: 128,
+  audio_type: 'mp3',
+  // OmniVoice-only
+  mode: 'clone' as 'auto' | 'clone' | 'design',
+  model_key: 'base' as 'base',
+  preset_id: '',
+  instruct: '',
+  language: 'Vietnamese',
+}
+
 export default function ProcessorPage() {
   const { storyId } = useParams<{ storyId: string }>()
   const navigate = useNavigate()
@@ -176,7 +194,7 @@ export default function ProcessorPage() {
   const [searchedVoice, setSearchedVoice] = useState<any | null>(null)
   // The DB-dropdown's own selection, kept separate from ttsConfig.voice_code so
   // a searched voice doesn't clobber it and we can restore it on "bỏ".
-  const [dbVoiceCode, setDbVoiceCode] = useState('hn_female_ngochuyen_full_48k-fhg')
+  const [dbVoiceCode, setDbVoiceCode] = useState(DEFAULT_DB_VOICE)
   const [chapterStats, setChapterStats] = useState<ChapterStats | null>(null)
   const [checkingGrammar, setCheckingGrammar] = useState(false)
   const [editDialog, setEditDialog] = useState<EditDialogState>({
@@ -195,19 +213,7 @@ export default function ProcessorPage() {
     isOpen: false,
     chapter: null
   })
-  const [ttsConfig, setTtsConfig] = useState({
-    engine: 'vbee' as 'vbee' | 'omnivoice',
-    voice_code: 'hn_female_ngochuyen_full_48k-fhg',
-    speed: 1.0,
-    bitrate: 128,
-    audio_type: 'mp3',
-    // OmniVoice-only
-    mode: 'clone' as 'auto' | 'clone' | 'design',
-    model_key: 'base' as 'base',
-    preset_id: '',
-    instruct: '',
-    language: 'Vietnamese',
-  })
+  const [ttsConfig, setTtsConfig] = useState({ ...DEFAULT_TTS_CONFIG })
   // OmniVoice engine state (availability + clone presets)
   const [omniStatus, setOmniStatus] = useState<any>(null)
   const [omniPresets, setOmniPresets] = useState<any[]>([])
@@ -1224,6 +1230,54 @@ export default function ProcessorPage() {
         status: story.status,
         current_step: story.current_step
       })
+      // Restore this story's saved "Cấu hình TTS" (engine + all voice/settings)
+      // from the DB in the SAME synchronous block as setStoryData so the persist
+      // effect writes to the right story and step 5 renders the correct engine UI.
+      let ttsRestored = false
+      const savedCfg = story.tts_config
+      if (savedCfg && typeof savedCfg === 'object') {
+        const { dbVoiceCode: savedDbVoice, ...cfg } = savedCfg
+        setTtsConfig(prev => ({ ...prev, ...cfg }))
+        if (savedDbVoice) setDbVoiceCode(savedDbVoice)
+        ttsRestored = true
+      } else {
+        // No saved config: reset to defaults synchronously so this story never
+        // inherits — and then persists — the previously-open story's config
+        // (the component is reused across /processor/:storyId without remount).
+        setTtsConfig({ ...DEFAULT_TTS_CONFIG })
+        setDbVoiceCode(DEFAULT_DB_VOICE)
+      }
+
+      // Fallback for stories saved before per-story config existed: infer the
+      // engine/settings from the config stored on any segment already generated,
+      // so an OmniVoice project doesn't wrongly show the VBEE one-shot UI.
+      if (!ttsRestored) {
+        try {
+          const segResp = await axios.get(`/api/v1/tts/segments/${story.id}`)
+          const segs = segResp.data?.segments || []
+          const segCfg = segs.find((s: any) => s.config)?.config
+          if (segCfg) {
+            // Coalesce backend nulls to ttsConfig's string/number shape —
+            // preset_id/instruct arrive as null for non-design configs and would
+            // otherwise break `.trim()` and controlled inputs downstream.
+            setTtsConfig(prev => ({
+              ...prev,
+              engine: segCfg.engine ?? prev.engine,
+              voice_code: segCfg.voice_code ?? prev.voice_code,
+              audio_type: segCfg.audio_type ?? prev.audio_type,
+              bitrate: segCfg.bitrate ?? prev.bitrate,
+              speed: segCfg.speed ?? prev.speed,
+              mode: segCfg.mode ?? prev.mode,
+              model_key: segCfg.model_key ?? prev.model_key,
+              preset_id: segCfg.preset_id ?? '',
+              instruct: segCfg.instruct ?? '',
+              language: segCfg.language ?? prev.language,
+            }))
+          } else if (segs.length > 0) {
+            setTtsConfig(prev => ({ ...prev, engine: 'omnivoice' }))
+          }
+        } catch {}
+      }
 
       // Load chapters if story has been downloaded
       if (story.status !== 'draft' && story.status !== 'created') {
@@ -1836,6 +1890,22 @@ export default function ProcessorPage() {
     const { folder, audioPath, bannerImage, bannerVideoScaleX, bannerVideoScaleY, bannerVideoRotation, bannerVideoOffsetX, bannerVideoOffsetY, watermarkImage, bgmPath, ...cfg } = videoConfig
     localStorage.setItem('videoConfig_cfg', JSON.stringify(cfg))
   }, [videoConfig])
+
+  // Persist the full "Cấu hình TTS" step to the story row (DB) so reopening a
+  // project restores the exact engine + voice/settings, independent of the
+  // browser cache or machine. Without this, ttsConfig resets to the vbee
+  // default on reload and step 5 (Đọc TTS) shows the wrong engine's UI even
+  // when the story was processed with OmniVoice. Debounced so the instruct
+  // textarea doesn't fire a PUT on every keystroke; only writes once a story
+  // exists so switching projects never clobbers another story's config.
+  useEffect(() => {
+    if (!storyData.id) return
+    const id = storyData.id
+    const timer = window.setTimeout(() => {
+      axios.put(`/api/v1/stories/${id}`, { tts_config: { ...ttsConfig, dbVoiceCode } }).catch(() => {})
+    }, 600)
+    return () => window.clearTimeout(timer)
+  }, [ttsConfig, dbVoiceCode, storyData.id])
 
   // Load presets from server on mount
   useEffect(() => {

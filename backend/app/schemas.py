@@ -25,12 +25,14 @@ class StoryUpdate(BaseModel):
     custom_chapter_urls: Optional[List[str]] = None
     status: Optional[str] = None
     current_step: Optional[int] = None
+    tts_config: Optional[dict] = None
 
 class StoryResponse(StoryBase):
     id: str
     status: str
     current_step: int
     is_favorite: bool = False
+    tts_config: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
 

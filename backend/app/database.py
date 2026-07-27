@@ -87,6 +87,7 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     _ensure_column("merged_audio", "engine", "VARCHAR(20)")
     _ensure_column("tasks", "engine", "VARCHAR(20)")
+    _ensure_column("stories", "tts_config", "JSON")
     logger.info("Database initialized successfully")
 
 def test_connection():

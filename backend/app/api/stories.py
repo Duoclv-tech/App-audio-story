@@ -235,6 +235,8 @@ async def update_story(story_id: str, story_update: schemas.StoryUpdate, db: Ses
             story.status = story_update.status
         if story_update.current_step is not None:
             story.current_step = story_update.current_step
+        if story_update.tts_config is not None:
+            story.tts_config = story_update.tts_config
 
         db.commit()
         db.refresh(story)

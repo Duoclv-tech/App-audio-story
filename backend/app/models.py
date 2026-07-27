@@ -22,6 +22,7 @@ class Story(Base):
     current_step = Column(Integer, default=1)
     is_favorite = Column(Boolean, default=False)
     merged_content = Column(Text, nullable=True)  # All chapters merged into one text
+    tts_config = Column(JSON, nullable=True)  # Saved "Cấu hình TTS" step: engine + voice/settings
     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 

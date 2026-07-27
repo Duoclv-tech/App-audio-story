@@ -14,6 +14,7 @@ interface OverlayProps {
   onSelect?: (id: string) => void
   onDrag?: (id: string, x: number, y: number) => void
   onResize?: (id: string, w: number, h: number) => void
+  onRotate?: (id: string, rotation: number) => void
 }
 
 // Renders the active stickers on top of the preview frame. Each sticker is a
@@ -23,7 +24,7 @@ interface OverlayProps {
 export function StickerOverlay({
   stickers, audioRef, currentTime,
   previewFrameW, previewFrameH, outputW, outputH,
-  selectedId, onSelect, onDrag, onResize,
+  selectedId, onSelect, onDrag, onResize, onRotate,
 }: OverlayProps) {
   // Local rAF tick so we re-evaluate per-sticker visibility against
   // audio.currentTime ~60 Hz (timeupdate fires too slowly).
@@ -62,6 +63,7 @@ export function StickerOverlay({
         if (!visible) return null
 
         const isSel = selectedId === s.id
+        const rot = s.rotation ?? 0
         const wPx = Math.max(8, s.w * scaleX)
         const hPx = Math.max(8, s.h * scaleY)
 
@@ -95,7 +97,7 @@ export function StickerOverlay({
               position: 'absolute',
               left: `${s.x * 100}%`,
               top: `${s.y * 100}%`,
-              transform: 'translate(-50%, -50%)',
+              transform: `translate(-50%, -50%) rotate(${rot}deg)`,
               width: wPx,
               height: hPx,
               opacity: s.opacity,
@@ -144,6 +146,52 @@ export function StickerOverlay({
                   zIndex: 6,
                 }}
               />
+            )}
+            {isSel && onRotate && (
+              <>
+                {/* connector line from top-center up to the rotate knob */}
+                <div style={{
+                  position: 'absolute',
+                  left: '50%', top: -24, width: 2, height: 24,
+                  background: '#C67E15', transform: 'translateX(-50%)',
+                  zIndex: 6, pointerEvents: 'none',
+                }} />
+                <div
+                  onMouseDown={(e) => {
+                    e.stopPropagation()
+                    const el = e.currentTarget.parentElement as HTMLElement
+                    const rect = el.getBoundingClientRect()
+                    const cx = rect.left + rect.width / 2
+                    const cy = rect.top + rect.height / 2
+                    const a0 = Math.atan2(e.clientY - cy, e.clientX - cx)
+                    const orig = rot
+                    const move = (ev: MouseEvent) => {
+                      const a1 = Math.atan2(ev.clientY - cy, ev.clientX - cx)
+                      let deg = orig + (a1 - a0) * 180 / Math.PI
+                      deg = ((deg % 360) + 360) % 360
+                      if (ev.shiftKey) deg = Math.round(deg / 15) * 15
+                      onRotate(s.id, deg)
+                    }
+                    const up = () => {
+                      window.removeEventListener('mousemove', move)
+                      window.removeEventListener('mouseup', up)
+                    }
+                    window.addEventListener('mousemove', move)
+                    window.addEventListener('mouseup', up)
+                  }}
+                  title="Kéo để xoay (giữ Shift để snap 15°)"
+                  style={{
+                    position: 'absolute',
+                    left: '50%', top: -32,
+                    width: 16, height: 16,
+                    transform: 'translateX(-50%)',
+                    background: '#C67E15', borderRadius: 8,
+                    cursor: 'grab',
+                    border: '2px solid white',
+                    zIndex: 7,
+                  }}
+                />
+              </>
             )}
           </div>
         )

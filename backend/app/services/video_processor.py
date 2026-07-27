@@ -1247,6 +1247,19 @@ class VideoProcessor:
             # FFmpeg color filters accept "0xRRGGBB" or named colors.
             return ("0x" + hx[1:]) if hx.startswith("#") else hx
 
+        def _hex_to_rgb01(hx: str) -> tuple:
+            # Parse "#RRGGBB" (or "RRGGBB") into normalized 0..1 floats.
+            s = hx.lstrip("#")
+            if len(s) != 6:
+                return (1.0, 0.0, 0.0)
+            try:
+                r = int(s[0:2], 16) / 255.0
+                g = int(s[2:4], 16) / 255.0
+                b = int(s[4:6], 16) / 255.0
+                return (r, g, b)
+            except ValueError:
+                return (1.0, 0.0, 0.0)
+
         c1 = _hex_to_ff(color1)
         c2 = _hex_to_ff(color2)
         bg_c = _hex_to_ff(bg_color)
@@ -1298,9 +1311,16 @@ class VideoProcessor:
         elif style_l == "cqt":
             # showcqt is music-aware (constant-Q transform). axis_h=0 disables
             # the labelled note-axis ribbon at the bottom; bar_h fills the rest.
+            # cscheme maps stereo intensity -> RGB: left channel uses color1,
+            # right channel uses color2 (6 coefficients, each 0..1).
+            r1, g1, b1 = _hex_to_rgb01(color1)
+            r2, g2, b2 = _hex_to_rgb01(color2)
+            cscheme = (
+                f"{r1:.3f}|{g1:.3f}|{b1:.3f}|{r2:.3f}|{g2:.3f}|{b2:.3f}"
+            )
             viz_chain = (
                 f"[1:a]showcqt=s={vw}x{vh}:axis_h=0:bar_h={vh}:fps=30:"
-                f"basefreq=27.5:endfreq=20000:cscheme=1|0|0|0|1|0,"
+                f"basefreq=27.5:endfreq=20000:cscheme={cscheme},"
                 f"format=rgba[viz0]"
             )
         else:
@@ -1403,6 +1423,7 @@ class VideoProcessor:
             w = max(8, min(int(st.get("w", 200)), 4096)) // 2 * 2
             h = max(8, min(int(st.get("h", 200)), 4096)) // 2 * 2
             op = max(0.0, min(1.0, float(st.get("opacity", 1.0))))
+            rot_deg = float(st.get("rotation", 0.0)) % 360.0
             start = max(0.0, float(st.get("start_time", 0.0)))
             end_raw = st.get("end_time")
             end = float(end_raw) if end_raw is not None else (video_duration or 1e9)
@@ -1412,9 +1433,19 @@ class VideoProcessor:
 
             # Scale + apply per-sticker opacity via colorchannelmixer alpha.
             # format=rgba ensures alpha exists (PNG keeps it; JPG gains it).
+            # Optional clockwise rotation: expand the output box (ow/oh) so the
+            # rotated corners aren't clipped, and fill new area transparent
+            # (c=none). ffmpeg rotate is clockwise for positive angle, matching
+            # the CSS preview.
+            rot_filter = ""
+            if abs(rot_deg) > 0.01:
+                rad = rot_deg * math.pi / 180.0
+                rot_filter = (
+                    f",rotate={rad:.6f}:ow=rotw({rad:.6f}):oh=roth({rad:.6f}):c=none"
+                )
             chain_parts.append(
                 f"[{i}:v]scale={w}:{h},format=rgba,"
-                f"colorchannelmixer=aa={op:.3f}[s{i}]"
+                f"colorchannelmixer=aa={op:.3f}{rot_filter}[s{i}]"
             )
             pos = f"main_w*{x:.4f}-overlay_w/2:main_h*{y:.4f}-overlay_h/2"
             out_label = f"v{i}" if i < len(valid) else "out"

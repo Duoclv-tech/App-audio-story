@@ -66,6 +66,11 @@ datas += [
 _def_presets = os.path.join(BACKEND, "default_clone_presets")
 if os.path.isdir(_def_presets):
     datas.append((_def_presets, "default_clone_presets"))
+# Built-in sticker library (seeded into user's stickers dir on first run).
+# Shipped as "default_stickers" so it maps to paths.DEFAULT_STICKERS_DIR.
+_def_stickers = os.path.join(BACKEND, "stickers")
+if os.path.isdir(_def_stickers):
+    datas.append((_def_stickers, "default_stickers"))
 _fonts = os.path.join(BACKEND, "assets", "fonts")
 if os.path.isdir(_fonts) and os.listdir(_fonts):
     datas.append((_fonts, "assets/fonts"))

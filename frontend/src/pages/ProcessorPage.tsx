@@ -5881,19 +5881,16 @@ export default function ProcessorPage() {
                       const s = videoConfig.visualizer_style
                       // spectrum has its own preset
                       if (s === 'spectrum') return null
-                      // CQT (showcqt) uses a fixed cscheme in the render — neither
-                      // color is honored, so don't offer color pickers here.
-                      if (s === 'cqt') return (
-                        <div className="text-xs text-dim italic">
-                          CQT dùng bảng màu cố định (đỏ→xanh), không chỉnh được màu.
-                        </div>
-                      )
-                      // Styles that use both color1 + color2 gradient
-                      const usesC2 = s === 'bars'
+                      // Styles that use both colors:
+                      //  - bars: color1|color2 gradient
+                      //  - cqt: color1 = kênh trái, color2 = kênh phải (cscheme)
+                      const usesC2 = s === 'bars' || s === 'cqt'
                       return (
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <label className="block text-xs text-dim mb-1">Màu chính</label>
+                            <label className="block text-xs text-dim mb-1">
+                              {s === 'cqt' ? 'Màu kênh trái' : 'Màu chính'}
+                            </label>
                             <input
                               type="color"
                               value={videoConfig.visualizer_color1}
@@ -5904,7 +5901,7 @@ export default function ProcessorPage() {
                           </div>
                           <div>
                             <label className="block text-xs text-dim mb-1">
-                              Màu phụ {!usesC2 && <span className="text-[10px] text-faint">(không dùng)</span>}
+                              {s === 'cqt' ? 'Màu kênh phải' : 'Màu phụ'} {!usesC2 && <span className="text-[10px] text-faint">(không dùng)</span>}
                             </label>
                             <input
                               type="color"
@@ -6723,14 +6720,14 @@ export default function ProcessorPage() {
                                 key={i}
                                 style={{
                                   width: `${100 / 52}%`,
-                                  // showcqt uses a fixed cscheme (low→red, high→green);
-                                  // color1/color2 are ignored by the render, so mirror that.
-                                  background: `linear-gradient(to top, #ff2a2a, #2aff2a)`,
+                                  // showcqt cscheme: color1 = kênh trái, color2 = kênh
+                                  // phải. Preview pha 2 màu để phản ánh lựa chọn.
+                                  background: `linear-gradient(to top, ${c1}, ${c2})`,
                                   height: `${30 + Math.abs(Math.sin((i + 1) * 0.4)) * 60}%`,
                                   animation: `vizBar 0.${5 + (i % 5)}s ease-in-out infinite alternate`,
                                   animationDelay: `${(i % 12) * 0.04}s`,
                                   borderRadius: '2px 2px 0 0',
-                                  boxShadow: `0 0 4px #2aff2a`,
+                                  boxShadow: `0 0 4px ${c2}`,
                                 }}
                               />
                             ))}
@@ -6894,6 +6891,10 @@ export default function ProcessorPage() {
                       onResize={(id, w, h) => setVideoConfig(prev => ({
                         ...prev,
                         stickers: prev.stickers.map(s => s.id === id ? { ...s, w, h } : s),
+                      }))}
+                      onRotate={(id, rotation) => setVideoConfig(prev => ({
+                        ...prev,
+                        stickers: prev.stickers.map(s => s.id === id ? { ...s, rotation } : s),
                       }))}
                     />
                   )}

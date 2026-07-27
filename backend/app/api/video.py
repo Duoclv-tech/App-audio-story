@@ -4,6 +4,7 @@ Video Processing API endpoints
 import hashlib
 import json
 import os
+import shutil
 import string
 import threading
 import time
@@ -1120,6 +1121,40 @@ def _sticker_safe_path(p: str) -> Path:
     raise HTTPException(status_code=403, detail="Path outside sticker dirs")
 
 
+def _seed_default_stickers() -> None:
+    """Copy the bundled sticker library into the writable STICKERS_DIR (once).
+
+    Mirrors clone_preset_store.seed_default_presets: in the packaged app the
+    built-in stickers ship read-only under _MEIPASS/default_stickers and must be
+    copied into %LOCALAPPDATA%\\<app>\\stickers so the picker can list them. A
+    marker file records which categories were seeded, so a user-deleted category
+    stays deleted and won't reappear. In dev the source dir doesn't exist, making
+    this a harmless no-op.
+    """
+    src_root = paths.DEFAULT_STICKERS_DIR
+    if not src_root.is_dir() or src_root.resolve() == _STICKER_LIB_DIR.resolve():
+        return
+    _STICKER_LIB_DIR.mkdir(parents=True, exist_ok=True)
+    marker = _STICKER_LIB_DIR / ".seeded_defaults"
+    seeded = set(marker.read_text(encoding="utf-8").split("\n")) if marker.exists() else set()
+    newly = []
+    for src in sorted(src_root.iterdir()):
+        if not src.is_dir() or src.name.startswith("."):
+            continue
+        if src.name in seeded:
+            continue  # already seeded once — respect later user deletion
+        dest = _STICKER_LIB_DIR / src.name
+        if not dest.exists():
+            try:
+                shutil.copytree(src, dest)
+            except Exception as e:
+                logger.warning(f"Sticker seed failed for {src.name}: {e}")
+                continue
+        newly.append(src.name)
+    if newly:
+        marker.write_text("\n".join(sorted(seeded | set(newly))), encoding="utf-8")
+
+
 @router.get("/stickers/library")
 async def stickers_library():
     """List built-in stickers grouped by category (one subfolder per category).
@@ -1127,6 +1162,7 @@ async def stickers_library():
     Returns absolute paths the FE can echo back into VideoConfig.stickers.
     Animated flag is inferred from extension so the UI can mark GIFs.
     """
+    _seed_default_stickers()
     categories = []
     if not _STICKER_LIB_DIR.exists():
         return {"categories": []}

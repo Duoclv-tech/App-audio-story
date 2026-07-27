@@ -76,7 +76,15 @@
       "Bash(ls scratch_bg)",
       "Bash(ls -la backend/assets/fonts/)",
       "Bash(ls frontend/src/assets/)",
-      "Bash(cat frontend/src/vite-env.d.ts)"
+      "Bash(cat frontend/src/vite-env.d.ts)",
+      "PowerShell(& \"D:\\\\Project\\\\web_app\\\\packaging\\\\build.ps1\")",
+      "Bash(python -c \"from app import paths; print\\('STICKERS_DIR:', paths.STICKERS_DIR\\); print\\('UPLOAD_DIR:', paths.STICKER_UPLOAD_DIR\\)\")",
+      "Bash(ls -R stickers/)",
+      "Bash(git apply *)",
+      "Bash(curl -sS -L -o /tmp/_test_bell.png \"https://openmoji.org/data/color/618x618/1F514.png\")",
+      "Bash(file /tmp/_test_bell.png)",
+      "Bash(curl -sS -L --ssl-no-revoke -o /tmp/_test_bell.png \"https://openmoji.org/data/color/618x618/1F514.png\")",
+      "Bash(xxd)"
     ],
     "deny": [
       "Bash(sudo:*)"

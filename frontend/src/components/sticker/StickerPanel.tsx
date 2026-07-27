@@ -259,6 +259,37 @@ export function StickerPanel({
             />
           </div>
 
+          <div>
+            <div className="flex items-center justify-between">
+              <label className="block text-[10px] text-dim">
+                Xoay: {Math.round(selected.rotation ?? 0)}°
+              </label>
+              <div className="flex items-center gap-1">
+                <input
+                  type="number" min={0} max={360} step={1}
+                  value={Math.round(selected.rotation ?? 0)}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value)
+                    onUpdate(selected.id, { rotation: ((isNaN(v) ? 0 : v) % 360 + 360) % 360 })
+                  }}
+                  className="w-14 px-1 py-0.5 text-[11px] border rounded text-right"
+                />
+                <button
+                  type="button"
+                  onClick={() => onUpdate(selected.id, { rotation: 0 })}
+                  className="text-[11px] px-1.5 py-0.5 bg-surface-3 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+                  title="Về 0°"
+                >↺ 0°</button>
+              </div>
+            </div>
+            <input
+              type="range" min={0} max={360} step={1}
+              value={Math.round(selected.rotation ?? 0)}
+              onChange={(e) => onUpdate(selected.id, { rotation: parseInt(e.target.value) })}
+              className="w-full"
+            />
+          </div>
+
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="block text-[10px] text-dim">

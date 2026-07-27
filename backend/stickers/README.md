@@ -23,3 +23,16 @@ Drop sticker files (PNG, GIF, WebP, APNG) directly into the category folders bel
 ## Adding a new category
 
 Just create a new subfolder. The label shown in the UI is the folder name with first letter capitalized; rename the folder to whatever label you want.
+
+## Attribution / License
+
+The pre-seeded emoji stickers in `subscribe/`, `reactions/`, `decorations/`,
+`arrows/`, `mood/`, and `kawaii/` are from **OpenMoji** (https://openmoji.org)
+and are licensed under **CC BY-SA 4.0**.
+
+Nếu dùng trong video thương mại, hãy ghi nguồn (ví dụ trong phần mô tả video):
+
+> Emoji stickers by OpenMoji – the open-source emoji and icon project.
+> License: CC BY-SA 4.0
+
+Sticker do bạn tự upload không bị ràng buộc bởi giấy phép này.

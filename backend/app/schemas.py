@@ -341,6 +341,7 @@ class Sticker(BaseModel):
     w: int = 200
     h: int = 200
     opacity: float = 1.0
+    rotation: float = 0.0  # Clockwise rotation in degrees (0..360)
     start_time: float = 0.0
     end_time: Optional[float] = None
 

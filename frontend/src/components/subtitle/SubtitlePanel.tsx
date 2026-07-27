@@ -30,6 +30,31 @@ interface PanelProps {
   availableFonts: string[]
 }
 
+// Client-side sample so the button works offline (incl. packaged desktop app),
+// with proper Vietnamese diacritics to demo the Be Vietnam Pro font.
+const SAMPLE_SRT = [
+  '1',
+  '00:00:00,000 --> 00:00:03,000',
+  'Chào mừng bạn đến với video của chúng tôi',
+  '',
+  '2',
+  '00:00:03,200 --> 00:00:06,500',
+  'Đây là dòng phụ đề mẫu tiếng Việt có dấu',
+  '',
+  '3',
+  '00:00:06,700 --> 00:00:10,000',
+  'Bạn có thể chỉnh font, màu sắc và hiệu ứng',
+  '',
+  '4',
+  '00:00:10,200 --> 00:00:13,500',
+  'Kéo phụ đề trên khung xem trước để đổi vị trí',
+  '',
+  '5',
+  '00:00:13,700 --> 00:00:17,000',
+  'Chúc bạn tạo được những video thật đẹp!',
+  '',
+].join('\n')
+
 const ANIMATION_LABELS: Record<SubtitleAnimation, string> = {
   none: 'Không hiệu ứng',
   fade: 'Fade in/out',
@@ -117,6 +142,19 @@ export function SubtitlePanel({
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
+  const handleDownloadSample = () => {
+    // BOM so editors like Notepad open the Vietnamese text as UTF-8.
+    const blob = new Blob(['﻿' + SAMPLE_SRT], { type: 'text/srt;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'phu-de-mau.srt'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
     if (f) handleUpload(f)
@@ -177,6 +215,11 @@ export function SubtitlePanel({
               className="px-3 py-1.5 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 rounded text-xs text-white"
             >{uploading ? 'Đang upload…' : 'Chọn file SRT'}</button>
             <div className="text-[11px] text-dim mt-1">hoặc kéo thả vào đây</div>
+            <button
+              type="button"
+              onClick={handleDownloadSample}
+              className="mt-2 text-[11px] text-primary-500 dark:text-primary-400 hover:underline"
+            >⬇ Tải SRT mẫu</button>
           </>
         )}
         <input

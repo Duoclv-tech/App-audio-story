@@ -9,6 +9,7 @@ export interface Sticker {
   w: number                   // px at output resolution
   h: number                   // px
   opacity: number             // 0..1
+  rotation: number            // clockwise degrees, 0..360
   start_time: number          // seconds
   end_time: number | null     // seconds, null = until end
   // UI hints (not sent to BE)
@@ -39,6 +40,7 @@ export function toBackendSticker(s: Sticker): Omit<Sticker, 'id' | 'source_label
     w: s.w,
     h: s.h,
     opacity: s.opacity,
+    rotation: s.rotation,
     start_time: s.start_time,
     end_time: s.end_time,
   }
@@ -63,6 +65,7 @@ export function makeSticker(args: {
     w: 200,
     h: 200,
     opacity: 1.0,
+    rotation: 0,
     start_time: 0,
     end_time: defaultEnd,
     source_label: args.source_label,

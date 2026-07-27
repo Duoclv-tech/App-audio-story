@@ -38,6 +38,11 @@ FFMPEG_BIN_DIR = BUNDLE_DIR / "bin"
 # Default OmniVoice clone-voice presets shipped read-only with the app; seeded
 # into the writable CLONE_PRESETS_DIR on first run (see clone_preset_store).
 DEFAULT_CLONE_PRESETS_DIR = BUNDLE_DIR / "default_clone_presets"
+# Built-in sticker library shipped read-only with the app; seeded into the
+# writable STICKERS_DIR on first run (see api/video.py::_seed_default_stickers).
+# In dev this points at a non-existent path so seeding is a harmless no-op —
+# the dev sticker files already live in STICKERS_DIR (backend/stickers).
+DEFAULT_STICKERS_DIR = BUNDLE_DIR / "default_stickers"
 
 # The frontend build lives next to the app when frozen, but in dev it sits at
 # <repo>/frontend/dist (a sibling of backend/, i.e. BUNDLE_DIR.parent).

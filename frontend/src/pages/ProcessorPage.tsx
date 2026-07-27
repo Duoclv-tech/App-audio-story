@@ -357,13 +357,20 @@ export default function ProcessorPage() {
     stickers: Sticker[];
   }
 
-  type VideoCfgPreset = Omit<VideoConfig, 'folder'|'audioPath'|'bannerImage'|'bannerVideoScaleX'|'bannerVideoScaleY'|'bannerVideoRotation'|'bannerVideoOffsetX'|'bannerVideoOffsetY'|'watermarkImage'|'bgmPath'>
+  // Preset lưu mọi setting tái dùng được — bao gồm cả transform bố cục banner
+  // (scale/rotation/offset) để tái lập layout — chỉ loại các đường dẫn file cụ thể.
+  type VideoCfgPreset = Omit<VideoConfig, 'folder'|'audioPath'|'bannerImage'|'watermarkImage'|'bgmPath'>
 
   // Seed shared by the preview and the final render so "Ngẫu nhiên" shows the
   // exact clip order the output will use. "Trộn lại" generates a fresh one.
   const genClipSeed = () => Math.floor(Math.random() * 1_000_000_000)
 
   const DEFAULT_VIDEO_CFG: VideoCfgPreset = {
+    bannerVideoScaleX: 1.0,
+    bannerVideoScaleY: 1.0,
+    bannerVideoRotation: 0,
+    bannerVideoOffsetX: 0,
+    bannerVideoOffsetY: 0,
     audio_speed: 1.0,
     transitions_pool: ['fade', 'crossfade', 'slideleft'],
     transition_duration: 0.5,
@@ -471,15 +478,17 @@ export default function ProcessorPage() {
       folder: savedFolder,
       audioPath: '',
       bannerImage: savedBanner,
+      watermarkImage: savedWatermark,
+      bgmPath: savedBgm,
+      ...DEFAULT_VIDEO_CFG,
+      ...migrateOldCfg(savedCfg),
+      // Banner transform từ các key localStorage riêng — đặt sau các spread để
+      // luôn thắng giá trị mặc định trong DEFAULT_VIDEO_CFG.
       bannerVideoScaleX: isNaN(savedSX) ? 1.0 : Math.max(0.1, Math.min(3, savedSX)),
       bannerVideoScaleY: isNaN(savedSY) ? 1.0 : Math.max(0.1, Math.min(3, savedSY)),
       bannerVideoOffsetX: isNaN(savedOffX) ? 0 : Math.max(-0.5, Math.min(0.5, savedOffX)),
       bannerVideoOffsetY: isNaN(savedOffY) ? 0 : Math.max(-0.5, Math.min(0.5, savedOffY)),
       bannerVideoRotation: isNaN(savedRot) ? 0 : Math.max(-180, Math.min(180, savedRot)),
-      watermarkImage: savedWatermark,
-      bgmPath: savedBgm,
-      ...DEFAULT_VIDEO_CFG,
-      ...migrateOldCfg(savedCfg),
       // Ensure a non-zero seed exists (old saved configs won't have one).
       clip_seed: savedCfg?.clip_seed || genClipSeed(),
     }
@@ -1839,7 +1848,8 @@ export default function ProcessorPage() {
   }, [])
 
   const extractCfgFromConfig = () => {
-    const { folder, audioPath, bannerImage, bannerVideoScaleX, bannerVideoScaleY, bannerVideoRotation, bannerVideoOffsetX, bannerVideoOffsetY, watermarkImage, bgmPath, ...cfg } = videoConfig
+    // Chỉ loại đường dẫn file cụ thể; giữ lại banner transform để preset tái lập bố cục.
+    const { folder, audioPath, bannerImage, watermarkImage, bgmPath, ...cfg } = videoConfig
     return cfg
   }
 

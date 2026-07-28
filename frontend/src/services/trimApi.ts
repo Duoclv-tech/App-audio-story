@@ -126,6 +126,8 @@ export interface FromFolderRequest {
   height: number
   clip_order: string
   clip_seed?: number | null
+  /** Mute audio of the folder clips (does not affect the original video). */
+  mute_audio?: boolean
 }
 
 /** Randomly concat clips from a folder into a source video of the given

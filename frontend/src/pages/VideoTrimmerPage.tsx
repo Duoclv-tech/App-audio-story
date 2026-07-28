@@ -158,6 +158,10 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
   const [sourceFolder, setSourceFolder] = useState('')
   const [folderValidation, setFolderValidation] = useState<FolderValidation | null>(null)
   const [clipOrder, setClipOrder] = useState<'shuffle' | 'name'>('shuffle')
+  // Mute the audio of clips pulled from the folder (default on). This only
+  // affects the folder-generated video — the original imported video's audio
+  // (kept via the Export "mute" toggle) is untouched.
+  const [folderMuteAudio, setFolderMuteAudio] = useState(true)
   const [folderBusy, setFolderBusy] = useState(false)
   // The target length to fill — captured from the ORIGINAL imported video so it
   // stays fixed across re-shuffles (the generated clip replaces `metadata`).
@@ -490,6 +494,7 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
         height,
         clip_order: clipOrder,
         clip_seed: seed,
+        mute_audio: folderMuteAudio,
       })
       if (fileUrl.startsWith('blob:')) URL.revokeObjectURL(fileUrl)
       setFolderTargetDuration(target)
@@ -768,106 +773,6 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
         )}
       </section>
 
-      {/* Video Source Folder — override the current video with a random
-          shuffle-concat of clips from a folder, cut to the original duration. */}
-      {metadata && (
-        <section className="bg-surface p-6 rounded-lg shadow space-y-3">
-          <div>
-            <h2 className="text-lg font-semibold">Nguồn từ thư mục (tuỳ chọn)</h2>
-            <p className="text-sm text-dim mt-1">
-              Chọn ngẫu nhiên các video trong thư mục, nối lại và cắt đúng{' '}
-              <b>{(folderTargetDuration ?? metadata.duration).toFixed(1)}s</b>{' '}
-              (thời lượng video gốc) — thay cho video hiện tại.
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm text-dim mb-1">Video Source Folder</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={sourceFolder}
-                onChange={(e) => {
-                  setSourceFolder(e.target.value)
-                  setFolderValidation(null)
-                }}
-                placeholder="D:\path\to\video\folder"
-                className="flex-1 px-3 py-1.5 border rounded bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                disabled={folderBusy}
-              />
-              <button
-                type="button"
-                onClick={handleBrowseFolder}
-                disabled={folderBusy}
-                className="px-3 py-1.5 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50"
-              >
-                Browse
-              </button>
-              <button
-                type="button"
-                onClick={handleValidateFolder}
-                disabled={!sourceFolder.trim() || folderBusy}
-                className="px-3 py-1.5 text-sm bg-primary-500 text-white rounded hover:bg-primary-600 disabled:opacity-50"
-              >
-                Validate
-              </button>
-            </div>
-            {folderValidation && (
-              <div
-                className={`mt-1 text-xs ${
-                  folderValidation.valid
-                    ? 'text-green-600 dark:text-green-400'
-                    : 'text-red-600 dark:text-red-400'
-                }`}
-              >
-                {folderValidation.valid
-                  ? `✓ ${folderValidation.video_count} video (${folderValidation.total_duration_formatted})`
-                  : folderValidation.error || 'Thư mục không hợp lệ'}
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-4 flex-wrap">
-            <span className="text-sm text-dim">Cách chọn clip:</span>
-            <label className="flex items-center gap-1.5 text-sm text-dim cursor-pointer select-none">
-              <input
-                type="radio"
-                name="trim_clip_order"
-                checked={clipOrder === 'shuffle'}
-                onChange={() => setClipOrder('shuffle')}
-                disabled={folderBusy}
-              />
-              Ngẫu nhiên (mặc định)
-            </label>
-            <label className="flex items-center gap-1.5 text-sm text-dim cursor-pointer select-none">
-              <input
-                type="radio"
-                name="trim_clip_order"
-                checked={clipOrder === 'name'}
-                onChange={() => setClipOrder('name')}
-                disabled={folderBusy}
-              />
-              Theo thứ tự tên (A→Z)
-            </label>
-          </div>
-
-          <div className="flex items-center gap-3 flex-wrap">
-            <button
-              type="button"
-              onClick={handleGenerateFromFolder}
-              disabled={folderBusy || !sourceFolder.trim()}
-              className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50"
-            >
-              <Scissors size={16} />
-              {folderBusy ? 'Đang tạo…' : 'Tạo video từ folder'}
-            </button>
-            {clipOrder === 'shuffle' && folderTargetDuration !== null && !folderBusy && (
-              <span className="text-xs text-dim">Bấm lại để tạo bản ngẫu nhiên khác cùng thời lượng.</span>
-            )}
-          </div>
-        </section>
-      )}
-
       {metadata && fileUrl && (
         <>
           {/* Step 2: Preview + selection */}
@@ -909,6 +814,114 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
                 setEndSec(e)
               }}
             />
+          </section>
+
+          {/* Video Source Folder — override the current video with a random
+              shuffle-concat of clips from a folder, cut to the original duration. */}
+          <section className="bg-surface p-6 rounded-lg shadow space-y-3">
+            <div>
+              <h2 className="text-lg font-semibold">Nguồn từ thư mục (tuỳ chọn)</h2>
+              <p className="text-sm text-dim mt-1">
+                Chọn ngẫu nhiên các video trong thư mục, nối lại và cắt đúng{' '}
+                <b>{(folderTargetDuration ?? metadata.duration).toFixed(1)}s</b>{' '}
+                (thời lượng video gốc) — thay cho video hiện tại.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm text-dim mb-1">Video Source Folder</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={sourceFolder}
+                  onChange={(e) => {
+                    setSourceFolder(e.target.value)
+                    setFolderValidation(null)
+                  }}
+                  placeholder="D:\path\to\video\folder"
+                  className="flex-1 px-3 py-1.5 border rounded bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  disabled={folderBusy}
+                />
+                <button
+                  type="button"
+                  onClick={handleBrowseFolder}
+                  disabled={folderBusy}
+                  className="px-3 py-1.5 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50"
+                >
+                  Browse
+                </button>
+                <button
+                  type="button"
+                  onClick={handleValidateFolder}
+                  disabled={!sourceFolder.trim() || folderBusy}
+                  className="px-3 py-1.5 text-sm bg-primary-500 text-white rounded hover:bg-primary-600 disabled:opacity-50"
+                >
+                  Validate
+                </button>
+              </div>
+              {folderValidation && (
+                <div
+                  className={`mt-1 text-xs ${
+                    folderValidation.valid
+                      ? 'text-green-600 dark:text-green-400'
+                      : 'text-red-600 dark:text-red-400'
+                  }`}
+                >
+                  {folderValidation.valid
+                    ? `✓ ${folderValidation.video_count} video (${folderValidation.total_duration_formatted})`
+                    : folderValidation.error || 'Thư mục không hợp lệ'}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-4 flex-wrap">
+              <span className="text-sm text-dim">Cách chọn clip:</span>
+              <label className="flex items-center gap-1.5 text-sm text-dim cursor-pointer select-none">
+                <input
+                  type="radio"
+                  name="trim_clip_order"
+                  checked={clipOrder === 'shuffle'}
+                  onChange={() => setClipOrder('shuffle')}
+                  disabled={folderBusy}
+                />
+                Ngẫu nhiên (mặc định)
+              </label>
+              <label className="flex items-center gap-1.5 text-sm text-dim cursor-pointer select-none">
+                <input
+                  type="radio"
+                  name="trim_clip_order"
+                  checked={clipOrder === 'name'}
+                  onChange={() => setClipOrder('name')}
+                  disabled={folderBusy}
+                />
+                Theo thứ tự tên (A→Z)
+              </label>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm text-dim cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={folderMuteAudio}
+                onChange={(e) => setFolderMuteAudio(e.target.checked)}
+                disabled={folderBusy}
+              />
+              Tắt tiếng các video lấy từ thư mục (không ảnh hưởng âm thanh video gốc import ở trên)
+            </label>
+
+            <div className="flex items-center gap-3 flex-wrap">
+              <button
+                type="button"
+                onClick={handleGenerateFromFolder}
+                disabled={folderBusy || !sourceFolder.trim()}
+                className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50"
+              >
+                <Scissors size={16} />
+                {folderBusy ? 'Đang tạo…' : 'Tạo video từ folder'}
+              </button>
+              {clipOrder === 'shuffle' && folderTargetDuration !== null && !folderBusy && (
+                <span className="text-xs text-dim">Bấm lại để tạo bản ngẫu nhiên khác cùng thời lượng.</span>
+              )}
+            </div>
           </section>
 
           {/* Step 3: Precise time + segment management */}

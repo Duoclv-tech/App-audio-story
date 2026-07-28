@@ -672,8 +672,9 @@ export default function ProcessorPage() {
     if (exactPollRef.current) { window.clearInterval(exactPollRef.current); exactPollRef.current = null }
     setExactPreview({ open: true, hash: null, status: 'queued', progress: 0, error: null, cached: false })
 
-    // Mirrors /start's payload shape — backend's /render-preview ignores story_id
-    // (preview is story-agnostic) but VideoProcessRequest requires it.
+    // Mirrors /start's payload shape. story_id picks the output subfolder the
+    // preview is written to (<output>/<story>/file_preview.mp4) — falls back to
+    // a generic "preview" folder when no story is loaded.
     const payload = {
       story_id: storyData.id || 'preview',
       video_source_folder: videoConfig.folder,
@@ -1155,6 +1156,16 @@ export default function ProcessorPage() {
       await axios.post(`/api/v1/video/reveal-video/${id}`)
     } catch (err: any) {
       showToast(errMessage(err, 'Không mở được thư mục chứa video.'), 'error')
+    }
+  }
+
+  // Open the OS file manager with the rendered exact-preview mp4 selected.
+  const handleOpenPreviewFolder = async () => {
+    if (!exactPreview.hash) return
+    try {
+      await axios.post(`/api/v1/video/reveal-preview?hash=${exactPreview.hash}`)
+    } catch (err: any) {
+      showToast(errMessage(err, 'Không mở được thư mục chứa file preview.'), 'error')
     }
   }
 
@@ -4213,15 +4224,6 @@ export default function ProcessorPage() {
                             <option key={p.id} value={p.id}>{p.name}</option>
                           ))}
                         </select>
-                        {ttsConfig.preset_id && (
-                          <audio
-                            key={ttsConfig.preset_id}
-                            controls
-                            preload="metadata"
-                            src={`/api/v1/tts/omnivoice/presets/${ttsConfig.preset_id}/audio`}
-                            className="w-full mt-2 h-10"
-                          />
-                        )}
                       </div>
 
                       {/* Create a new cloned voice — collapse để đỡ chiếm diện tích, click header để mở */}
@@ -7660,11 +7662,10 @@ export default function ProcessorPage() {
                   />
                   <div className="flex items-center justify-between text-xs text-dim">
                     <span>Preview render dùng đúng config hiện tại — khớp 100% với output cuối.</span>
-                    <a
-                      href={`/api/v1/video/preview-file?hash=${exactPreview.hash}`}
-                      download={`preview_${exactPreview.hash}.mp4`}
+                    <button
+                      onClick={handleOpenPreviewFolder}
                       className="bg-slate-800 text-white px-3 py-1.5 rounded hover:bg-slate-700"
-                    > Download</a>
+                    >📂 Mở thư mục</button>
                   </div>
                 </div>
               )}

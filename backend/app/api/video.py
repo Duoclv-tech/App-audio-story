@@ -12,7 +12,7 @@ import uuid
 from pathlib import Path
 from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 from loguru import logger
 
@@ -42,11 +42,13 @@ def require_localhost(request: Request) -> None:
     if host not in _LOCAL_HOSTS:
         raise HTTPException(status_code=403, detail="Localhost-only endpoint")
 
+# Exact-preview jobs. Keyed by config hash; each entry tracks status/progress
+# and the absolute path of the rendered file. The file itself is delivered next
+# to the story's other outputs (see render_preview) and is NOT auto-deleted.
 _PREVIEW_JOBS: dict = {}
 _PREVIEW_LOCK = threading.Lock()
-_PREVIEW_CACHE_DIR = paths.PREVIEW_CACHE_DIR
-_PREVIEW_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-_PREVIEW_TTL_SECONDS = 3600
+# Name of the exact-preview file inside each story's output folder.
+_PREVIEW_FILENAME = "file_preview.mp4"
 
 _AD_FIELDS = (
     "ad_flip_random", "ad_flip_all",
@@ -713,6 +715,60 @@ async def srt_content(path: str):
     return {"path": str(file), "content": text}
 
 
+# A ready-to-use SRT the user can download to try the subtitle feature. Vietnamese
+# with diacritics so it also demoes the Be Vietnam Pro font. Kept in sync with the
+# FE preview copy (SubtitlePanel.tsx SAMPLE_SRT).
+SAMPLE_SRT_CONTENT = (
+    "1\n00:00:00,000 --> 00:00:03,000\n"
+    "Chào mừng bạn đến với video của chúng tôi\n\n"
+    "2\n00:00:03,200 --> 00:00:06,500\n"
+    "Đây là dòng phụ đề mẫu tiếng Việt có dấu\n\n"
+    "3\n00:00:06,700 --> 00:00:10,000\n"
+    "Bạn có thể chỉnh font, màu sắc và hiệu ứng\n\n"
+    "4\n00:00:10,200 --> 00:00:13,500\n"
+    "Kéo phụ đề trên khung xem trước để đổi vị trí\n\n"
+    "5\n00:00:13,700 --> 00:00:17,000\n"
+    "Chúc bạn tạo được những video thật đẹp!\n"
+)
+
+
+@router.get("/sample-srt")
+async def sample_srt_download():
+    """Serve the sample SRT as an attachment (browser/dev download path)."""
+    # UTF-8 BOM so editors like Notepad render the Vietnamese text correctly.
+    body = ("﻿" + SAMPLE_SRT_CONTENT).encode("utf-8")
+    return Response(
+        content=body,
+        media_type="application/x-subrip",
+        headers={"Content-Disposition": 'attachment; filename="phu-de-mau.srt"'},
+    )
+
+
+@router.post("/sample-srt/save", dependencies=[Depends(require_localhost)])
+async def sample_srt_save():
+    """Write the sample SRT to the user's Downloads folder and reveal it.
+
+    Used by the desktop app (WebView2), where a programmatic browser download
+    does nothing — so we drop the file on disk and open Explorer with it
+    selected, mirroring how finished audio/video are delivered.
+    """
+    downloads = Path.home() / "Downloads"
+    try:
+        downloads.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        downloads = Path.home()
+    dest = downloads / "phu-de-mau.srt"
+    try:
+        dest.write_text(SAMPLE_SRT_CONTENT, encoding="utf-8-sig")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Cannot write sample SRT: {e}")
+    try:
+        _reveal_in_file_manager(str(dest))
+    except Exception as e:
+        logger.error(f"[video] reveal sample srt failed: {e}")
+    return {"path": str(dest)}
+
+
 @router.get("/sample-clip", dependencies=[Depends(require_localhost)])
 async def sample_clip(folder: str):
     """Return path to a random sample video clip from a folder"""
@@ -796,28 +852,6 @@ def _preview_config_hash(cfg: dict) -> str:
     payload = {k: cfg.get(k) for k in keys}
     raw = json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()[:16]
-
-
-def _sweep_preview_cache() -> None:
-    # Drops cache files older than the TTL, plus stale _PREVIEW_JOBS entries
-    # whose backing file is gone or whose terminal status is older than the
-    # TTL. Keeps the in-memory dict from growing unboundedly across renders.
-    now = time.time()
-    try:
-        for f in _PREVIEW_CACHE_DIR.glob("*.mp4"):
-            try:
-                if now - f.stat().st_mtime > _PREVIEW_TTL_SECONDS:
-                    f.unlink(missing_ok=True)
-            except Exception:
-                pass
-    except Exception:
-        pass
-    with _PREVIEW_LOCK:
-        for h, job in list(_PREVIEW_JOBS.items()):
-            if job.get("status") not in ("done", "failed"):
-                continue
-            if (now - job.get("started", now)) > _PREVIEW_TTL_SECONDS:
-                _PREVIEW_JOBS.pop(h, None)
 
 
 def _run_preview_render(job_hash: str, cfg: dict, output_path: str) -> None:
@@ -943,15 +977,16 @@ def _run_preview_render(job_hash: str, cfg: dict, output_path: str) -> None:
 
 
 @router.post("/render-preview")
-async def render_preview(request: schemas.VideoProcessRequest):
+async def render_preview(request: schemas.VideoProcessRequest, db: Session = Depends(get_db)):
     """Async render a 60s exact preview using the same pipeline as the final video.
 
     Returns immediately with a job hash. Poll /preview-status?hash=... to track,
-    then GET /preview-file?hash=... to download/play. If a recent (<1h) cached
-    file already exists for the same config, it is reused.
+    then GET /preview-file?hash=... to download/play. The rendered file is
+    delivered to ``<output folder>/<story>/file_preview.mp4`` — next to the
+    story's audio/video outputs — and is overwritten (not accumulated) on each
+    render, never auto-deleted. If the same config was already rendered this
+    session the existing file is reused.
     """
-    threading.Thread(target=_sweep_preview_cache, daemon=True).start()
-
     audio_path = request.audio_path
     if not audio_path:
         raise HTTPException(status_code=400, detail="audio_path is required for preview")
@@ -1021,20 +1056,31 @@ async def render_preview(request: schemas.VideoProcessRequest):
     if request.ad_flip_random or request.ad_clip_speed_jitter:
         cfg["_random_salt"] = uuid.uuid4().hex[:12]
     job_hash = _preview_config_hash(cfg)
-    output_path = str(_PREVIEW_CACHE_DIR / f"{job_hash}.mp4")
+
+    # Deliver the preview next to the story's other outputs, using the SAME
+    # subfolder the finished video uses (see video_processor.process_story_video):
+    #   <output folder>/<story>/file_preview.mp4
+    # A fixed filename means each render overwrites the previous preview instead
+    # of piling up per-config files — and nothing is ever auto-deleted.
+    from app.services.output_delivery import get_output_folder, safe_file_stem
+    story = db.query(models.Story).filter(models.Story.id == request.story_id).first()
+    sub = safe_file_stem(story.title if story and story.title else request.story_id,
+                         request.story_id)
+    out_dir = get_output_folder(db) / sub
+    out_dir.mkdir(parents=True, exist_ok=True)
+    output_path = str(out_dir / _PREVIEW_FILENAME)
 
     with _PREVIEW_LOCK:
         existing = _PREVIEW_JOBS.get(job_hash)
 
-        if os.path.exists(output_path):
-            age = time.time() - os.path.getmtime(output_path)
-            if age <= _PREVIEW_TTL_SECONDS and (existing is None or existing.get("status") == "done"):
-                _PREVIEW_JOBS[job_hash] = {
-                    "status": "done", "progress": 100, "error": None,
-                    "path": output_path, "started": time.time(),
-                    "cached": True,
-                }
-                return {"hash": job_hash, "status": "done", "cached": True}
+        # Reuse only when this exact config was already rendered to this exact
+        # path this session and the file is still there. A changed config (new
+        # hash) or a different story (different path) falls through and
+        # re-renders, overwriting file_preview.mp4.
+        if (existing and existing.get("status") == "done"
+                and existing.get("path") == output_path
+                and os.path.exists(output_path)):
+            return {"hash": job_hash, "status": "done", "cached": True}
 
         if existing and existing.get("status") in ("queued", "running"):
             return {
@@ -1044,9 +1090,24 @@ async def render_preview(request: schemas.VideoProcessRequest):
                 "cached": False,
             }
 
+        # Since the filename is fixed per story, a render already in flight for a
+        # DIFFERENT config would write the same file_preview.mp4 concurrently.
+        # Don't start a competing render — report the in-flight one instead.
+        for h, j in _PREVIEW_JOBS.items():
+            if j.get("path") == output_path and j.get("status") in ("queued", "running"):
+                return {
+                    "hash": h,
+                    "status": j["status"],
+                    "progress": j.get("progress", 0),
+                    "cached": False,
+                }
+
+        # Store the target path up front so the in-flight guard above can match
+        # it while the render runs (preview-file still 404s until the file lands,
+        # since it checks the path exists on disk).
         _PREVIEW_JOBS[job_hash] = {
             "status": "queued", "progress": 0, "error": None,
-            "path": None, "started": time.time(), "cached": False,
+            "path": output_path, "started": time.time(), "cached": False,
         }
 
     threading.Thread(
@@ -1063,10 +1124,8 @@ async def preview_status(hash: str):
     with _PREVIEW_LOCK:
         job = _PREVIEW_JOBS.get(hash)
         if job is None:
-            # Server may have restarted while a cached file is still on disk.
-            f = _PREVIEW_CACHE_DIR / f"{hash}.mp4"
-            if f.exists() and (time.time() - f.stat().st_mtime) <= _PREVIEW_TTL_SECONDS:
-                return {"status": "done", "progress": 100, "cached": True}
+            # Job is only tracked in-memory (files live in the story folder now),
+            # so after a server restart the caller just re-triggers a render.
             raise HTTPException(status_code=404, detail="Job not found")
         return {
             "status": job["status"],
@@ -1080,11 +1139,39 @@ async def preview_status(hash: str):
 
 @router.get("/preview-file")
 async def preview_file(hash: str):
-    """Serve a rendered preview mp4 by job hash."""
-    f = _PREVIEW_CACHE_DIR / f"{hash}.mp4"
-    if not f.exists():
+    """Serve a rendered preview mp4 by job hash.
+
+    The file lives in the story's output folder (``.../<story>/file_preview.mp4``);
+    the job record holds its absolute path.
+    """
+    with _PREVIEW_LOCK:
+        job = _PREVIEW_JOBS.get(hash)
+        path = job.get("path") if job else None
+    if not path or not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Preview file not found")
-    return FileResponse(str(f), media_type="video/mp4")
+    return FileResponse(str(path), media_type="video/mp4")
+
+
+@router.post("/reveal-preview", dependencies=[Depends(require_localhost)])
+async def reveal_preview_file(hash: str):
+    """Open the file manager with the rendered preview mp4 selected.
+
+    The desktop app can't trigger a programmatic download, so the preview
+    modal offers "open folder" instead — this reveals the ``file_preview.mp4``
+    that ``/preview-file`` serves, using the same job-record path.
+    """
+    with _PREVIEW_LOCK:
+        job = _PREVIEW_JOBS.get(hash)
+        path = job.get("path") if job else None
+    if not path or not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Preview file not found")
+    path = os.path.normpath(path)
+    try:
+        _reveal_in_file_manager(path)
+    except Exception as e:
+        logger.error(f"[video] reveal preview failed: {e}")
+        raise HTTPException(status_code=500, detail="Không mở được thư mục chứa file preview.")
+    return {"revealed": path}
 
 
 # --- Sticker library + upload + serve -----------------------------------------

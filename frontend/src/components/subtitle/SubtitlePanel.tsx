@@ -6,6 +6,7 @@ import {
   SubtitleSegment,
   parseSRT,
 } from './srt'
+import { hasNativeDialogs } from '../../services/nativeDialog'
 
 interface UploadResponse {
   srt_path: string
@@ -29,31 +30,6 @@ interface PanelProps {
   onSrtUploaded: (info: UploadResponse | null, segments: SubtitleSegment[] | null) => void
   availableFonts: string[]
 }
-
-// Client-side sample so the button works offline (incl. packaged desktop app),
-// with proper Vietnamese diacritics to demo the Be Vietnam Pro font.
-const SAMPLE_SRT = [
-  '1',
-  '00:00:00,000 --> 00:00:03,000',
-  'Chào mừng bạn đến với video của chúng tôi',
-  '',
-  '2',
-  '00:00:03,200 --> 00:00:06,500',
-  'Đây là dòng phụ đề mẫu tiếng Việt có dấu',
-  '',
-  '3',
-  '00:00:06,700 --> 00:00:10,000',
-  'Bạn có thể chỉnh font, màu sắc và hiệu ứng',
-  '',
-  '4',
-  '00:00:10,200 --> 00:00:13,500',
-  'Kéo phụ đề trên khung xem trước để đổi vị trí',
-  '',
-  '5',
-  '00:00:13,700 --> 00:00:17,000',
-  'Chúc bạn tạo được những video thật đẹp!',
-  '',
-].join('\n')
 
 const ANIMATION_LABELS: Record<SubtitleAnimation, string> = {
   none: 'Không hiệu ứng',
@@ -142,17 +118,31 @@ export function SubtitlePanel({
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  const handleDownloadSample = () => {
-    // BOM so editors like Notepad open the Vietnamese text as UTF-8.
-    const blob = new Blob(['﻿' + SAMPLE_SRT], { type: 'text/srt;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'phu-de-mau.srt'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+  const [savingSample, setSavingSample] = useState(false)
+
+  // Download the ready-made sample SRT. WebView2 (the packaged desktop app)
+  // can't trigger a programmatic download, so there we ask the backend to write
+  // the file into Downloads and reveal it; in a plain browser we navigate to the
+  // attachment endpoint, which downloads normally.
+  const handleDownloadSample = async () => {
+    if (hasNativeDialogs()) {
+      setSavingSample(true)
+      try {
+        await axios.post('/api/v1/video/sample-srt/save')
+        setWarning('Đã lưu phu-de-mau.srt vào thư mục Downloads (đã mở Explorer).')
+      } catch (e: any) {
+        setWarning(e?.response?.data?.detail || 'Không lưu được file mẫu.')
+      } finally {
+        setSavingSample(false)
+      }
+    } else {
+      const a = document.createElement('a')
+      a.href = '/api/v1/video/sample-srt'
+      a.download = 'phu-de-mau.srt'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    }
   }
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -218,8 +208,9 @@ export function SubtitlePanel({
             <button
               type="button"
               onClick={handleDownloadSample}
-              className="mt-2 text-[11px] text-primary-500 dark:text-primary-400 hover:underline"
-            >⬇ Tải SRT mẫu</button>
+              disabled={savingSample}
+              className="mt-2 text-[11px] text-primary-500 dark:text-primary-400 hover:underline disabled:opacity-50"
+            >{savingSample ? 'Đang lưu…' : '⬇ Tải SRT mẫu'}</button>
           </>
         )}
         <input

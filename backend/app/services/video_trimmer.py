@@ -91,6 +91,20 @@ def _escape_drawtext(text: str) -> str:
     return text
 
 
+def _escape_fontfile(path) -> str:
+    """Escape a filesystem path for a drawtext ``fontfile='...'`` value.
+
+    On Windows a raw path like ``C:\\WINDOWS\\Fonts\\arialbd.ttf`` breaks the
+    filtergraph parser: backslashes are escape chars and the ``C:`` colon is an
+    option separator, so ffmpeg fails with "Invalid argument". Use forward
+    slashes and escape the drive-letter colon (the value is wrapped in single
+    quotes by the caller, so spaces are fine).
+    """
+    p = str(path).replace("\\", "/")
+    p = p.replace(":", "\\:")
+    return p
+
+
 _WM_POSITION_MAP = {
     "top-left":      ("{m}",              "{m}"),
     "top-center":    ("(w-text_w)/2",     "{m}"),
@@ -143,7 +157,7 @@ def _drawtext_expr(wm: dict) -> str:
         y_expr = y_tpl.format(m=margin)
 
     parts = [
-        f"fontfile='{FONT_PATH}'",
+        f"fontfile='{_escape_fontfile(FONT_PATH)}'",
         f"text='{escaped}'",
         f"fontsize={font_size}",
         f"fontcolor={color_ff}@{opacity:.2f}",
@@ -340,6 +354,7 @@ def _build_multiseg_filter_complex(params: dict, segments: list, video_w: int, v
     crop_mode = params.get("crop_mode", "crop")
     speed = params.get("speed", 1.0)
     mute = params.get("mute", False)
+    volume = params.get("volume", 1.0)
     fade = params.get("fade", False)
     wm_enabled, wm_rotation = _watermark_active(params)
 
@@ -427,6 +442,11 @@ def _build_multiseg_filter_complex(params: dict, segments: list, video_w: int, v
     else:
         fc_parts.append(f"{concat_inputs}concat=n={n}:v=1:a=1[vc][ac]")
         cur_v, cur_a = "vc", "ac"
+        # Volume must live inside the complex graph — a simple `-af` filter on a
+        # complex-graph output is rejected by ffmpeg ("Invalid argument").
+        if volume != 1.0:
+            fc_parts.append(f"[{cur_a}]volume={volume:.3f}[avol]")
+            cur_a = "avol"
 
     if fade and total_output_duration > 2:
         fc_parts.append(
@@ -563,9 +583,9 @@ def trim(input_path: str, output_path: str, params: dict, progress_cb: Optional[
         else:
             if audio_out_label:
                 cmd += ["-map", f"[{audio_out_label}]"]
-            # Apply volume/speed audio filters if needed
-            if audio_filters:
-                cmd += ["-af", ",".join(audio_filters)]
+            # NOTE: volume + speed (atempo) are applied INSIDE the complex graph
+            # (per-segment atempo, post-concat volume). A simple `-af` here would
+            # target a complex-graph output, which ffmpeg rejects. So no -af.
             cmd += ["-c:a", "aac", "-b:a", "192k"]
 
         cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p"]

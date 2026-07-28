@@ -266,6 +266,9 @@ class TrimFromFolderRequest(BaseModel):
     height: int = 1080
     clip_order: str = "shuffle"  # "shuffle" (random) | "name" (A→Z)
     clip_seed: Optional[int] = None
+    # Mute the folder clips' audio (default on). Only affects this generated
+    # source video — the original imported video's audio is untouched.
+    mute_audio: bool = True
 
 
 @router.post("/from-folder", response_model=TrimUploadResponse)
@@ -322,7 +325,7 @@ async def trim_from_folder(request: TrimFromFolderRequest):
             clip_paths,
             input_path,
             resolution=resolution,
-            keep_audio=True,
+            keep_audio=not request.mute_audio,
             max_duration=request.target_duration,
         )
 

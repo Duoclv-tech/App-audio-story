@@ -1275,11 +1275,44 @@ class VideoProcessor:
 
         # Build per-style chain ending in [viz0] sized exactly vw x vh.
         if style_l == "bars":
-            # showfreqs (~64 bars across width). ascale=cbrt smooths motion.
-            viz_chain = (
-                f"[1:a]showfreqs=s={vw}x{vh}:mode={bars_mode_l}:ascale=cbrt:"
-                f"fscale=log:win_size=2048:colors={c1}|{c2},format=rgba[viz0]"
-            )
+            if bars_mode_l == "bar":
+                # Chunky vertical-gradient bars matching the editor preview:
+                # render N white bars, blockify them with a nearest-neighbour
+                # upscale, carve gaps between bars with geq, then use that as an
+                # alpha mask over a color1(bottom)->color2(top) gradient. This
+                # replaces flat per-channel colouring (which looked nothing like
+                # the preview) with the promised vertical gradient.
+                nbars = 32
+                cell = vw / nbars
+                # ~5% gap per side -> ~90% bar fill, matching the preview's
+                # justify-around spacing (thin gaps, wide bars).
+                edge = cell * 0.05
+                cell_hi = cell - edge
+                gap_expr = (
+                    f"p(X\\,Y)*between(mod(X\\,{cell:.3f})\\,"
+                    f"{edge:.3f}\\,{cell_hi:.3f})"
+                )
+                # dynaudnorm lifts quiet passages so bars stay lively/full and
+                # ascale=log pushes them tall enough to reach the gradient's
+                # top color — without this, voice audio kept the bars short and
+                # stuck in the bottom (color1) band, unlike the preview.
+                viz_chain = (
+                    f"[1:a]dynaudnorm,showfreqs=s={nbars}x{vh}:mode=bar:"
+                    f"ascale=log:fscale=log:win_size=2048:colors=white:rate=30,"
+                    f"scale={vw}:{vh}:flags=neighbor,format=gray,"
+                    f"geq=lum={gap_expr}[barmask];"
+                    f"gradients=s={vw}x{vh}:c0={c1}:c1={c2}:x0=0:y0={vh}:"
+                    f"x1=0:y1=0:speed=0:r=30,format=rgba[grad];"
+                    f"[grad][barmask]alphamerge,format=rgba[viz0]"
+                )
+            else:
+                # line / dot: single-colour thin marks (matches the preview,
+                # which draws these modes in color1 only).
+                viz_chain = (
+                    f"[1:a]showfreqs=s={vw}x{vh}:mode={bars_mode_l}:"
+                    f"ascale=cbrt:fscale=log:win_size=2048:colors={c1},"
+                    f"format=rgba[viz0]"
+                )
         elif style_l == "waveform":
             if waveform_mirror:
                 # Render at half-height, vstack with vflipped copy for symmetric look.

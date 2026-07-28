@@ -29,6 +29,8 @@ class SubtitleStyle:
     x: float = 0.5         # center anchor, 0..1 of frame
     y: float = 0.85
     opacity: float = 1.0
+    max_width: float = 1.0  # wrap box width as a fraction of frame (0..1)
+    font_file: str = ""     # abs path to the TTF, used to measure wrap width
 
 
 # ASS numpad-style alignment used as anchor when \pos is given.
@@ -118,6 +120,42 @@ def _typewriter_body(text: str, step_ms: int = 50) -> str:
     return "".join(parts)
 
 
+def _measure_fn(font_file: str, font_size: int):
+    """Return a callable str->width_px. Uses the real TTF via Pillow when
+    available; otherwise falls back to a coarse per-char estimate so wrapping
+    still happens (just less precisely) when the font can't be loaded."""
+    try:
+        from PIL import ImageFont
+        font = ImageFont.truetype(font_file or "DejaVuSans.ttf", font_size)
+        return lambda s: font.getlength(s)
+    except Exception:
+        # ~0.5em average glyph advance — rough but keeps long lines wrapping.
+        avg = font_size * 0.5
+        return lambda s: len(s) * avg
+
+
+def _wrap_text(text: str, font_file: str, font_size: int, max_width_px: int) -> str:
+    """Re-wrap `text` so no line exceeds `max_width_px`, preserving any manual
+    line breaks already present. Words longer than the limit are left intact
+    (overflow) rather than split mid-word."""
+    if max_width_px <= 0:
+        return text
+    measure = _measure_fn(font_file, font_size)
+    out_lines: List[str] = []
+    for para in text.split("\n"):
+        words = para.split(" ")
+        line = ""
+        for w in words:
+            candidate = w if not line else f"{line} {w}"
+            if line and measure(candidate) > max_width_px:
+                out_lines.append(line)
+                line = w
+            else:
+                line = candidate
+        out_lines.append(line)
+    return "\n".join(out_lines)
+
+
 def _build_dialogue_text(
     animation: str, px: int, py: int, anchor: int, text: str
 ) -> str:
@@ -184,6 +222,15 @@ def srt_to_ass(
     px = int(round(max(0.0, min(1.0, style.x)) * play_res_x))
     py = int(round(max(0.0, min(1.0, style.y)) * play_res_y))
     anchor = _ANCHOR_FOR_ALIGN.get(style.align, 5)
+
+    # Re-wrap each line to the chosen box width so the burned-in text breaks at
+    # the same place the live preview does (browser wraps a max-width box; here
+    # we measure with the same font + size and insert hard breaks to match).
+    wrap_px = int(round(max(0.05, min(1.0, style.max_width)) * play_res_x))
+    segments = [
+        (s, e, _wrap_text(t, style.font_file, style.font_size, wrap_px))
+        for s, e, t in segments
+    ]
 
     primary = _hex_to_ass_color(style.color, style.opacity)
     outline = _hex_to_ass_color(style.outline_color, 1.0)

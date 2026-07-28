@@ -339,8 +339,8 @@ export function SubtitlePanel({
       </div>
 
       <div className="text-[11px] text-dim">
-        Vị trí: X {Math.round(style.subtitle_x * 100)}% · Y {Math.round(style.subtitle_y * 100)}%
-        <span className="ml-1 text-primary-500 dark:text-primary-400">(kéo phụ đề trên preview để chỉnh)</span>
+        Vị trí: X {Math.round(style.subtitle_x * 100)}% · Y {Math.round(style.subtitle_y * 100)}% · Rộng {Math.round(style.subtitle_max_width * 100)}%
+        <span className="ml-1 text-primary-500 dark:text-primary-400">(kéo chữ để di chuyển · kéo góc đổi cỡ · kéo cạnh để xuống dòng)</span>
       </div>
     </div>
   )

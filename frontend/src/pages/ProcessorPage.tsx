@@ -333,6 +333,7 @@ export default function ProcessorPage() {
     subtitle_bold: boolean; subtitle_italic: boolean;
     subtitle_align: 'left'|'center'|'right';
     subtitle_x: number; subtitle_y: number; subtitle_opacity: number;
+    subtitle_max_width: number;
     fade_in: number; fade_out: number;
     mute_source_videos: boolean;
     clip_order: 'shuffle'|'name';
@@ -562,6 +563,7 @@ export default function ProcessorPage() {
   const [antiDetectionOpen, setAntiDetectionOpen] = useState(false)
   const [videoTab, setVideoTab] = useState<'basic' | 'effects' | 'antidetect'>('basic')
   const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null)
+  const [subtitleSelected, setSubtitleSelected] = useState<boolean>(false)
   type ClipInfo = { path: string; name: string; duration: number }
   const [clipList, setClipList] = useState<ClipInfo[]>([])
   const [currentClipIdx, setCurrentClipIdx] = useState<number>(0)
@@ -724,6 +726,7 @@ export default function ProcessorPage() {
       subtitle_x: videoConfig.subtitle_x,
       subtitle_y: videoConfig.subtitle_y,
       subtitle_opacity: videoConfig.subtitle_opacity,
+      subtitle_max_width: videoConfig.subtitle_max_width,
       fade_in: videoConfig.fade_in,
       fade_out: videoConfig.fade_out,
       mute_source_videos: videoConfig.mute_source_videos,
@@ -1640,6 +1643,7 @@ export default function ProcessorPage() {
         subtitle_x: videoConfig.subtitle_x,
         subtitle_y: videoConfig.subtitle_y,
         subtitle_opacity: videoConfig.subtitle_opacity,
+        subtitle_max_width: videoConfig.subtitle_max_width,
         fade_in: videoConfig.fade_in,
         fade_out: videoConfig.fade_out,
         mute_source_videos: videoConfig.mute_source_videos,
@@ -6053,6 +6057,7 @@ export default function ProcessorPage() {
                       subtitle_x: videoConfig.subtitle_x,
                       subtitle_y: videoConfig.subtitle_y,
                       subtitle_opacity: videoConfig.subtitle_opacity,
+                      subtitle_max_width: videoConfig.subtitle_max_width,
                     }}
                     onChange={(patch) => setVideoConfig(prev => ({ ...prev, ...patch }))}
                     srtPath={videoConfig.subtitle_srt_path}
@@ -6363,6 +6368,7 @@ export default function ProcessorPage() {
               <div ref={previewColRef} className="flex flex-col items-center">
                 <div
                   ref={previewFrameRef}
+                  onMouseDown={() => setSubtitleSelected(false)}
                   className="relative overflow-hidden bg-black shadow-lg"
                   style={{
                     width: previewW,
@@ -6868,25 +6874,8 @@ export default function ProcessorPage() {
                       </span>
                     )
                   })()}
-                  {/* Subtitle overlay (draggable; live preview from parsed SRT) */}
-                  {videoConfig.subtitle_srt_path && subtitleSegments && (
-                    <div
-                      onPointerDown={startWatermarkDrag('subtitle')}
-                      style={{
-                        position: 'absolute',
-                        left: `${videoConfig.subtitle_x * 100}%`,
-                        top: `${videoConfig.subtitle_y * 100}%`,
-                        transform: 'translate(-50%, -50%)',
-                        cursor: 'move',
-                        touchAction: 'none',
-                        // Invisible 60×30 hit-area centered on the anchor — gives the
-                        // user a stable handle even between subtitle segments.
-                        width: 60, height: 30,
-                        marginLeft: -30, marginTop: -15,
-                        outline: '1px dashed rgba(255,255,255,0.25)',
-                      }}
-                    />
-                  )}
+                  {/* Subtitle overlay — grab the text to move, drag the corner to
+                      resize the font, drag a side edge to change wrap width. */}
                   {videoConfig.subtitle_srt_path && subtitleSegments && (
                     <SubtitleOverlay
                       segments={subtitleSegments}
@@ -6904,11 +6893,18 @@ export default function ProcessorPage() {
                         subtitle_x: videoConfig.subtitle_x,
                         subtitle_y: videoConfig.subtitle_y,
                         subtitle_opacity: videoConfig.subtitle_opacity,
+                        subtitle_max_width: videoConfig.subtitle_max_width,
                       }}
                       audioRef={previewAudioRef}
                       currentTime={previewCurrentTime}
                       previewFrameW={previewW}
+                      previewFrameH={previewH}
                       outputW={parseInt(videoConfig.resolution.split('x')[0])}
+                      selected={subtitleSelected}
+                      onSelect={() => { setSubtitleSelected(true); setSelectedStickerId(null) }}
+                      onMove={(x, y) => setVideoConfig(prev => ({ ...prev, subtitle_x: x, subtitle_y: y }))}
+                      onResizeFont={(size) => setVideoConfig(prev => ({ ...prev, subtitle_font_size: size }))}
+                      onResizeWidth={(w) => setVideoConfig(prev => ({ ...prev, subtitle_max_width: w }))}
                     />
                   )}
                   {videoConfig.stickers.length > 0 && (

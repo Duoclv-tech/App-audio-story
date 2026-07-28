@@ -14,10 +14,20 @@ interface OverlayProps {
   // typewriter effect). Falls back to `currentTime` prop if ref is null.
   audioRef?: React.RefObject<HTMLAudioElement | null>
   currentTime?: number
-  // Preview frame width in CSS px and the target output width — used to scale
-  // the on-screen font size so what you see matches the burned-in result.
+  // Preview frame size in CSS px and the target output width — used to scale
+  // the on-screen font size (and convert drag deltas) so what you see matches
+  // the burned-in result.
   previewFrameW: number
+  previewFrameH?: number
   outputW: number
+  // Direct-manipulation hooks. When provided the subtitle becomes grabbable:
+  // click to select, drag the text to move, drag the corner to change font
+  // size, drag a side edge to change the wrap-box width (forces line breaks).
+  selected?: boolean
+  onSelect?: () => void
+  onMove?: (x: number, y: number) => void        // 0..1 anchor within frame
+  onResizeFont?: (fontSize: number) => void       // output px (16..200)
+  onResizeWidth?: (maxWidth: number) => void       // 0..1 fraction of frame
 }
 
 // Strip the trailing " (descriptor)" Be Vietnam Pro etc. ship in their key.
@@ -79,7 +89,9 @@ function computeAnimState(
 }
 
 export function SubtitleOverlay({
-  segments, style, audioRef, currentTime, previewFrameW, outputW,
+  segments, style, audioRef, currentTime,
+  previewFrameW, previewFrameH, outputW,
+  selected, onSelect, onMove, onResizeFont, onResizeWidth,
 }: OverlayProps) {
   // Local ticker — refreshed via rAF whenever audio is playing, so we can
   // recompute animation state at ~display refresh without dragging the parent
@@ -104,22 +116,28 @@ export function SubtitleOverlay({
 
   if (!segments || segments.length === 0) return null
 
+  const interactive = !!(onMove || onSelect)
+
   const t = audioRef?.current
     ? audioRef.current.currentTime
     : (currentTime ?? 0)
 
   const seg = findActiveSegment(segments, t)
-  if (!seg) return null
+  // Between segments (or paused before the first line) there's no active text.
+  // For pure display we render nothing; while editing we keep a dim guide (the
+  // first line) so the box stays visible and grabbable for positioning.
+  if (!seg && !interactive) return null
 
-  const tInSeg = t - seg.start
-  const segDuration = seg.end - seg.start
-  const anim = computeAnimState(style.subtitle_animation, tInSeg, segDuration, seg.text.length)
+  const anim = seg
+    ? computeAnimState(style.subtitle_animation, t - seg.start, seg.end - seg.start, seg.text.length)
+    : { opacity: 0.4, scaleX: 1, scaleY: 1, translateY: 0, charsToShow: 0 }
 
   // Scale font size from output px to preview px so on-screen size mirrors the
   // burned-in result.
   const scale = outputW > 0 ? previewFrameW / outputW : 1
   const fontPx = Math.max(8, Math.round(style.subtitle_font_size * scale))
   const outlinePx = Math.max(0, Math.round(style.subtitle_outline_width * scale))
+  const frameH = previewFrameH && previewFrameH > 0 ? previewFrameH : previewFrameW
 
   // Build text-shadow for outline (4 directions, layered for thickness).
   const stroke = (px: number, color: string): string => {
@@ -149,14 +167,50 @@ export function SubtitleOverlay({
     : style.subtitle_align === 'right' ? '-100%'
     : '-50%'
 
-  const text = style.subtitle_animation === 'typewriter'
-    ? seg.text.slice(0, anim.charsToShow)
-    : seg.text
+  const text = !seg
+    ? (segments[0]?.text ?? '')
+    : style.subtitle_animation === 'typewriter'
+      ? seg.text.slice(0, anim.charsToShow)
+      : seg.text
 
   const fontKey = style.subtitle_font
   const fontFamily = fontKey.includes('system default')
     ? 'Arial, sans-serif'
     : `'${fontFamilyFromKey(fontKey)}', Arial, sans-serif`
+
+  // Wrap-box width in preview px. The browser wraps the text within this; the
+  // backend re-wraps to the same fraction of the output width so breaks match.
+  const maxWidthFrac = Math.max(0.05, Math.min(1, style.subtitle_max_width ?? 1))
+  const boxWidthPx = Math.max(24, maxWidthFrac * previewFrameW)
+
+  // Shared drag lifecycle (mouse). Delta-based so no grab-snap; converts px to
+  // fractions/output-px using the known preview/output sizes (no frame rect).
+  const startDrag = (
+    e: React.MouseEvent,
+    onMoveDelta: (dx: number, dy: number) => void,
+  ) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const startY = e.clientY
+    const move = (ev: MouseEvent) => onMoveDelta(ev.clientX - startX, ev.clientY - startY)
+    const up = () => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+    }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  }
+
+  const HANDLE = '#C67E15'
+  const handleBase: React.CSSProperties = {
+    position: 'absolute',
+    background: HANDLE,
+    border: '2px solid white',
+    borderRadius: 8,
+    zIndex: 8,
+    pointerEvents: 'auto',
+  }
 
   return (
     <div
@@ -164,26 +218,105 @@ export function SubtitleOverlay({
         position: 'absolute',
         left: `${style.subtitle_x * 100}%`,
         top: `${style.subtitle_y * 100}%`,
-        transform: `translate(${tx}, -50%) translateY(${anim.translateY}px) scale(${anim.scaleX}, ${anim.scaleY})`,
-        transformOrigin: 'center center',
-        opacity: anim.opacity * style.subtitle_opacity,
-        fontFamily,
-        fontSize: fontPx,
-        color: style.subtitle_color,
-        textShadow,
-        fontWeight: style.subtitle_bold ? 700 : 400,
-        fontStyle: style.subtitle_italic ? 'italic' : 'normal',
-        textAlign: style.subtitle_align as any,
-        lineHeight: 1.2,
-        whiteSpace: 'pre-line',
+        transform: `translate(${tx}, -50%)`,
+        width: boxWidthPx,
+        // The box itself is click-through; only the text + handles grab, so a
+        // wide wrap-box doesn't block dragging clips behind the empty margins.
         pointerEvents: 'none',
         userSelect: 'none',
-        textRendering: 'geometricPrecision',
-        // Outline preview hint (subtle border; doesn't affect the burned output).
-        padding: '2px 6px',
+        touchAction: 'none',
+        outline: selected ? `2px dashed ${HANDLE}` : 'none',
+        outlineOffset: 4,
+        zIndex: 6,
       }}
     >
-      {text}
+      <div
+        onMouseDown={interactive ? (e) => {
+          onSelect?.()
+          if (!onMove) return
+          const ox = style.subtitle_x
+          const oy = style.subtitle_y
+          startDrag(e, (dx, dy) => {
+            const nx = Math.max(0, Math.min(1, ox + dx / previewFrameW))
+            const ny = Math.max(0, Math.min(1, oy + dy / frameH))
+            onMove(nx, ny)
+          })
+        } : undefined}
+        style={{
+          width: '100%',
+          transform: `translateY(${anim.translateY}px) scale(${anim.scaleX}, ${anim.scaleY})`,
+          transformOrigin: 'center center',
+          opacity: anim.opacity * style.subtitle_opacity,
+          fontFamily,
+          fontSize: fontPx,
+          color: style.subtitle_color,
+          textShadow,
+          fontWeight: style.subtitle_bold ? 700 : 400,
+          fontStyle: style.subtitle_italic ? 'italic' : 'normal',
+          textAlign: style.subtitle_align as any,
+          lineHeight: 1.2,
+          whiteSpace: 'pre-line',
+          overflowWrap: 'break-word',
+          wordBreak: 'break-word',
+          pointerEvents: interactive ? 'auto' : 'none',
+          cursor: onMove ? 'move' : 'default',
+          userSelect: 'none',
+          textRendering: 'geometricPrecision',
+          padding: '2px 6px',
+        }}
+      >
+        {text}
+      </div>
+
+      {selected && onResizeWidth && (
+        <>
+          {/* Left / right edge handles — drag to change the wrap-box width so
+              the text breaks into more or fewer lines. */}
+          {(['left', 'right'] as const).map(side => (
+            <div
+              key={side}
+              onMouseDown={(e) => {
+                const orig = maxWidthFrac
+                const sign = side === 'right' ? 1 : -1
+                startDrag(e, (dx) => {
+                  // Symmetric about the anchor → moving one edge grows both.
+                  const next = orig + sign * 2 * (dx / previewFrameW)
+                  onResizeWidth(Math.max(0.1, Math.min(1, next)))
+                })
+              }}
+              title="Kéo để đổi bề rộng (xuống dòng)"
+              style={{
+                ...handleBase,
+                top: '50%',
+                [side]: -7,
+                marginTop: -7,
+                width: 14, height: 14,
+                cursor: 'ew-resize',
+              }}
+            />
+          ))}
+        </>
+      )}
+
+      {selected && onResizeFont && (
+        <div
+          onMouseDown={(e) => {
+            const orig = style.subtitle_font_size
+            startDrag(e, (dx, dy) => {
+              // Down-right grows; convert avg preview-px delta to output px.
+              const deltaOut = ((dx + dy) / 2) / (scale || 1)
+              onResizeFont(Math.max(16, Math.min(200, Math.round(orig + deltaOut))))
+            })
+          }}
+          title="Kéo để đổi cỡ chữ"
+          style={{
+            ...handleBase,
+            right: -8, bottom: -8,
+            width: 16, height: 16,
+            cursor: 'nwse-resize',
+          }}
+        />
+      )}
     </div>
   )
 }

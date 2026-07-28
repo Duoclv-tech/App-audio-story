@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Scissors, Play, RotateCcw, Plus, Trash2, Upload, X } from 'lucide-react'
+import { Scissors, Play, RotateCcw, Plus, Trash2, Upload, X, FolderOpen } from 'lucide-react'
 import UploadZone from '../components/trim/UploadZone'
 import VideoPreview from '../components/trim/VideoPreview'
 import Waveform from '../components/trim/Waveform'
@@ -12,7 +12,7 @@ import {
   fetchWaveform,
   startTrim,
   openProgressStream,
-  getDownloadUrl,
+  revealOutput,
   getVideoUrl,
   checkFileExists,
   clearTemp,
@@ -162,6 +162,10 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
   // affects the folder-generated video — the original imported video's audio
   // (kept via the Export "mute" toggle) is untouched.
   const [folderMuteAudio, setFolderMuteAudio] = useState(true)
+  // Mute the ORIGINAL imported video's audio when generating from folder.
+  // Default off => the original narration is muxed onto the folder background
+  // so the folder clips act purely as visuals.
+  const [muteOriginalAudio, setMuteOriginalAudio] = useState(false)
   const [folderBusy, setFolderBusy] = useState(false)
   // The target length to fill — captured from the ORIGINAL imported video so it
   // stays fixed across re-shuffles (the generated clip replaces `metadata`).
@@ -495,6 +499,12 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
         clip_order: clipOrder,
         clip_seed: seed,
         mute_audio: folderMuteAudio,
+        // Carry the currently-loaded video's audio onto the new background so
+        // the original narration survives (unless the user chose to mute it).
+        // On re-shuffles prevFileId already holds the muxed narration, so it
+        // keeps flowing through each regeneration.
+        original_file_id: prevFileId,
+        mute_original_audio: muteOriginalAudio,
       })
       if (fileUrl.startsWith('blob:')) URL.revokeObjectURL(fileUrl)
       setFolderTargetDuration(target)
@@ -824,7 +834,8 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
               <p className="text-sm text-dim mt-1">
                 Chọn ngẫu nhiên các video trong thư mục, nối lại và cắt đúng{' '}
                 <b>{(folderTargetDuration ?? metadata.duration).toFixed(1)}s</b>{' '}
-                (thời lượng video gốc) — thay cho video hiện tại.
+                (thời lượng video gốc) làm <b>nền hình</b> — mặc định vẫn giữ{' '}
+                <b>tiếng của video gốc</b>.
               </p>
             </div>
 
@@ -905,7 +916,17 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
                 onChange={(e) => setFolderMuteAudio(e.target.checked)}
                 disabled={folderBusy}
               />
-              Tắt tiếng các video lấy từ thư mục (không ảnh hưởng âm thanh video gốc import ở trên)
+              Tắt tiếng các video lấy từ thư mục (chỉ dùng làm nền hình)
+            </label>
+
+            <label className="flex items-center gap-2 text-sm text-dim cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={muteOriginalAudio}
+                onChange={(e) => setMuteOriginalAudio(e.target.checked)}
+                disabled={folderBusy}
+              />
+              Tắt âm thanh của video gốc import (mặc định giữ tiếng gốc, ghép vào nền mới)
             </label>
 
             <div className="flex items-center gap-3 flex-wrap">
@@ -1088,13 +1109,20 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
                   </p>
                 )}
                 {processStatus === 'completed' && jobId && (
-                  <a
-                    href={getDownloadUrl(jobId)}
-                    download={outputFilename}
-                    className="text-sm text-primary-600 dark:text-primary-400 hover:underline"
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await revealOutput(jobId)
+                      } catch (e: any) {
+                        alert(e?.response?.data?.detail || 'Không mở được thư mục chứa file.')
+                      }
+                    }}
+                    className="mt-2 flex items-center gap-2 text-sm text-primary-600 dark:text-primary-400 hover:underline"
                   >
-                    Tải về trình duyệt
-                  </a>
+                    <FolderOpen size={16} />
+                    Mở thư mục chứa file
+                  </button>
                 )}
               </div>
             )}

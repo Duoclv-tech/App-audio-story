@@ -21,6 +21,7 @@ export interface SubtitleStyle {
   subtitle_x: number  // 0..1
   subtitle_y: number  // 0..1
   subtitle_opacity: number
+  subtitle_max_width: number  // 0..1 — wrap box width as fraction of frame
 }
 
 export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
@@ -37,6 +38,7 @@ export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
   subtitle_x: 0.5,
   subtitle_y: 0.85,
   subtitle_opacity: 1.0,
+  subtitle_max_width: 0.9,
 }
 
 export interface SubtitleSegment {

@@ -126,8 +126,14 @@ export interface FromFolderRequest {
   height: number
   clip_order: string
   clip_seed?: number | null
-  /** Mute audio of the folder clips (does not affect the original video). */
+  /** Mute audio of the folder clips (visual background only). */
   mute_audio?: boolean
+  /** file_id of the currently-loaded video whose audio should be muxed onto
+   *  the generated background so the original narration is preserved. */
+  original_file_id?: string | null
+  /** When false (default) the original imported video's audio is kept (muxed
+   *  onto the folder background); when true the output drops the original audio. */
+  mute_original_audio?: boolean
 }
 
 /** Randomly concat clips from a folder into a source video of the given
@@ -170,6 +176,10 @@ export function openProgressStream(
 
 export function getDownloadUrl(jobId: string): string {
   return `${BASE}/download/${jobId}`
+}
+
+export async function revealOutput(jobId: string): Promise<void> {
+  await axios.post(`${BASE}/reveal/${jobId}`)
 }
 
 export function getVideoUrl(fileId: string): string {

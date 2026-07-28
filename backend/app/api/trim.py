@@ -5,17 +5,19 @@ import asyncio
 import json
 import os
 import shutil
+import subprocess
 import time
 import uuid
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
 from loguru import logger
 from pydantic import BaseModel
 
 from app import paths
+from app.api.video import _reveal_in_file_manager, require_localhost
 from app.database import SessionLocal
 from app.services.output_delivery import deliver_final, get_output_folder
 from app.services.video_trimmer import (
@@ -266,9 +268,17 @@ class TrimFromFolderRequest(BaseModel):
     height: int = 1080
     clip_order: str = "shuffle"  # "shuffle" (random) | "name" (A→Z)
     clip_seed: Optional[int] = None
-    # Mute the folder clips' audio (default on). Only affects this generated
-    # source video — the original imported video's audio is untouched.
+    # Mute the folder clips' audio (default on). Only affects the visual clips
+    # pulled from the folder, not the original imported video's audio.
     mute_audio: bool = True
+    # file_id of the currently-loaded video whose audio should be muxed onto the
+    # generated background (so the folder clips become pure visuals while the
+    # original narration/voice is preserved). None => no original audio to keep.
+    original_file_id: Optional[str] = None
+    # When False (default) the original imported video's audio is muxed onto the
+    # generated background. When True the output is left with only the folder
+    # clips' audio (or silent if those are muted too).
+    mute_original_audio: bool = False
 
 
 @router.post("/from-folder", response_model=TrimUploadResponse)
@@ -339,6 +349,55 @@ async def trim_from_folder(request: TrimFromFolderRequest):
     if not result.get("success"):
         shutil.rmtree(dest_dir, ignore_errors=True)
         raise HTTPException(status_code=500, detail=result.get("error", "Concat failed"))
+
+    # Preserve the original imported video's audio: the folder clips are only a
+    # visual background, so unless the user opted to mute it, mux the original
+    # audio onto the freshly-concatenated video. When the folder clips kept their
+    # own audio (mute_audio=False) both tracks are mixed; otherwise the original
+    # audio simply replaces the (silent) folder track.
+    if not request.mute_original_audio and request.original_file_id:
+        orig_dir = TRIM_TEMP_DIR / request.original_file_id
+        # The source may have been imported with any container extension, so
+        # resolve the actual input.* file rather than assuming .mp4.
+        orig_matches = sorted(orig_dir.glob("input.*")) if orig_dir.exists() else []
+        orig_path = orig_matches[0] if orig_matches else None
+        try:
+            orig_has_audio = bool(orig_path and probe(str(orig_path)).get("audio_codec"))
+        except Exception:
+            orig_has_audio = False
+        if orig_has_audio:
+            try:
+                concat_has_audio = bool(probe(input_path).get("audio_codec"))
+            except Exception:
+                concat_has_audio = False
+            muxed = str(dest_dir / "muxed.mp4")
+            if concat_has_audio:
+                # Both the folder background and the original video carry audio —
+                # mix them, capping to the (background) video length.
+                mux_cmd = [
+                    "ffmpeg", "-y", "-i", input_path, "-i", str(orig_path),
+                    "-filter_complex",
+                    "[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=0[aout]",
+                    "-map", "0:v:0", "-map", "[aout]",
+                    "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest",
+                    muxed,
+                ]
+            else:
+                # Background is silent — carry over the original audio as-is.
+                mux_cmd = [
+                    "ffmpeg", "-y", "-i", input_path, "-i", str(orig_path),
+                    "-map", "0:v:0", "-map", "1:a:0",
+                    "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest",
+                    muxed,
+                ]
+            proc = subprocess.run(mux_cmd, capture_output=True, text=True)
+            if proc.returncode == 0 and os.path.exists(muxed):
+                os.replace(muxed, input_path)
+            else:
+                logger.warning(
+                    f"[trim] mux original audio failed (keeping muted background): "
+                    f"{proc.stderr[-500:] if proc.stderr else 'unknown error'}"
+                )
 
     try:
         meta = probe(input_path)
@@ -490,6 +549,36 @@ async def download_output(job_id: str):
         media_type="video/mp4",
         filename=filename,
     )
+
+
+@router.post("/reveal/{job_id}")
+async def reveal_output(job_id: str, _: None = Depends(require_localhost)):
+    """Open the OS file manager with the trimmed file selected.
+
+    The desktop app already saves the finished MP4 to the user's output folder,
+    so "download" is really "show me where it is" — and WebView2 can't trigger a
+    programmatic blob download anyway. Reveal the file selected in Explorer.
+
+    Gated to localhost like the other reveal endpoints: it spawns an Explorer
+    subprocess on the host, which must not be reachable if API_HOST=0.0.0.0.
+    """
+    if job_id not in _jobs:
+        raise HTTPException(status_code=404, detail="job_id not found")
+
+    job = _jobs[job_id]
+    if job.status != "completed":
+        raise HTTPException(status_code=400, detail=f"Job not completed (status={job.status})")
+
+    if not job.output_path or not Path(job.output_path).exists():
+        raise HTTPException(status_code=404, detail="File đã bị xóa hoặc di chuyển khỏi máy.")
+
+    path = os.path.normpath(job.output_path)
+    try:
+        _reveal_in_file_manager(path)
+    except Exception as e:
+        logger.error(f"[trim] reveal output failed: {e}")
+        raise HTTPException(status_code=500, detail="Không mở được thư mục chứa file.")
+    return {"revealed": path}
 
 
 @router.post("/clear/{file_id}")

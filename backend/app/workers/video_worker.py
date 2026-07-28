@@ -87,6 +87,7 @@ async def process_video_task(
         subtitle_x = config.get("subtitle_x", 0.5)
         subtitle_y = config.get("subtitle_y", 0.85)
         subtitle_opacity = config.get("subtitle_opacity", 1.0)
+        subtitle_max_width = config.get("subtitle_max_width", 0.9)
         fade_in = config.get("fade_in", 0.0)
         fade_out = config.get("fade_out", 0.0)
         mute_source_videos = config.get("mute_source_videos", True)
@@ -116,6 +117,7 @@ async def process_video_task(
         visualizer_bg_opacity = config.get("visualizer_bg_opacity", 0.3)
         visualizer_spectrum_preset = config.get("visualizer_spectrum_preset", "rainbow")
         visualizer_bars_mode = config.get("visualizer_bars_mode", "bar")
+        visualizer_bars_mirror = config.get("visualizer_bars_mirror", False)
         visualizer_waveform_mode = config.get("visualizer_waveform_mode", "cline")
         visualizer_waveform_mirror = config.get("visualizer_waveform_mirror", False)
         stickers = config.get("stickers") or []
@@ -188,6 +190,7 @@ async def process_video_task(
             subtitle_x=subtitle_x,
             subtitle_y=subtitle_y,
             subtitle_opacity=subtitle_opacity,
+            subtitle_max_width=subtitle_max_width,
             fade_in=fade_in,
             fade_out=fade_out,
             mute_source_videos=mute_source_videos,
@@ -217,6 +220,7 @@ async def process_video_task(
             visualizer_bg_opacity=visualizer_bg_opacity,
             visualizer_spectrum_preset=visualizer_spectrum_preset,
             visualizer_bars_mode=visualizer_bars_mode,
+            visualizer_bars_mirror=visualizer_bars_mirror,
             visualizer_waveform_mode=visualizer_waveform_mode,
             visualizer_waveform_mirror=visualizer_waveform_mirror,
             stickers=stickers,

@@ -349,6 +349,7 @@ export default function ProcessorPage() {
     visualizer_bg_color: string; visualizer_bg_opacity: number;
     visualizer_spectrum_preset: string;
     visualizer_bars_mode: 'bar'|'line'|'dot';
+    visualizer_bars_mirror: boolean;
     visualizer_waveform_mode: 'cline'|'line'|'point'|'p2p';
     visualizer_waveform_mirror: boolean;
     ad_flip_random: boolean; ad_flip_all: boolean;
@@ -421,6 +422,7 @@ export default function ProcessorPage() {
     visualizer_bg_opacity: 0.3,
     visualizer_spectrum_preset: 'rainbow',
     visualizer_bars_mode: 'bar',
+    visualizer_bars_mirror: false,
     visualizer_waveform_mode: 'cline',
     visualizer_waveform_mirror: false,
     ad_flip_random: false,
@@ -756,6 +758,7 @@ export default function ProcessorPage() {
       visualizer_bg_opacity: videoConfig.visualizer_bg_opacity,
       visualizer_spectrum_preset: videoConfig.visualizer_spectrum_preset,
       visualizer_bars_mode: videoConfig.visualizer_bars_mode,
+      visualizer_bars_mirror: videoConfig.visualizer_bars_mirror,
       visualizer_waveform_mode: videoConfig.visualizer_waveform_mode,
       visualizer_waveform_mirror: videoConfig.visualizer_waveform_mirror,
       stickers: videoConfig.stickers.map(toBackendSticker),
@@ -1671,6 +1674,7 @@ export default function ProcessorPage() {
         visualizer_bg_opacity: videoConfig.visualizer_bg_opacity,
         visualizer_spectrum_preset: videoConfig.visualizer_spectrum_preset,
         visualizer_bars_mode: videoConfig.visualizer_bars_mode,
+        visualizer_bars_mirror: videoConfig.visualizer_bars_mirror,
         visualizer_waveform_mode: videoConfig.visualizer_waveform_mode,
         visualizer_waveform_mirror: videoConfig.visualizer_waveform_mirror,
         stickers: videoConfig.stickers.map(toBackendSticker),
@@ -5715,12 +5719,10 @@ export default function ProcessorPage() {
                     {/* Style picker — 4 top-level styles */}
                     <div>
                       <label className="block text-xs text-dim mb-1">Kiểu hiển thị</label>
-                      <div className="grid grid-cols-4 gap-1">
+                      <div className="grid grid-cols-2 gap-1">
                         {([
                           { v: 'bars', lbl: ' Bars', t: 'Cột tần số (showfreqs)' },
                           { v: 'waveform', lbl: '〰️ Wave', t: 'Sóng (showwaves) — Smooth/Linear/Dots/Filled + Symmetrical' },
-                          { v: 'spectrum', lbl: ' Spectrum', t: 'Phổ tần số scrolling' },
-                          { v: 'cqt', lbl: ' CQT', t: 'Music-aware bars (showcqt) — đẹp nhất' },
                         ] as const).map(({ v, lbl, t }) => {
                           const active = videoConfig.visualizer_style === v
                           return (
@@ -5744,32 +5746,45 @@ export default function ProcessorPage() {
 
                     {/* Sub-mode picker for Bars */}
                     {videoConfig.visualizer_style === 'bars' && (
-                      <div>
-                        <label className="block text-xs text-dim mb-1">Bars mode</label>
-                        <div className="grid grid-cols-3 gap-1">
-                          {([
-                            { v: 'bar', lbl: 'Bar', t: 'Cột đặc (mặc định)' },
-                            { v: 'line', lbl: 'Line', t: 'Đường nối đỉnh' },
-                            { v: 'dot', lbl: 'Dot', t: 'Chấm đỉnh' },
-                          ] as const).map(({ v, lbl, t }) => {
-                            const active = videoConfig.visualizer_bars_mode === v
-                            return (
-                              <button
-                                key={v}
-                                onClick={() => setVideoConfig(prev => ({ ...prev, visualizer_bars_mode: v }))}
-                                disabled={isProcessing}
-                                title={t}
-                                className={`text-xs px-2 py-1 rounded border ${
-                                  active
-                                    ? 'bg-primary-500 text-white border-primary-500'
-                                    : 'bg-surface text-dim border-token hover:border-primary-400'
-                                }`}
-                              >
-                                {lbl}
-                              </button>
-                            )
-                          })}
+                      <div className="space-y-2">
+                        <div>
+                          <label className="block text-xs text-dim mb-1">Bars mode</label>
+                          <div className="grid grid-cols-3 gap-1">
+                            {([
+                              { v: 'bar', lbl: 'Bar', t: 'Cột đặc (mặc định)' },
+                              { v: 'line', lbl: 'Line', t: 'Đường nối đỉnh' },
+                              { v: 'dot', lbl: 'Dot', t: 'Chấm đỉnh' },
+                            ] as const).map(({ v, lbl, t }) => {
+                              const active = videoConfig.visualizer_bars_mode === v
+                              return (
+                                <button
+                                  key={v}
+                                  onClick={() => setVideoConfig(prev => ({ ...prev, visualizer_bars_mode: v }))}
+                                  disabled={isProcessing}
+                                  title={t}
+                                  className={`text-xs px-2 py-1 rounded border ${
+                                    active
+                                      ? 'bg-primary-500 text-white border-primary-500'
+                                      : 'bg-surface text-dim border-token hover:border-primary-400'
+                                  }`}
+                                >
+                                  {lbl}
+                                </button>
+                              )
+                            })}
+                          </div>
                         </div>
+                        {videoConfig.visualizer_bars_mode === 'bar' && (
+                          <label className="flex items-center gap-2 text-xs cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={videoConfig.visualizer_bars_mirror}
+                              onChange={(e) => setVideoConfig(prev => ({ ...prev, visualizer_bars_mirror: e.target.checked }))}
+                              disabled={isProcessing}
+                            />
+                            Mirror (cột mọc từ giữa ra 2 phía — như equalizer podcast)
+                          </label>
+                        )}
                       </div>
                     )}
 
@@ -6569,6 +6584,7 @@ export default function ProcessorPage() {
                     const bgOp = videoConfig.visualizer_bg_mode === 'solid' ? videoConfig.visualizer_bg_opacity : 0
                     const style = videoConfig.visualizer_style
                     const barsMode = videoConfig.visualizer_bars_mode
+                    const barsMirror = videoConfig.visualizer_bars_mirror
                     const waveformMode = videoConfig.visualizer_waveform_mode
                     const waveformMirror = videoConfig.visualizer_waveform_mirror
                     return (
@@ -6599,11 +6615,30 @@ export default function ProcessorPage() {
                         {/* Style-specific mock */}
                         {style === 'bars' && (
                           <div
-                            className="absolute inset-0 flex items-end justify-around px-1 pb-1"
+                            className={`absolute inset-0 flex justify-around px-1 ${
+                              barsMode === 'bar' && barsMirror ? 'items-center' : 'items-end pb-1'
+                            }`}
                             style={{ opacity: op }}
                           >
                             {Array.from({ length: 32 }).map((_, i) => {
                               const heightPct = 20 + Math.abs(Math.sin((i + 1) * 0.7)) * 70 + Math.abs(Math.cos(i * 1.3)) * 10
+                              if (barsMode === 'bar' && barsMirror) {
+                                // Mirror: bar centred on the mid-line, grows both
+                                // ways; symmetric edge(c2)->centre(c1)->edge(c2).
+                                return (
+                                  <div
+                                    key={i}
+                                    style={{
+                                      width: `${100 / 36}%`,
+                                      background: `linear-gradient(to top, ${c2}, ${c1} 50%, ${c2})`,
+                                      height: `${heightPct}%`,
+                                      animation: `vizBar 0.${4 + (i % 6)}s ease-in-out infinite alternate`,
+                                      animationDelay: `${(i % 8) * 0.05}s`,
+                                      borderRadius: '1px',
+                                    }}
+                                  />
+                                )
+                              }
                               if (barsMode === 'dot') {
                                 return (
                                   <div
@@ -6742,6 +6777,7 @@ export default function ProcessorPage() {
                         >
                            viz · {style}
                           {style === 'bars' && barsMode !== 'bar' ? `:${barsMode}` : ''}
+                          {style === 'bars' && barsMode === 'bar' && barsMirror ? '+mirror' : ''}
                           {style === 'waveform' ? `:${waveformMode}${waveformMirror ? '+mirror' : ''}` : ''}
                         </div>
                       </div>

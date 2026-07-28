@@ -394,6 +394,7 @@ class VideoProcessRequest(BaseModel):
     subtitle_x: float = 0.5
     subtitle_y: float = 0.85
     subtitle_opacity: float = 1.0
+    subtitle_max_width: float = 0.9  # wrap box width as a fraction of frame (0..1)
     fade_in: float = 0.0  # Fade-in seconds at start (0 = none)
     fade_out: float = 0.0  # Fade-out seconds at end (0 = none)
     mute_source_videos: bool = True  # If True, drop audio from background clips (only main audio plays)
@@ -425,6 +426,7 @@ class VideoProcessRequest(BaseModel):
     visualizer_spectrum_preset: str = "rainbow"  # showspectrum color preset
     # Sub-modes
     visualizer_bars_mode: str = "bar"          # bar | line | dot (showfreqs mode)
+    visualizer_bars_mirror: bool = False       # If True, mirror bars center-out (bar mode only)
     visualizer_waveform_mode: str = "cline"    # cline | line | point | p2p (showwaves mode)
     visualizer_waveform_mirror: bool = False   # If True, vstack a vertically-flipped copy
 

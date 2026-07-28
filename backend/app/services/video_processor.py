@@ -1064,7 +1064,7 @@ class VideoProcessor:
                 f"[2:v]scale={tw}:{th},format=gray[mask];"
                 f"[wm0][mask]alphamerge[wm1];"
                 f"[wm1]colorchannelmixer=aa={op:.2f}[wm];"
-                f"[0:v][wm]overlay={pos}:format=auto:shortest=1[out]"
+                f"[0:v][wm]overlay={pos}:format=auto[out]"
             )
             cmd = [
                 'ffmpeg', '-y',
@@ -1079,7 +1079,7 @@ class VideoProcessor:
             filter_complex = (
                 f"[1:v]scale={tw}:{th},format=rgba,"
                 f"colorchannelmixer=aa={op:.2f}[wm];"
-                f"[0:v][wm]overlay={pos}:format=auto:shortest=1[out]"
+                f"[0:v][wm]overlay={pos}:format=auto[out]"
             )
             cmd = [
                 'ffmpeg', '-y',
@@ -1221,6 +1221,7 @@ class VideoProcessor:
         spectrum_preset: str,
         resolution: str,
         bars_mode: str = "bar",
+        bars_mirror: bool = False,
         waveform_mode: str = "cline",
         waveform_mirror: bool = False,
         task=None,
@@ -1292,19 +1293,42 @@ class VideoProcessor:
                     f"p(X\\,Y)*between(mod(X\\,{cell:.3f})\\,"
                     f"{edge:.3f}\\,{cell_hi:.3f})"
                 )
-                # dynaudnorm lifts quiet passages so bars stay lively/full and
-                # ascale=log pushes them tall enough to reach the gradient's
-                # top color — without this, voice audio kept the bars short and
-                # stuck in the bottom (color1) band, unlike the preview.
-                viz_chain = (
-                    f"[1:a]dynaudnorm,showfreqs=s={nbars}x{vh}:mode=bar:"
-                    f"ascale=log:fscale=log:win_size=2048:colors=white:rate=30,"
-                    f"scale={vw}:{vh}:flags=neighbor,format=gray,"
-                    f"geq=lum={gap_expr}[barmask];"
-                    f"gradients=s={vw}x{vh}:c0={c1}:c1={c2}:x0=0:y0={vh}:"
-                    f"x1=0:y1=0:speed=0:r=30,format=rgba[grad];"
-                    f"[grad][barmask]alphamerge,format=rgba[viz0]"
-                )
+                if bars_mirror:
+                    # Mirror / center-out equalizer look: render both the bar mask
+                    # and the gradient at half height, then vstack a vertically-
+                    # flipped copy of each so bars grow from the centre line
+                    # outward (up + down) with a symmetric centre(color1)->
+                    # edge(color2) gradient. showfreqs draws bars bottom-up, so the
+                    # top half's bar bases sit on the centre line and their tips
+                    # point at the outer edge — exactly the podcast look.
+                    h2 = max(2, vh // 2)
+                    viz_chain = (
+                        f"[1:a]dynaudnorm,showfreqs=s={nbars}x{h2}:mode=bar:"
+                        f"ascale=log:fscale=log:win_size=2048:colors=white:rate=30,"
+                        f"scale={vw}:{h2}:flags=neighbor,format=gray,"
+                        f"geq=lum={gap_expr},split[bt][bb];"
+                        f"[bb]vflip[bbf];"
+                        f"[bt][bbf]vstack=inputs=2,scale={vw}:{vh}[barmask];"
+                        f"gradients=s={vw}x{h2}:c0={c1}:c1={c2}:x0=0:y0={h2}:"
+                        f"x1=0:y1=0:speed=0:r=30,format=rgba,split[gt][gb];"
+                        f"[gb]vflip[gbf];"
+                        f"[gt][gbf]vstack=inputs=2,scale={vw}:{vh}[grad];"
+                        f"[grad][barmask]alphamerge,format=rgba[viz0]"
+                    )
+                else:
+                    # dynaudnorm lifts quiet passages so bars stay lively/full and
+                    # ascale=log pushes them tall enough to reach the gradient's
+                    # top color — without this, voice audio kept the bars short and
+                    # stuck in the bottom (color1) band, unlike the preview.
+                    viz_chain = (
+                        f"[1:a]dynaudnorm,showfreqs=s={nbars}x{vh}:mode=bar:"
+                        f"ascale=log:fscale=log:win_size=2048:colors=white:rate=30,"
+                        f"scale={vw}:{vh}:flags=neighbor,format=gray,"
+                        f"geq=lum={gap_expr}[barmask];"
+                        f"gradients=s={vw}x{vh}:c0={c1}:c1={c2}:x0=0:y0={vh}:"
+                        f"x1=0:y1=0:speed=0:r=30,format=rgba[grad];"
+                        f"[grad][barmask]alphamerge,format=rgba[viz0]"
+                    )
             else:
                 # line / dot: single-colour thin marks (matches the preview,
                 # which draws these modes in color1 only).
@@ -1755,6 +1779,7 @@ class VideoProcessor:
         subtitle_x: float = 0.5,
         subtitle_y: float = 0.85,
         subtitle_opacity: float = 1.0,
+        subtitle_max_width: float = 0.9,
         fade_in: float = 0.0,
         fade_out: float = 0.0,
         mute_source_videos: bool = True,
@@ -1786,6 +1811,7 @@ class VideoProcessor:
         visualizer_bg_opacity: float = 0.3,
         visualizer_spectrum_preset: str = "rainbow",
         visualizer_bars_mode: str = "bar",
+        visualizer_bars_mirror: bool = False,
         visualizer_waveform_mode: str = "cline",
         visualizer_waveform_mirror: bool = False,
         stickers: Optional[List[Dict]] = None,
@@ -1965,6 +1991,7 @@ class VideoProcessor:
                     visualizer_bg_mode, visualizer_bg_color, visualizer_bg_opacity,
                     visualizer_spectrum_preset, resolution,
                     bars_mode=visualizer_bars_mode,
+                    bars_mirror=visualizer_bars_mirror,
                     waveform_mode=visualizer_waveform_mode,
                     waveform_mirror=visualizer_waveform_mirror,
                     task=task, db=db, progress_start=step_start, progress_end=step_end,
@@ -1994,7 +2021,7 @@ class VideoProcessor:
                 )
             elif step == "subtitle":
                 from app.services.fonts import ensure_font
-                sub_font_name, _ = ensure_font(subtitle_font)
+                sub_font_name, sub_font_file = ensure_font(subtitle_font)
                 step_result = self.apply_subtitle(
                     current, next_path, subtitle_srt_path,
                     {
@@ -2010,6 +2037,8 @@ class VideoProcessor:
                         "x": subtitle_x,
                         "y": subtitle_y,
                         "opacity": subtitle_opacity,
+                        "max_width": subtitle_max_width,
+                        "font_file": sub_font_file,
                     },
                     subtitle_animation, resolution,
                     task, db, step_start, step_end,
@@ -2113,6 +2142,7 @@ class VideoProcessor:
         subtitle_x: float = 0.5,
         subtitle_y: float = 0.85,
         subtitle_opacity: float = 1.0,
+        subtitle_max_width: float = 0.9,
         fade_in: float = 0.0,
         fade_out: float = 0.0,
         mute_source_videos: bool = True,
@@ -2142,6 +2172,7 @@ class VideoProcessor:
         visualizer_bg_opacity: float = 0.3,
         visualizer_spectrum_preset: str = "rainbow",
         visualizer_bars_mode: str = "bar",
+        visualizer_bars_mirror: bool = False,
         visualizer_waveform_mode: str = "cline",
         visualizer_waveform_mirror: bool = False,
         stickers: Optional[List[Dict]] = None,
@@ -2248,6 +2279,7 @@ class VideoProcessor:
                         subtitle_outline_color, subtitle_outline_width, subtitle_shadow,
                         subtitle_bold, subtitle_italic, subtitle_align,
                         subtitle_x, subtitle_y, subtitle_opacity,
+                        subtitle_max_width,
                         fade_in, fade_out,
                         mute_source_videos=mute_source_videos,
                         transitions_pool=transitions_pool,
@@ -2278,6 +2310,7 @@ class VideoProcessor:
                         visualizer_bg_opacity=visualizer_bg_opacity,
                         visualizer_spectrum_preset=visualizer_spectrum_preset,
                         visualizer_bars_mode=visualizer_bars_mode,
+                        visualizer_bars_mirror=visualizer_bars_mirror,
                         visualizer_waveform_mode=visualizer_waveform_mode,
                         visualizer_waveform_mirror=visualizer_waveform_mirror,
                         stickers=stickers,
@@ -2444,6 +2477,7 @@ class VideoProcessor:
         subtitle_x: float = 0.5,
         subtitle_y: float = 0.85,
         subtitle_opacity: float = 1.0,
+        subtitle_max_width: float = 0.9,
         fade_in: float = 0.0,
         fade_out: float = 0.0,
         mute_source_videos: bool = True,
@@ -2475,6 +2509,7 @@ class VideoProcessor:
         visualizer_bg_opacity: float = 0.3,
         visualizer_spectrum_preset: str = "rainbow",
         visualizer_bars_mode: str = "bar",
+        visualizer_bars_mirror: bool = False,
         visualizer_waveform_mode: str = "cline",
         visualizer_waveform_mirror: bool = False,
         stickers: Optional[List[Dict]] = None,
@@ -2650,6 +2685,7 @@ class VideoProcessor:
                         visualizer_bg_mode, visualizer_bg_color, visualizer_bg_opacity,
                         visualizer_spectrum_preset, resolution,
                         bars_mode=visualizer_bars_mode,
+                        bars_mirror=visualizer_bars_mirror,
                         waveform_mode=visualizer_waveform_mode,
                         waveform_mirror=visualizer_waveform_mirror,
                     )
@@ -2675,7 +2711,7 @@ class VideoProcessor:
                     )
                 elif step == "subtitle":
                     from app.services.fonts import ensure_font
-                    sub_font_name, _ = ensure_font(subtitle_font)
+                    sub_font_name, sub_font_file = ensure_font(subtitle_font)
                     sr = self.apply_subtitle(
                         current, next_path, subtitle_srt_path,
                         {
@@ -2691,6 +2727,8 @@ class VideoProcessor:
                             "x": subtitle_x,
                             "y": subtitle_y,
                             "opacity": subtitle_opacity,
+                            "max_width": subtitle_max_width,
+                            "font_file": sub_font_file,
                         },
                         subtitle_animation, resolution,
                     )

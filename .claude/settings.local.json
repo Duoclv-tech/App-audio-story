@@ -88,7 +88,13 @@
       "Bash(PYTHONPATH=\"D:/Project/web_app/backend\" python \"C:/Users/VANDUO~1/AppData/Local/Temp/claude/D--Project-web-app/9b55cf0d-03f1-456e-a90e-305002a09836/scratchpad/test_wave_preview.py\")",
       "Bash(command -v iscc)",
       "PowerShell(Get-CimInstance *)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "PowerShell($iscc = Get-Command iscc -ErrorAction SilentlyContinue; if \\($iscc\\) { \"iscc: $\\($iscc.Source\\)\" } else { \"iscc: NOT FOUND\" }; $p = Get-Process TruyenFullProcessor -ErrorAction SilentlyContinue; if \\($p\\) { \"app running PID $\\($p.Id\\)\" } else { \"app not running\" }; \"node: $\\(\\(Get-Command node -ErrorAction SilentlyContinue\\).Version\\)\")",
+      "PowerShell($paths = @\\(\"C:\\\\Program Files \\(x86\\)\\\\Inno Setup 6\\\\ISCC.exe\",\"C:\\\\Program Files\\\\Inno Setup 6\\\\ISCC.exe\"\\); foreach \\($p in $paths\\) { if \\(Test-Path $p\\) { \"FOUND: $p\" } }; \"done\")",
+      "PowerShell(winget install *)",
+      "PowerShell($found = Get-ChildItem -Path \"C:\\\\Program Files\",\"C:\\\\Program Files \\(x86\\)\",\"$env:LOCALAPPDATA\" -Recurse -Filter \"ISCC.exe\" -ErrorAction SilentlyContinue | Select-Object -First 5 -ExpandProperty FullName; if \\($found\\) { $found } else { \"not found in common roots\" })",
+      "PowerShell($env:PATH = \"C:\\\\Users\\\\Van Duoc\\\\AppData\\\\Local\\\\Programs\\\\Inno Setup 6;\" + $env:PATH; & \"D:\\\\Project\\\\web_app\\\\packaging\\\\build.ps1\")",
+      "PowerShell(Get-Item *)"
     ],
     "deny": [
       "Bash(sudo:*)"

@@ -167,7 +167,7 @@ const DEFAULT_TTS_CONFIG = {
   bitrate: 128,
   audio_type: 'mp3',
   // OmniVoice-only
-  mode: 'clone' as 'auto' | 'clone' | 'design',
+  mode: 'clone' as 'auto' | 'clone',
   model_key: 'base' as 'base',
   preset_id: '',
   instruct: '',
@@ -1284,7 +1284,8 @@ export default function ProcessorPage() {
               audio_type: segCfg.audio_type ?? prev.audio_type,
               bitrate: segCfg.bitrate ?? prev.bitrate,
               speed: segCfg.speed ?? prev.speed,
-              mode: segCfg.mode ?? prev.mode,
+              // 'design' mode đã bị gỡ — story cũ lưu 'design' thì đưa về 'auto'.
+              mode: segCfg.mode === 'design' ? 'auto' : (segCfg.mode ?? prev.mode),
               model_key: segCfg.model_key ?? prev.model_key,
               preset_id: segCfg.preset_id ?? '',
               instruct: segCfg.instruct ?? '',
@@ -4180,7 +4181,6 @@ export default function ProcessorPage() {
                       >
                         <option value="auto">Auto (model tự chọn giọng)</option>
                         <option value="clone">Clone (giọng từ mẫu)</option>
-                        <option value="design">Design (mô tả giọng)</option>
                       </select>
                     </div>
 
@@ -4306,20 +4306,6 @@ export default function ProcessorPage() {
                     </div>
                   )}
 
-                  {/* Design mode: voice description */}
-                  {ttsConfig.mode === 'design' && (
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Mô tả giọng (instruct)</label>
-                      <textarea
-                        placeholder="VD: A warm female voice, gentle and slow."
-                        value={ttsConfig.instruct}
-                        onChange={(e) => setTtsConfig({ ...ttsConfig, instruct: e.target.value })}
-                        rows={2}
-                        className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        disabled={loading}
-                      />
-                    </div>
-                  )}
                     </div>
                   </div>
 
@@ -4363,8 +4349,6 @@ export default function ProcessorPage() {
                 if (ttsConfig.engine !== 'omnivoice' || !omniStatus?.availability?.ready) return null
                 if (ttsConfig.mode === 'clone' && !ttsConfig.preset_id)
                   return <div className="text-amber-600 dark:text-amber-400 text-sm">Hãy chọn một giọng đã clone (hoặc tạo giọng mới) trước khi bắt đầu.</div>
-                if (ttsConfig.mode === 'design' && !ttsConfig.instruct.trim())
-                  return <div className="text-amber-600 dark:text-amber-400 text-sm">Hãy nhập mô tả giọng (instruct) trước khi bắt đầu.</div>
                 return null
               })()}
               <button
@@ -4373,8 +4357,7 @@ export default function ProcessorPage() {
                   loading ||
                   (ttsConfig.engine === 'omnivoice' && (
                     !omniStatus?.availability?.ready ||
-                    (ttsConfig.mode === 'clone' && !ttsConfig.preset_id) ||
-                    (ttsConfig.mode === 'design' && !ttsConfig.instruct.trim())
+                    (ttsConfig.mode === 'clone' && !ttsConfig.preset_id)
                   ))
                 }
                 className="w-full bg-primary-500 text-white py-2 px-4 rounded-md hover:bg-primary-600 transition disabled:bg-gray-400 disabled:cursor-not-allowed"

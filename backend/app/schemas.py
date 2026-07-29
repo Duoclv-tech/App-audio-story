@@ -294,6 +294,11 @@ class PaginatedStoriesResponse(BaseModel):
     data: List[StoryWithStats]
     meta: PaginationMeta
 
+class StoryOverviewResponse(BaseModel):
+    total_projects: int
+    total_audio_generated: int
+    running_count: int
+
 class PaginatedBannedWordsResponse(BaseModel):
     data: List['BannedWordResponse']
     meta: PaginationMeta

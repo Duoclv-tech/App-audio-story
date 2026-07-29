@@ -171,6 +171,29 @@ async def list_stories_with_stats(
         logger.error(f"Error listing stories with stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/overview", response_model=schemas.StoryOverviewResponse)
+async def get_stories_overview(db: Session = Depends(get_db)):
+    """Aggregate stats for the home dashboard (fast, single-pass counts)."""
+    try:
+        total_projects = db.query(models.Story).count()
+
+        total_audio_generated = db.query(models.AudioFile).filter(
+            models.AudioFile.status == 'success'
+        ).count()
+
+        running_count = db.query(models.Story).filter(
+            models.Story.status.in_(['downloading', 'tts_processing'])
+        ).count()
+
+        return {
+            'total_projects': total_projects,
+            'total_audio_generated': total_audio_generated,
+            'running_count': running_count,
+        }
+    except Exception as e:
+        logger.error(f"Error building stories overview: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/{story_id}", response_model=schemas.StoryResponse)
 async def get_story(story_id: str, db: Session = Depends(get_db)):
     """Get story by ID"""

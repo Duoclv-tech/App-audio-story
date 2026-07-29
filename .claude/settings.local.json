@@ -94,7 +94,10 @@
       "PowerShell(winget install *)",
       "PowerShell($found = Get-ChildItem -Path \"C:\\\\Program Files\",\"C:\\\\Program Files \\(x86\\)\",\"$env:LOCALAPPDATA\" -Recurse -Filter \"ISCC.exe\" -ErrorAction SilentlyContinue | Select-Object -First 5 -ExpandProperty FullName; if \\($found\\) { $found } else { \"not found in common roots\" })",
       "PowerShell($env:PATH = \"C:\\\\Users\\\\Van Duoc\\\\AppData\\\\Local\\\\Programs\\\\Inno Setup 6;\" + $env:PATH; & \"D:\\\\Project\\\\web_app\\\\packaging\\\\build.ps1\")",
-      "PowerShell(Get-Item *)"
+      "PowerShell(Get-Item *)",
+      "Bash(curl -s http://127.0.0.1:8123/api/v1/stories/overview)",
+      "Bash(curl -s \"http://127.0.0.1:8123/api/v1/stories/with-stats?page=1&page_size=6\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8000/api/v1/stories/overview)"
     ],
     "deny": [
       "Bash(sudo:*)"

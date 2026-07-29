@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import axios from 'axios'
 import { Scissors, Play, RotateCcw, Plus, Trash2, Upload, X, FolderOpen } from 'lucide-react'
 import UploadZone from '../components/trim/UploadZone'
 import VideoPreview from '../components/trim/VideoPreview'
@@ -6,6 +7,8 @@ import Waveform from '../components/trim/Waveform'
 import Timeline from '../components/trim/Timeline'
 import TimeInput from '../components/trim/TimeInput'
 import ExportSettings from '../components/trim/ExportSettings'
+import SubtitleTrimPanel from '../components/trim/SubtitleTrimPanel'
+import { DEFAULT_SUBTITLE_STYLE, type SubtitleStyle } from '../components/subtitle/srt'
 import {
   uploadVideo,
   importVideoFromPath,
@@ -81,6 +84,8 @@ interface PersistedState {
   watermark: WatermarkParams
   outputFilename: string
   waveform: number[]
+  srtPath: string | null
+  subtitleStyle: SubtitleStyle
 }
 
 function loadPersisted(): PersistedState | null {
@@ -197,6 +202,17 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
     persistedInitial?.outputFilename ?? 'output.mp4'
   )
 
+  // Subtitle (SRT) burn — optional. srtPath is server-side, scoped to the
+  // current trim file_id; it's cleared whenever the video changes.
+  const [srtPath, setSrtPath] = useState<string | null>(persistedInitial?.srtPath ?? null)
+  const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyle>(
+    persistedInitial?.subtitleStyle ?? DEFAULT_SUBTITLE_STYLE
+  )
+  const [availableFonts, setAvailableFonts] = useState<string[]>([
+    'Be Vietnam Pro (Vietnamese)',
+  ])
+  const [subtitleCardOpen, setSubtitleCardOpen] = useState(false)
+
   // Processing
   const [jobId, setJobId] = useState<string | null>(null)
   const [processProgress, setProcessProgress] = useState(0)
@@ -224,6 +240,7 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
       setStartSec(0)
       setEndSec(0)
       setSegments([])
+      setSrtPath(null)
     })
     return () => {
       cancelled = true
@@ -234,6 +251,16 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
   useEffect(() => {
     if (sourceVideoPath) setImportPath(sourceVideoPath)
   }, [sourceVideoPath])
+
+  // Fonts available for subtitle burning (same registry as the story pipeline).
+  useEffect(() => {
+    axios
+      .get<string[]>('/api/v1/video/fonts')
+      .then((r) => {
+        if (Array.isArray(r.data) && r.data.length > 0) setAvailableFonts(r.data)
+      })
+      .catch(() => {})
+  }, [])
 
   // Auto-update default output filename when file first loads
   useEffect(() => {
@@ -254,11 +281,13 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
       metadata, fileSizeBytes, startSec, endSec, segments,
       quality, customBitrate, aspectRatio, cropMode,
       mute, volume, speed, exactFrame, fade, watermark, outputFilename, waveform,
+      srtPath, subtitleStyle,
     })
   }, [
     metadata, fileSizeBytes, startSec, endSec, segments,
     quality, customBitrate, aspectRatio, cropMode,
     mute, volume, speed, exactFrame, fade, watermark, outputFilename, waveform,
+    srtPath, subtitleStyle,
   ])
 
   // Preview pause handler
@@ -380,6 +409,7 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
     setStartSec(0)
     setEndSec(0)
     setSegments([])
+    setSrtPath(null)
     setFolderTargetDuration(null)
     setJobId(null)
     setProcessProgress(0)
@@ -429,6 +459,7 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
     setStartSec(0)
     setEndSec(0)
     setSegments([])
+    setSrtPath(null)
     setFolderTargetDuration(null)
     setJobId(null)
     setProcessProgress(0)
@@ -515,6 +546,7 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
       setStartSec(0)
       setEndSec(meta.duration)
       setSegments([])
+      setSrtPath(null)
       setWaveform([])
       setJobId(null)
       setProcessProgress(0)
@@ -569,6 +601,24 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
         exact_frame: exactFrame,
         fade,
         watermark,
+        subtitle: {
+          enabled: !!srtPath,
+          srt_path: srtPath,
+          animation: subtitleStyle.subtitle_animation,
+          font: subtitleStyle.subtitle_font,
+          font_size: subtitleStyle.subtitle_font_size,
+          color: subtitleStyle.subtitle_color,
+          outline_color: subtitleStyle.subtitle_outline_color,
+          outline_width: subtitleStyle.subtitle_outline_width,
+          shadow: subtitleStyle.subtitle_shadow,
+          bold: subtitleStyle.subtitle_bold,
+          italic: subtitleStyle.subtitle_italic,
+          align: subtitleStyle.subtitle_align,
+          x: subtitleStyle.subtitle_x,
+          y: subtitleStyle.subtitle_y,
+          opacity: subtitleStyle.subtitle_opacity,
+          max_width: subtitleStyle.subtitle_max_width,
+        },
         output_filename: outputFilename,
       })
       setJobId(newJobId)
@@ -617,6 +667,9 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
     setStartSec(0)
     setEndSec(0)
     setSegments([])
+    setSrtPath(null)
+    setSubtitleStyle(DEFAULT_SUBTITLE_STYLE)
+    setSubtitleCardOpen(false)
     setSourceFolder('')
     setFolderValidation(null)
     setFolderTargetDuration(null)
@@ -1047,6 +1100,38 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
               previewAspect={outputAspect}
               outputFilename={outputFilename} setOutputFilename={setOutputFilename}
             />
+          </section>
+
+          {/* Phụ đề (SRT) — tuỳ chọn: burn phụ đề re-based lên clip cắt */}
+          <section className="bg-surface p-6 rounded-lg shadow">
+            <button
+              type="button"
+              onClick={() => setSubtitleCardOpen((o) => !o)}
+              className="w-full flex items-center justify-between gap-2"
+            >
+              <span className="flex items-center gap-2">
+                <span className="text-lg font-semibold">Phụ đề (SRT)</span>
+                <span className="text-sm text-dim font-normal">— tuỳ chọn</span>
+                {srtPath && (
+                  <span className="text-[11px] px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-500/15 text-green-700 dark:text-green-400">
+                    đã gắn ({subtitleStyle.subtitle_animation})
+                  </span>
+                )}
+              </span>
+              <span className="text-faint text-xs">{subtitleCardOpen ? '▲ ẩn' : '▼ hiện'}</span>
+            </button>
+            {subtitleCardOpen && (
+              <div className="mt-4">
+                <SubtitleTrimPanel
+                  fileId={metadata.file_id}
+                  style={subtitleStyle}
+                  onChange={(patch) => setSubtitleStyle((prev) => ({ ...prev, ...patch }))}
+                  srtPath={srtPath}
+                  onSrtUploaded={(info) => setSrtPath(info?.srt_path ?? null)}
+                  availableFonts={availableFonts}
+                />
+              </div>
+            )}
           </section>
 
           {/* Step 5: Process */}

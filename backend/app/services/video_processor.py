@@ -1590,10 +1590,8 @@ class VideoProcessor:
                 logger.warning(warning)
 
             # ffmpeg subtitles filter needs colon-escaped paths on Windows.
-            ass_ff = ass_path.replace('\\', '/').replace(':', r'\:')
             from app.services.fonts import FONTS_DIR
-            fonts_dir_ff = str(FONTS_DIR).replace('\\', '/').replace(':', r'\:')
-            vf = f"subtitles='{ass_ff}':fontsdir='{fonts_dir_ff}'"
+            vf = subtitle_renderer.build_subtitles_vf(ass_path, str(FONTS_DIR))
 
             cmd = [
                 'ffmpeg', '-y',

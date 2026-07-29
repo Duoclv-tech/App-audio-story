@@ -184,40 +184,54 @@ def _build_dialogue_text(
     return "{" + base + "}" + _escape_ass_text(text)
 
 
-def srt_to_ass(
-    srt_path: str,
+def rebase_for_segments(
+    segments: List[Tuple[float, float, str]],
+    cut_segments: List[Tuple[float, float]],
+    speed: float = 1.0,
+) -> List[Tuple[float, float, str]]:
+    """Re-base subtitle timings onto the trimmed/concatenated output timeline.
+
+    ``cut_segments`` are the kept ranges ``(start_sec, end_sec)`` in output
+    order. Each subtitle line is intersected with every cut range; a line that
+    spans a cut boundary yields one piece per overlapping range. Kept pieces are
+    shifted so the first cut range starts at 0, later ranges are offset by the
+    cumulative length of the earlier ones, and everything is divided by
+    ``speed`` (a 2x clip has half-length subtitle timings). Result is sorted by
+    start time.
+    """
+    if speed is None or speed <= 0:
+        speed = 1.0
+    out: List[Tuple[float, float, str]] = []
+    offset = 0.0
+    for a, b in cut_segments:
+        seg_len = max(0.0, b - a)
+        for s, e, t in segments:
+            os_ = max(s, a)
+            oe_ = min(e, b)
+            if oe_ > os_:
+                ns = (os_ - a + offset) / speed
+                ne = (oe_ - a + offset) / speed
+                out.append((ns, ne, t))
+        offset += seg_len
+    out.sort(key=lambda x: x[0])
+    return out
+
+
+def _write_ass(
+    segments: List[Tuple[float, float, str]],
     output_ass_path: str,
     style: SubtitleStyle,
     animation: str,
     play_res_x: int,
     play_res_y: int,
-    max_duration: float = 0.0,
-) -> Dict[str, Any]:
-    """Convert SRT to a single-Style ASS file with the chosen animation.
+) -> None:
+    """Render already-prepared segments into a single-Style ASS file.
 
-    `max_duration > 0` truncates dialogues ending past it (lines starting past
-    it are dropped). Returns metadata (counts, last_end) for caller to surface
-    a warning to the user.
-    """
+    Shared by ``srt_to_ass`` (full-video burn) and ``rebase_srt_to_ass`` (cut
+    clip). ``segments`` are assumed final — timing already truncated/re-based by
+    the caller. Line wrapping to ``style.max_width`` is applied here."""
     if animation not in ANIMATION_PRESETS:
         animation = "fade"
-
-    segments = parse_srt(srt_path)
-    total_segments = len(segments)
-    last_end = max((e for _, e, _ in segments), default=0.0)
-
-    truncated = 0
-    if max_duration > 0:
-        kept: List[Tuple[float, float, str]] = []
-        for s, e, t in segments:
-            if s >= max_duration:
-                truncated += 1
-                continue
-            if e > max_duration:
-                e = max_duration
-                truncated += 1
-            kept.append((s, e, t))
-        segments = kept
 
     px = int(round(max(0.0, min(1.0, style.x)) * play_res_x))
     py = int(round(max(0.0, min(1.0, style.y)) * play_res_y))
@@ -281,6 +295,41 @@ def srt_to_ass(
     Path(output_ass_path).parent.mkdir(parents=True, exist_ok=True)
     Path(output_ass_path).write_text("".join(body_lines), encoding="utf-8")
 
+
+def srt_to_ass(
+    srt_path: str,
+    output_ass_path: str,
+    style: SubtitleStyle,
+    animation: str,
+    play_res_x: int,
+    play_res_y: int,
+    max_duration: float = 0.0,
+) -> Dict[str, Any]:
+    """Convert SRT to a single-Style ASS file with the chosen animation.
+
+    `max_duration > 0` truncates dialogues ending past it (lines starting past
+    it are dropped). Returns metadata (counts, last_end) for caller to surface
+    a warning to the user.
+    """
+    segments = parse_srt(srt_path)
+    total_segments = len(segments)
+    last_end = max((e for _, e, _ in segments), default=0.0)
+
+    truncated = 0
+    if max_duration > 0:
+        kept: List[Tuple[float, float, str]] = []
+        for s, e, t in segments:
+            if s >= max_duration:
+                truncated += 1
+                continue
+            if e > max_duration:
+                e = max_duration
+                truncated += 1
+            kept.append((s, e, t))
+        segments = kept
+
+    _write_ass(segments, output_ass_path, style, animation, play_res_x, play_res_y)
+
     return {
         "output_path": output_ass_path,
         "total_segments": total_segments,
@@ -288,6 +337,51 @@ def srt_to_ass(
         "truncated_count": truncated,
         "last_end": last_end,
     }
+
+
+def rebase_srt_to_ass(
+    srt_path: str,
+    output_ass_path: str,
+    style: SubtitleStyle,
+    animation: str,
+    play_res_x: int,
+    play_res_y: int,
+    cut_segments: List[Tuple[float, float]],
+    speed: float = 1.0,
+) -> Dict[str, Any]:
+    """Like ``srt_to_ass`` but re-bases timings onto a trimmed clip.
+
+    ``cut_segments`` are the kept ranges (in output order) and ``speed`` the
+    output speed factor — see ``rebase_for_segments``. Used when burning
+    subtitles onto a clip cut out of a longer source so the SRT (still on the
+    source timeline) lands correctly on the shortened output.
+    """
+    parsed = parse_srt(srt_path)
+    total_segments = len(parsed)
+    last_end = max((e for _, e, _ in parsed), default=0.0)
+
+    rebased = rebase_for_segments(parsed, cut_segments, speed)
+    _write_ass(rebased, output_ass_path, style, animation, play_res_x, play_res_y)
+
+    return {
+        "output_path": output_ass_path,
+        "total_segments": total_segments,
+        "kept_segments": len(rebased),
+        "truncated_count": max(0, total_segments - len(rebased)),
+        "last_end": last_end,
+    }
+
+
+def build_subtitles_vf(ass_path: str, fonts_dir: str) -> str:
+    """Build the ffmpeg ``-vf`` ``subtitles=...:fontsdir=...`` string.
+
+    Centralises the Windows-fragile escaping (backslash→slash, colon escaped so
+    a drive letter isn't parsed as a filtergraph option separator) so the trim
+    burn pass and the story pipeline's ``apply_subtitle`` share one implementation.
+    """
+    ass_ff = str(ass_path).replace("\\", "/").replace(":", r"\:")
+    fonts_ff = str(fonts_dir).replace("\\", "/").replace(":", r"\:")
+    return f"subtitles='{ass_ff}':fontsdir='{fonts_ff}'"
 
 
 def probe_srt(srt_path: str) -> Dict[str, Any]:

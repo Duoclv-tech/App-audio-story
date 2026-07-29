@@ -2,6 +2,7 @@
 FFmpeg-based video trimmer service
 """
 import json
+import os
 import struct
 import subprocess
 import threading
@@ -196,9 +197,30 @@ def _build_atempo(speed: float) -> list[str]:
     return filters
 
 
+def _quality_encode_args(params: dict) -> list[str]:
+    """libx264 rate-control args for the chosen quality / custom bitrate.
+
+    Mirrors the mapping the main trim pass uses so the subtitle 2nd pass honours
+    the user's quality choice instead of a fixed CRF.
+    """
+    quality = params.get("quality", "original")
+    if quality == "custom" and params.get("custom_bitrate_kbps"):
+        return ["-b:v", f"{params['custom_bitrate_kbps']}k"]
+    crf_map = {"original": 12, "1080p": 18, "720p": 23, "480p": 28}
+    preset_map = {"original": "slow", "1080p": "medium", "720p": "medium", "480p": "fast"}
+    return ["-crf", str(crf_map.get(quality, 23)), "-preset", preset_map.get(quality, "medium")]
+
+
 def needs_reencode(params: dict) -> bool:
     """Return True if re-encoding is required (cannot use stream copy)."""
     if len(params.get("segments", [])) > 1:
+        return True
+    # A subtitle burn re-bases timings assuming the clip starts EXACTLY at
+    # start_sec. Stream copy keyframe-snaps the start (extra leading frames), so
+    # the burn would be shifted by up to one GOP — force a frame-accurate
+    # re-encode when subtitles are requested.
+    sub = params.get("subtitle") or {}
+    if sub.get("enabled") and sub.get("srt_path"):
         return True
     if params.get("exact_frame"):
         return True
@@ -532,6 +554,109 @@ def _run_ffmpeg_with_progress(cmd: list, target_duration: float, progress_cb: Op
     return proc.returncode, stderr_tail
 
 
+def _burn_subtitle(video_path: str, params: dict, progress_cb: Optional[Callable] = None) -> Optional[str]:
+    """Burn a re-based SRT onto the finished (already-trimmed) clip in a 2nd pass.
+
+    Runs only when ``params["subtitle"]`` is enabled with a valid ``srt_path``.
+    The SRT is still on the SOURCE timeline, so it is re-based against the cut
+    ``segments`` + ``speed`` and rendered against the OUTPUT canvas (probed from
+    ``video_path``) so position/size match the shortened, resized clip. Rewrites
+    ``video_path`` in place. Returns an error string on failure, else ``None``
+    (also ``None`` when there is nothing to burn).
+    """
+    sub = params.get("subtitle") or {}
+    if not sub.get("enabled") or not sub.get("srt_path"):
+        return None
+    srt_path = sub["srt_path"]
+    if not Path(srt_path).exists():
+        return f"SRT not found: {srt_path}"
+
+    from app.services import subtitle_renderer
+    from app.services.fonts import ensure_font, FONTS_DIR
+
+    try:
+        meta = probe(video_path)
+    except Exception as e:
+        return f"Cannot probe clip for subtitle: {e}"
+    play_w = meta.get("width") or 1920
+    play_h = meta.get("height") or 1080
+
+    # Resolve (and auto-download) the chosen font; "" => system default.
+    font_name, font_file = ensure_font(sub.get("font", "") or "")
+    style = subtitle_renderer.SubtitleStyle(
+        font_name=font_name,
+        font_size=int(sub.get("font_size", 56)),
+        color=sub.get("color", "#FFFFFF"),
+        outline_color=sub.get("outline_color", "#000000"),
+        outline_width=int(sub.get("outline_width", 3)),
+        shadow=int(sub.get("shadow", 0)),
+        bold=bool(sub.get("bold", True)),
+        italic=bool(sub.get("italic", False)),
+        align=sub.get("align", "center"),
+        x=float(sub.get("x", 0.5)),
+        y=float(sub.get("y", 0.85)),
+        opacity=float(sub.get("opacity", 1.0)),
+        max_width=float(sub.get("max_width", 0.9)),
+        font_file=font_file,
+    )
+
+    cut_segments = [(s["start_sec"], s["end_sec"]) for s in params.get("segments", [])]
+    speed = params.get("speed", 1.0) or 1.0
+
+    d = Path(video_path).parent
+    ass_path = str(d / "subtitle.ass")
+    try:
+        subtitle_renderer.rebase_srt_to_ass(
+            srt_path=srt_path,
+            output_ass_path=ass_path,
+            style=style,
+            animation=sub.get("animation", "fade"),
+            play_res_x=play_w,
+            play_res_y=play_h,
+            cut_segments=cut_segments,
+            speed=speed,
+        )
+    except Exception as e:
+        return f"SRT→ASS failed: {e}"
+
+    vf = subtitle_renderer.build_subtitles_vf(ass_path, str(FONTS_DIR))
+
+    tmp_out = str(d / "subtitled.mp4")
+    # Honour the user's export quality on this 2nd encode too (else a small-bitrate
+    # request would balloon back up at a fixed CRF).
+    cmd = [
+        "ffmpeg", "-y", "-i", video_path,
+        "-vf", vf,
+        "-map", "0:v", "-map", "0:a?",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p",
+        *_quality_encode_args(params),
+        "-c:a", "copy",
+        "-movflags", "+faststart",
+        tmp_out,
+    ]
+    logger.info(f"[trim] burning subtitle onto clip ({play_w}x{play_h}): {' '.join(cmd)}")
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=7200)
+    except subprocess.TimeoutExpired:
+        return "Subtitle burn timed out"
+    finally:
+        try:
+            if os.path.exists(ass_path):
+                os.remove(ass_path)
+        except Exception:
+            pass
+
+    if proc.returncode != 0 or not os.path.exists(tmp_out):
+        tail = (proc.stderr or "").strip().splitlines()
+        last = tail[-1] if tail else "unknown error"
+        return f"Subtitle burn failed: {last[:300]}"
+
+    os.replace(tmp_out, video_path)
+    if progress_cb:
+        progress_cb(100.0)
+    return None
+
+
 def trim(input_path: str, output_path: str, params: dict, progress_cb: Optional[Callable] = None) -> dict:
     """
     Run FFmpeg trim. Returns {success, duration, file_size, error?}.
@@ -568,6 +693,17 @@ def trim(input_path: str, output_path: str, params: dict, progress_cb: Optional[
         if speed != 1.0:
             audio_filters.extend(_build_atempo(speed))
 
+    # When a subtitle burn (2nd pass) will follow, keep the 1st pass inside
+    # 0..90% so the progress bar doesn't hit 100% and appear stuck while the
+    # burn re-encodes.
+    sub_cfg = params.get("subtitle") or {}
+    will_burn = bool(sub_cfg.get("enabled") and sub_cfg.get("srt_path"))
+    if will_burn and progress_cb:
+        _outer_cb = progress_cb
+        trim_cb: Optional[Callable] = lambda p: _outer_cb(min(90.0, p * 0.9))
+    else:
+        trim_cb = progress_cb
+
     # -----------------------------------------------------------------------
     # MULTI-SEGMENT path
     # -----------------------------------------------------------------------
@@ -595,7 +731,7 @@ def trim(input_path: str, output_path: str, params: dict, progress_cb: Optional[
         cmd.append(output_path)
 
         logger.info(f"FFmpeg multi-segment: {' '.join(cmd)}")
-        rc, stderr_tail = _run_ffmpeg_with_progress(cmd, output_duration, progress_cb)
+        rc, stderr_tail = _run_ffmpeg_with_progress(cmd, output_duration, trim_cb)
 
     # -----------------------------------------------------------------------
     # SINGLE-SEGMENT path
@@ -637,7 +773,7 @@ def trim(input_path: str, output_path: str, params: dict, progress_cb: Optional[
             cmd.append(output_path)
 
             logger.info(f"FFmpeg re-encode: {' '.join(cmd)}")
-            rc, stderr_tail = _run_ffmpeg_with_progress(cmd, output_duration, progress_cb)
+            rc, stderr_tail = _run_ffmpeg_with_progress(cmd, output_duration, trim_cb)
 
         else:
             # Stream copy (fast path — no audio/video filters)
@@ -648,7 +784,7 @@ def trim(input_path: str, output_path: str, params: dict, progress_cb: Optional[
                 output_path,
             ]
             logger.info(f"FFmpeg stream copy: {' '.join(cmd)}")
-            rc, stderr_tail = _run_ffmpeg_with_progress(cmd, output_duration, progress_cb)
+            rc, stderr_tail = _run_ffmpeg_with_progress(cmd, output_duration, trim_cb)
 
             if rc != 0:
                 logger.warning("Stream copy failed, falling back to audio re-encode")
@@ -659,7 +795,7 @@ def trim(input_path: str, output_path: str, params: dict, progress_cb: Optional[
                     "-progress", "pipe:1", "-nostats",
                     output_path,
                 ]
-                rc, stderr_tail = _run_ffmpeg_with_progress(cmd, output_duration, progress_cb)
+                rc, stderr_tail = _run_ffmpeg_with_progress(cmd, output_duration, trim_cb)
 
     # -----------------------------------------------------------------------
     # Result
@@ -674,6 +810,13 @@ def trim(input_path: str, output_path: str, params: dict, progress_cb: Optional[
     out = Path(output_path)
     if not out.exists():
         return {"success": False, "error": "Output file not created"}
+
+    # 2nd pass: burn a re-based SRT onto the finished clip (no-op if disabled).
+    if will_burn and progress_cb:
+        progress_cb(92.0)
+    sub_err = _burn_subtitle(output_path, params, progress_cb)
+    if sub_err:
+        return {"success": False, "error": sub_err}
 
     if progress_cb:
         progress_cb(100.0)

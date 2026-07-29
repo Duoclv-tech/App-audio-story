@@ -11,7 +11,7 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse, StreamingResponse
 from loguru import logger
 from pydantic import BaseModel
@@ -134,6 +134,28 @@ class SegmentParams(BaseModel):
     end_sec: float
 
 
+class SubtitleParams(BaseModel):
+    """Burn a (re-based) SRT onto the trimmed clip. `srt_path` points at the
+    file saved by /trim/upload-srt. Style mirrors the main pipeline's subtitle
+    config (subtitle_renderer.SubtitleStyle)."""
+    enabled: bool = False
+    srt_path: Optional[str] = None
+    animation: str = "fade"
+    font: str = "Be Vietnam Pro (Vietnamese)"
+    font_size: int = 56
+    color: str = "#FFFFFF"
+    outline_color: str = "#000000"
+    outline_width: int = 3
+    shadow: int = 0
+    bold: bool = True
+    italic: bool = False
+    align: str = "center"
+    x: float = 0.5
+    y: float = 0.85
+    opacity: float = 1.0
+    max_width: float = 0.9
+
+
 class TrimProcessRequest(BaseModel):
     file_id: str
     segments: list[SegmentParams]
@@ -147,6 +169,7 @@ class TrimProcessRequest(BaseModel):
     exact_frame: bool = True
     fade: bool = False
     watermark: WatermarkParams = WatermarkParams()
+    subtitle: SubtitleParams = SubtitleParams()
     output_filename: str = "output.mp4"
 
 
@@ -434,6 +457,66 @@ async def get_waveform(file_id: str):
         peaks = [0.0] * 500
 
     return {"waveform": peaks}
+
+
+@router.post("/upload-srt")
+async def upload_trim_srt(file_id: str = Form(...), file: UploadFile = File(...)):
+    """Save an SRT alongside a trim video (trim_temp/<file_id>/subtitle.srt).
+
+    Standalone counterpart to /video/upload-srt (which is scoped to a story) so
+    the Cắt video tab can attach subtitles without a story_id. Returns parse
+    metadata for the panel to show line count / span.
+    """
+    # file_id is normally a server-issued uuid; reject anything with path
+    # separators or traversal so a hostile value can't escape trim_temp and
+    # clobber a subtitle.srt elsewhere on disk.
+    if not file_id or any(c in file_id for c in ("/", "\\", "..")):
+        raise HTTPException(status_code=400, detail="invalid file_id")
+
+    dest_dir = TRIM_TEMP_DIR / file_id
+    if not dest_dir.exists():
+        raise HTTPException(status_code=404, detail="file_id not found")
+
+    fname = file.filename or "subtitle.srt"
+    if not fname.lower().endswith(".srt"):
+        raise HTTPException(status_code=400, detail="Only .srt files are accepted")
+
+    dest = dest_dir / "subtitle.srt"
+    chunk_size = 256 * 1024
+    written = 0
+    max_bytes = 5 * 1024 * 1024  # 5 MB hard cap — SRTs are tiny
+    try:
+        with open(dest, "wb") as f_out:
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > max_bytes:
+                    f_out.close()
+                    dest.unlink(missing_ok=True)
+                    raise HTTPException(status_code=413, detail="SRT file too large (max 5MB)")
+                f_out.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as e:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail=f"Cannot save SRT: {e}")
+
+    from app.services import subtitle_renderer
+    try:
+        meta = subtitle_renderer.probe_srt(str(dest))
+    except Exception as e:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(status_code=422, detail=f"Cannot parse SRT: {e}")
+
+    return {
+        "srt_path": str(dest),
+        "filename": fname,
+        "segment_count": meta["segment_count"],
+        "first_start": meta["first_start"],
+        "last_end": meta["last_end"],
+    }
 
 
 @router.post("/process", response_model=TrimProcessResponse)

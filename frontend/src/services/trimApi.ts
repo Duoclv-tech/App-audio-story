@@ -61,6 +61,47 @@ export interface Segment {
   end_sec: number
 }
 
+/** Burn a re-based SRT onto the trimmed clip. Field names match the backend
+ *  SubtitleParams (no `subtitle_` prefix — the UI's SubtitleStyle is mapped to
+ *  this shape in VideoTrimmerPage before sending). */
+export interface SubtitleParams {
+  enabled: boolean
+  srt_path?: string | null
+  animation: string
+  font: string
+  font_size: number
+  color: string
+  outline_color: string
+  outline_width: number
+  shadow: number
+  bold: boolean
+  italic: boolean
+  align: 'left' | 'center' | 'right'
+  x: number
+  y: number
+  opacity: number
+  max_width: number
+}
+
+export const defaultSubtitleParams = (): SubtitleParams => ({
+  enabled: false,
+  srt_path: null,
+  animation: 'fade',
+  font: 'Be Vietnam Pro (Vietnamese)',
+  font_size: 56,
+  color: '#FFFFFF',
+  outline_color: '#000000',
+  outline_width: 3,
+  shadow: 0,
+  bold: true,
+  italic: false,
+  align: 'center',
+  x: 0.5,
+  y: 0.85,
+  opacity: 1.0,
+  max_width: 0.9,
+})
+
 export interface TrimProcessRequest {
   file_id: string
   segments: Segment[]
@@ -74,7 +115,28 @@ export interface TrimProcessRequest {
   exact_frame: boolean
   fade: boolean
   watermark: WatermarkParams
+  subtitle?: SubtitleParams
   output_filename: string
+}
+
+export interface TrimSrtUploadResponse {
+  srt_path: string
+  filename: string
+  segment_count: number
+  first_start: number
+  last_end: number
+}
+
+/** Upload an SRT scoped to a trim file_id (saved to trim_temp/<file_id>). */
+export async function uploadTrimSrt(
+  fileId: string,
+  file: File
+): Promise<TrimSrtUploadResponse> {
+  const form = new FormData()
+  form.append('file_id', fileId)
+  form.append('file', file)
+  const { data } = await axios.post<TrimSrtUploadResponse>(`${BASE}/upload-srt`, form)
+  return data
 }
 
 /** Accept only files that look like a supported video (MIME or extension).

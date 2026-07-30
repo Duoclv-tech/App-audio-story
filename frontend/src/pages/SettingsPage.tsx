@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import type { ReactNode } from 'react'
 import axios from 'axios'
 import { hasNativeDialogs, pickFolderNative } from '../services/nativeDialog'
 
@@ -9,6 +10,25 @@ interface Settings {
   OPENAI_API_KEY?: string
   GEMINI_API_KEY?: string
   output_folder?: string
+}
+
+function HelpTooltip({ children }: { children: ReactNode }) {
+  return (
+    <span className="relative group inline-flex">
+      <span
+        className="flex items-center justify-center w-5 h-5 rounded-full bg-primary-100 dark:bg-primary-500/20 text-primary-700 dark:text-primary-300 text-xs font-bold cursor-help select-none"
+        aria-label="Hướng dẫn lấy API key"
+      >
+        ?
+      </span>
+      <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 w-80 -translate-x-1/2 rounded-lg border border-primary-200 dark:border-primary-500/30 bg-primary-50 dark:bg-gray-800 p-4 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-hover:pointer-events-auto">
+        <div className="text-sm text-primary-800 dark:text-primary-300 mb-2 font-medium">
+          Hướng dẫn lấy API key:
+        </div>
+        {children}
+      </div>
+    </span>
+  )
 }
 
 export default function SettingsPage() {
@@ -139,17 +159,19 @@ export default function SettingsPage() {
             >
               ?
             </span>
-            <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 w-80 -translate-x-1/2 rounded-lg border border-primary-200 dark:border-primary-500/30 bg-primary-50 dark:bg-primary-500/10 p-4 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-hover:pointer-events-auto">
+            <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 w-80 -translate-x-1/2 rounded-lg border border-primary-200 dark:border-primary-500/30 bg-primary-50 dark:bg-gray-800 p-4 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 group-hover:pointer-events-auto">
               <div className="text-sm text-primary-800 dark:text-primary-300 mb-2 font-medium">
                 Hướng dẫn lấy credentials:
               </div>
               <ol className="text-sm text-primary-700 dark:text-primary-400 space-y-1 list-decimal list-inside">
-                <li>Đăng nhập <a href="https://vbee.vn" target="_blank" rel="noopener noreferrer" className="underline">https://vbee.vn</a></li>
-                <li>Vào phần <strong>Quản lý ứng dụng</strong></li>
+                <li>Đăng nhập <a href="https://vbee.vn" target="_blank" rel="noopener noreferrer" className="underline">vbee.vn</a>, mở trang <strong>Quản lý ứng dụng</strong> (Dashboard)</li>
                 <li>Tạo app mới hoặc chọn app có sẵn</li>
                 <li>Copy <strong>ID ứng dụng</strong> (App ID)</li>
                 <li>Click vào app để lấy <strong>Bearer Token</strong></li>
               </ol>
+              <div className="text-xs text-primary-700 dark:text-primary-400 mt-2">
+                ⚠️ Bearer Token là JWT <strong>có thời hạn</strong> — khi hết hạn cần quay lại lấy token mới.
+              </div>
             </div>
           </span>
         </h3>
@@ -228,8 +250,19 @@ export default function SettingsPage() {
 
         {/* OpenAI API Key */}
         <div className="mb-4">
-          <label className="block text-sm font-medium mb-1">
+          <label className="block text-sm font-medium mb-1 flex items-center gap-2">
             OpenAI API Key
+            <HelpTooltip>
+              <ol className="text-sm text-primary-700 dark:text-primary-400 space-y-1 list-decimal list-inside">
+                <li>Đăng nhập <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="underline">platform.openai.com/api-keys</a></li>
+                <li>Bấm <strong>"Create new secret key"</strong></li>
+                <li>Copy key <strong>ngay</strong> — key chỉ hiển thị 1 lần duy nhất</li>
+                <li>Vào <strong>Billing</strong> nạp credit thì key mới dùng được</li>
+              </ol>
+              <div className="text-xs text-primary-700 dark:text-primary-400 mt-2">
+                ⚠️ Chưa nạp credit sẽ báo lỗi <span className="font-mono">insufficient_quota</span> dù key hợp lệ.
+              </div>
+            </HelpTooltip>
           </label>
           <div className="relative">
             <input
@@ -258,8 +291,19 @@ export default function SettingsPage() {
 
         {/* Gemini API Key */}
         <div>
-          <label className="block text-sm font-medium mb-1">
+          <label className="block text-sm font-medium mb-1 flex items-center gap-2">
             Gemini API Key
+            <HelpTooltip>
+              <ol className="text-sm text-primary-700 dark:text-primary-400 space-y-1 list-decimal list-inside">
+                <li>Mở <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="underline">aistudio.google.com/apikey</a></li>
+                <li>Đăng nhập tài khoản Google</li>
+                <li>Bấm <strong>"Create API key"</strong></li>
+                <li>Copy key vừa tạo</li>
+              </ol>
+              <div className="text-xs text-primary-700 dark:text-primary-400 mt-2">
+                ✅ Gemini có <strong>gói miễn phí</strong> — không cần thẻ thanh toán.
+              </div>
+            </HelpTooltip>
           </label>
           <div className="relative">
             <input
@@ -279,10 +323,10 @@ export default function SettingsPage() {
           </div>
           <p className="text-xs text-dim mt-1">
             Lấy miễn phí tại{' '}
-            <a href="https://ai.google.dev" target="_blank" rel="noopener noreferrer" className="underline">
-              ai.google.dev
+            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="underline">
+              aistudio.google.com/apikey
             </a>{' '}
-            → "Get API Key".
+            (xem hướng dẫn ở nút <strong>?</strong>).
           </p>
         </div>
       </div>

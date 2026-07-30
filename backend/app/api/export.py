@@ -3,7 +3,6 @@ Export API endpoints
 Handle document export (Word, etc.)
 """
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from loguru import logger
 import os
@@ -11,6 +10,7 @@ import os
 from app.database import get_db
 from app import models, paths
 from app.services.word_exporter import WordExporter
+from app.services.output_delivery import deliver_final, safe_file_stem
 
 router = APIRouter()
 
@@ -59,16 +59,20 @@ async def export_to_word(story_id: str, db: Session = Depends(get_db)):
         if not os.path.exists(filepath):
             raise HTTPException(status_code=500, detail="Failed to create export file")
 
-        # Get filename for download
-        filename = os.path.basename(filepath)
-
-        logger.info(f"Exporting Word document: {filename}")
-
-        return FileResponse(
-            path=filepath,
-            filename=filename,
-            media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        # Move the finished file into the user's configured output folder
+        # (same delivery mechanism as audio/video), grouped under the story name.
+        _name = safe_file_stem(story.title, story_id[:8])
+        delivered = deliver_final(
+            filepath, db, filename=f"{_name}.docx", subfolder=_name
         )
+
+        logger.info(f"Exported Word document -> {delivered}")
+
+        return {
+            "path": delivered,
+            "filename": os.path.basename(delivered),
+            "folder": os.path.dirname(delivered),
+        }
 
     except HTTPException:
         raise
@@ -134,24 +138,29 @@ async def export_to_txt(story_id: str, db: Session = Depends(get_db)):
 
         content = "\n".join(lines)
 
-        # Save to file
+        # Write to the internal exports dir first, then deliver to the user's
+        # configured output folder (same mechanism as audio/video/Word).
         output_dir = str(paths.EXPORTS_DIR)
         os.makedirs(output_dir, exist_ok=True)
 
-        safe_title = "".join(c for c in story.title if c.isalnum() or c in (' ', '-', '_')).strip()[:50]
-        filename = f"{safe_title}_{story_id[:8]}.txt"
+        _name = safe_file_stem(story.title, story_id[:8])
+        filename = f"{_name}_{story_id[:8]}.txt"
         filepath = os.path.join(output_dir, filename)
 
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
 
-        logger.info(f"Exporting TXT document: {filename}")
-
-        return FileResponse(
-            path=filepath,
-            filename=filename,
-            media_type='text/plain; charset=utf-8'
+        delivered = deliver_final(
+            filepath, db, filename=f"{_name}.txt", subfolder=_name
         )
+
+        logger.info(f"Exported TXT document -> {delivered}")
+
+        return {
+            "path": delivered,
+            "filename": os.path.basename(delivered),
+            "folder": os.path.dirname(delivered),
+        }
 
     except HTTPException:
         raise

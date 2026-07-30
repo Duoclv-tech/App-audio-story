@@ -97,7 +97,11 @@
       "PowerShell(Get-Item *)",
       "Bash(curl -s http://127.0.0.1:8123/api/v1/stories/overview)",
       "Bash(curl -s \"http://127.0.0.1:8123/api/v1/stories/with-stats?page=1&page_size=6\")",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8000/api/v1/stories/overview)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8000/api/v1/stories/overview)",
+      "Bash(npm run *)",
+      "Bash(./venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8000/api/v1/settings/)",
+      "Bash(curl -s \"http://127.0.0.1:8011/api/v1/stories/?page=1&page_size=20\")"
     ],
     "deny": [
       "Bash(sudo:*)"

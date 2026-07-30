@@ -50,10 +50,29 @@ export default function HistoryPage() {
     story: null
   })
   const [deleting, setDeleting] = useState(false)
+  const [exporting, setExporting] = useState<string | null>(null)
+  const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   useEffect(() => {
     loadStories(currentPage)
   }, [currentPage, favoriteOnly])
+
+  const handleExport = async (storyId: string, fmt: 'word' | 'txt') => {
+    setExporting(`${storyId}:${fmt}`)
+    setNotice(null)
+    try {
+      const r = await axios.get(`/api/v1/export/${storyId}/${fmt}`)
+      setNotice({ type: 'success', text: `Đã lưu ${fmt.toUpperCase()} vào: ${r.data.folder}` })
+    } catch (e: any) {
+      setNotice({
+        type: 'error',
+        text: e.response?.data?.detail || `Lỗi khi xuất file ${fmt.toUpperCase()}`,
+      })
+    } finally {
+      setExporting(null)
+      setTimeout(() => setNotice(null), 5000)
+    }
+  }
 
   const loadStories = async (page: number = 1) => {
     try {
@@ -190,6 +209,17 @@ export default function HistoryPage() {
 
   return (
     <div className="h-[calc(100vh-3rem)]">
+      {notice && (
+        <div
+          className={`fixed bottom-6 right-6 z-50 max-w-md px-4 py-3 rounded-lg shadow-lg text-sm break-all ${
+            notice.type === 'success'
+              ? 'bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30 text-green-800 dark:text-green-300'
+              : 'bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 text-red-800 dark:text-red-300'
+          }`}
+        >
+          {notice.text}
+        </div>
+      )}
       <div className="bg-surface rounded-lg shadow-sm p-8 h-full flex flex-col">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold">Lịch Sử</h2>
@@ -394,22 +424,22 @@ export default function HistoryPage() {
                     {/* Export buttons */}
                     {story.total_downloaded > 0 && (
                       <>
-                        <a
-                          href={`/api/v1/export/${story.id}/word`}
-                          download
-                          className="px-3 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 transition text-sm font-medium"
-                          title="Export Word"
+                        <button
+                          onClick={() => handleExport(story.id, 'word')}
+                          disabled={exporting === `${story.id}:word`}
+                          className="px-3 py-2 bg-primary-500 text-white rounded-md hover:bg-primary-600 transition text-sm font-medium disabled:opacity-60"
+                          title="Lưu file Word vào thư mục output"
                         >
-                          Word
-                        </a>
-                        <a
-                          href={`/api/v1/export/${story.id}/txt`}
-                          download
-                          className="px-3 py-2 bg-gray-500 dark:bg-gray-600 text-white rounded-md hover:bg-gray-600 transition text-sm font-medium"
-                          title="Export TXT"
+                          {exporting === `${story.id}:word` ? '...' : 'Word'}
+                        </button>
+                        <button
+                          onClick={() => handleExport(story.id, 'txt')}
+                          disabled={exporting === `${story.id}:txt`}
+                          className="px-3 py-2 bg-gray-500 dark:bg-gray-600 text-white rounded-md hover:bg-gray-600 transition text-sm font-medium disabled:opacity-60"
+                          title="Lưu file TXT vào thư mục output"
                         >
-                          TXT
-                        </a>
+                          {exporting === `${story.id}:txt` ? '...' : 'TXT'}
+                        </button>
                       </>
                     )}
                     <button

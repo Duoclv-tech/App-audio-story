@@ -54,6 +54,13 @@ def is_story_active(story_id: str) -> bool:
         return story_id in _active_stories
 
 
+def any_story_active() -> bool:
+    """True if any OmniVoice segment generation is running (GPU busy) — used by
+    the quick-build guard to avoid starting a batch on top of a wizard TTS run."""
+    with _active_lock:
+        return len(_active_stories) > 0
+
+
 def request_cancel(story_id: str) -> bool:
     """Ask a running generation to stop after its current segment.
 

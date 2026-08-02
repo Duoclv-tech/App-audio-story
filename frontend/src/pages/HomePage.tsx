@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Plus, ArrowRight, ChevronRight, BookOpen, Clock, AudioLines,
-  FileText, PenLine, Mic, Video, FolderOpen, Loader2,
+  FileText, PenLine, Mic, Video, FolderOpen, Loader2, Zap,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import axios from 'axios'
@@ -148,6 +148,12 @@ export default function HomePage() {
               {creating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
               {creating ? 'Đang tạo...' : 'Tạo dự án mới'}
             </button>
+            <Link
+              to="/quick-build"
+              className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border border-token-strong text-strong hover:bg-surface-2 transition"
+            >
+              <Zap size={16} style={{ color: 'var(--accent)' }} /> Build nhanh
+            </Link>
             <Link
               to="/settings"
               className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border border-token-strong text-strong hover:bg-surface-2 transition"

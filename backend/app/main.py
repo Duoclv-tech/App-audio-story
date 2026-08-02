@@ -16,7 +16,7 @@ paths.hide_subprocess_windows()
 
 from app.config import settings
 from app.database import test_connection, init_db
-from app.api import stories, chapters, download, text, tts, audio, video, settings_api, banned_words, prompts, export, trim, video_presets, license as license_api
+from app.api import stories, chapters, download, text, tts, audio, video, settings_api, banned_words, prompts, export, trim, video_presets, build_presets, quick_build, license as license_api
 from app.license import service as license_service
 
 # Configure loguru — log into the per-user data dir so it works when frozen
@@ -87,6 +87,8 @@ app.include_router(prompts.router, prefix="/api/v1/prompts", tags=["prompts"])
 app.include_router(export.router, prefix="/api/v1/export", tags=["export"])
 app.include_router(trim.router, prefix="/api/v1/trim", tags=["trim"])
 app.include_router(video_presets.router, prefix="/api/v1/video-presets", tags=["video-presets"])
+app.include_router(build_presets.router, prefix="/api/v1/build-presets", tags=["build-presets"])
+app.include_router(quick_build.router, prefix="/api/v1/quick-build", tags=["quick-build"])
 app.include_router(license_api.router, prefix="/api/v1/license", tags=["license"])
 
 @app.on_event("startup")
@@ -119,6 +121,10 @@ async def startup_event():
     # no live task generating it — reset it to 'pending' so it can be re-run.
     from app.workers.tts_worker import resume_stuck_segments
     resume_stuck_segments()
+
+    # Quick-build: fail any batch/job left mid-run by a closed app.
+    from app.services.build_orchestrator import recover_interrupted
+    recover_interrupted()
 
 @app.on_event("shutdown")
 async def shutdown_event():

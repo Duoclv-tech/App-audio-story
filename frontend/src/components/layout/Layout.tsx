@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Link } from 'react-router-dom'
 import axios from 'axios'
-import { Home, History, Settings, Shield, MessageSquare, Menu, ChevronLeft, Scissors, AlertTriangle, Mic, Sun, Moon } from 'lucide-react'
+import { Home, History, Settings, Shield, MessageSquare, Menu, ChevronLeft, Scissors, AlertTriangle, Mic, Sun, Moon, Zap } from 'lucide-react'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -18,6 +18,7 @@ const NAV_SECTIONS: { title: string; items: NavEntry[] }[] = [
     title: 'Sản xuất',
     items: [
       { to: '/', label: 'Trang chủ', icon: Home },
+      { to: '/quick-build', label: 'Build nhanh', icon: Zap },
       { to: '/history', label: 'Lịch sử', icon: History },
       { to: '/video-trimmer', label: 'Cắt video', icon: Scissors },
     ],
@@ -80,6 +81,7 @@ export default function Layout({ children }: LayoutProps) {
               <div className="min-w-0 flex-1">
                 <div className="font-bold text-[15px] tracking-tight leading-tight">Audio Story</div>
                 <div className="font-mono text-[10px] text-faint tracking-wide">STUDIO · v1.0</div>
+                <div className="font-mono text-[7.5px] text-faint tracking-wide">https://www.storetoolmmo.com/.com</div>
               </div>
               <button
                 onClick={() => setSidebarOpen(false)}

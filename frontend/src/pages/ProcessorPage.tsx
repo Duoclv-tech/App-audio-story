@@ -511,6 +511,7 @@ export default function ProcessorPage() {
     mode: 'create' | 'rename'
     name: string
     presetId: string | null
+    target?: 'video' | 'build'   // 'build' → save a full quick-build preset instead
   }>({ isOpen: false, mode: 'create', name: '', presetId: null })
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean
@@ -1597,92 +1598,16 @@ export default function ProcessorPage() {
       setVideoStatus({ status: 'queued', taskId: null, progress: 0, outputPath: null, error: null })
       const response = await axios.post('/api/v1/video/start', {
         story_id: storyData.id,
+        // Per-story inputs (paths) — the rest of the config is the shared block
+        // reused by Build Presets via buildBackendVideoCfg(), so the two payloads
+        // can't drift out of sync when a video setting is added or renamed.
         video_source_folder: videoConfig.folder,
         audio_path: videoConfig.audioPath || undefined,
-        clip_order: videoConfig.clip_order,
-        clip_seed: videoConfig.clip_seed,
-        audio_speed: videoConfig.audio_speed,
-        transitions_pool: videoConfig.transitions_pool.length ? videoConfig.transitions_pool : undefined,
-        transition_duration: videoConfig.transition_duration,
-        resolution: videoConfig.resolution,
         banner_image: videoConfig.bannerImage || undefined,
-        // Transform (scale/offset) applies with or without a banner — when no
-        // banner is set the backend composites the clip onto a black frame.
-        banner_video_scale: videoConfig.bannerVideoScaleX,
-        banner_video_scale_x: videoConfig.bannerVideoScaleX,
-        banner_video_scale_y: videoConfig.bannerVideoScaleY,
-        banner_video_rotation: videoConfig.bannerVideoRotation,
-        banner_video_offset_x: videoConfig.bannerVideoOffsetX,
-        banner_video_offset_y: videoConfig.bannerVideoOffsetY,
-        overlay_opacity: videoConfig.overlay_opacity,
         watermark_image: videoConfig.watermarkImage || undefined,
-        watermark_x: videoConfig.watermark_x,
-        watermark_y: videoConfig.watermark_y,
-        watermark_w: videoConfig.watermark_w,
-        watermark_h: videoConfig.watermark_h,
-        watermark_shape: videoConfig.watermark_shape,
-        watermark_opacity: videoConfig.watermark_opacity,
-        watermark_text: videoConfig.watermark_text || undefined,
-        watermark_text_font: videoConfig.watermark_text_font,
-        watermark_text_size: videoConfig.watermark_text_size,
-        watermark_text_color: videoConfig.watermark_text_color,
-        watermark_text_angle: videoConfig.watermark_text_angle,
-        watermark_text_x: videoConfig.watermark_text_x,
-        watermark_text_y: videoConfig.watermark_text_y,
-        watermark_text_opacity: videoConfig.watermark_text_opacity,
-        subtitle_srt_path: videoConfig.subtitle_srt_path || undefined,
-        subtitle_animation: videoConfig.subtitle_animation,
-        subtitle_font: videoConfig.subtitle_font,
-        subtitle_font_size: videoConfig.subtitle_font_size,
-        subtitle_color: videoConfig.subtitle_color,
-        subtitle_outline_color: videoConfig.subtitle_outline_color,
-        subtitle_outline_width: videoConfig.subtitle_outline_width,
-        subtitle_shadow: videoConfig.subtitle_shadow,
-        subtitle_bold: videoConfig.subtitle_bold,
-        subtitle_italic: videoConfig.subtitle_italic,
-        subtitle_align: videoConfig.subtitle_align,
-        subtitle_x: videoConfig.subtitle_x,
-        subtitle_y: videoConfig.subtitle_y,
-        subtitle_opacity: videoConfig.subtitle_opacity,
-        subtitle_max_width: videoConfig.subtitle_max_width,
-        fade_in: videoConfig.fade_in,
-        fade_out: videoConfig.fade_out,
-        mute_source_videos: videoConfig.mute_source_videos,
         bgm_path: videoConfig.bgmPath || undefined,
-        bgm_volume: videoConfig.bgm_volume,
-        bgm_loop: videoConfig.bgm_loop,
-        bgm_ducking: videoConfig.bgm_ducking,
-        bgm_fade: videoConfig.bgm_fade,
-        ad_flip_random: videoConfig.ad_flip_random,
-        ad_flip_all: videoConfig.ad_flip_all,
-        ad_zoom: videoConfig.ad_zoom,
-        ad_zoom_factor: videoConfig.ad_zoom_factor,
-        ad_color: videoConfig.ad_color,
-        ad_saturation: videoConfig.ad_saturation,
-        ad_contrast: videoConfig.ad_contrast,
-        ad_gamma: videoConfig.ad_gamma,
-        ad_hue_shift: videoConfig.ad_hue_shift,
-        ad_clip_speed_jitter: videoConfig.ad_clip_speed_jitter,
-        ad_clip_speed_jitter_range: videoConfig.ad_clip_speed_jitter_range,
-        ad_strip_metadata: videoConfig.ad_strip_metadata,
-        visualizer_enabled: videoConfig.visualizer_enabled,
-        visualizer_style: videoConfig.visualizer_style,
-        visualizer_x: videoConfig.visualizer_x,
-        visualizer_y: videoConfig.visualizer_y,
-        visualizer_w: videoConfig.visualizer_w,
-        visualizer_h: videoConfig.visualizer_h,
-        visualizer_color1: videoConfig.visualizer_color1,
-        visualizer_color2: videoConfig.visualizer_color2,
-        visualizer_opacity: videoConfig.visualizer_opacity,
-        visualizer_bg_mode: videoConfig.visualizer_bg_mode,
-        visualizer_bg_color: videoConfig.visualizer_bg_color,
-        visualizer_bg_opacity: videoConfig.visualizer_bg_opacity,
-        visualizer_spectrum_preset: videoConfig.visualizer_spectrum_preset,
-        visualizer_bars_mode: videoConfig.visualizer_bars_mode,
-        visualizer_bars_mirror: videoConfig.visualizer_bars_mirror,
-        visualizer_waveform_mode: videoConfig.visualizer_waveform_mode,
-        visualizer_waveform_mirror: videoConfig.visualizer_waveform_mirror,
-        stickers: videoConfig.stickers.map(toBackendSticker),
+        subtitle_srt_path: videoConfig.subtitle_srt_path || undefined,
+        ...buildBackendVideoCfg(),
       })
       setVideoStatus(prev => ({ ...prev, taskId: response.data.task_id, status: 'queued' }))
       startVideoPolling(response.data.task_id)
@@ -1944,7 +1869,103 @@ export default function ProcessorPage() {
   }
 
   const savePreset = () => {
-    setPresetModal({ isOpen: true, mode: 'create', name: '', presetId: null })
+    setPresetModal({ isOpen: true, mode: 'create', name: '', presetId: null, target: 'video' })
+  }
+
+  // Backend-format video config for a Build Preset: the exact flattened payload
+  // the video worker consumes (snake_case keys, stickers pre-converted), with
+  // every PER-STORY path nulled — folder/audio/banner/watermark/bgm are stored
+  // as separate top-level preset fields, and subtitle_srt_path is per-story so
+  // it must never be baked in (would burn the wrong SRT onto another story).
+  const buildBackendVideoCfg = () => ({
+    clip_order: videoConfig.clip_order,
+    clip_seed: videoConfig.clip_seed,
+    audio_speed: videoConfig.audio_speed,
+    transitions_pool: videoConfig.transitions_pool,
+    transition_duration: videoConfig.transition_duration,
+    resolution: videoConfig.resolution,
+    banner_video_scale: videoConfig.bannerVideoScaleX,
+    banner_video_scale_x: videoConfig.bannerVideoScaleX,
+    banner_video_scale_y: videoConfig.bannerVideoScaleY,
+    banner_video_rotation: videoConfig.bannerVideoRotation,
+    banner_video_offset_x: videoConfig.bannerVideoOffsetX,
+    banner_video_offset_y: videoConfig.bannerVideoOffsetY,
+    overlay_opacity: videoConfig.overlay_opacity,
+    watermark_x: videoConfig.watermark_x,
+    watermark_y: videoConfig.watermark_y,
+    watermark_w: videoConfig.watermark_w,
+    watermark_h: videoConfig.watermark_h,
+    watermark_shape: videoConfig.watermark_shape,
+    watermark_opacity: videoConfig.watermark_opacity,
+    watermark_text: videoConfig.watermark_text || undefined,
+    watermark_text_font: videoConfig.watermark_text_font,
+    watermark_text_size: videoConfig.watermark_text_size,
+    watermark_text_color: videoConfig.watermark_text_color,
+    watermark_text_angle: videoConfig.watermark_text_angle,
+    watermark_text_x: videoConfig.watermark_text_x,
+    watermark_text_y: videoConfig.watermark_text_y,
+    watermark_text_opacity: videoConfig.watermark_text_opacity,
+    subtitle_animation: videoConfig.subtitle_animation,
+    subtitle_font: videoConfig.subtitle_font,
+    subtitle_font_size: videoConfig.subtitle_font_size,
+    subtitle_color: videoConfig.subtitle_color,
+    subtitle_outline_color: videoConfig.subtitle_outline_color,
+    subtitle_outline_width: videoConfig.subtitle_outline_width,
+    subtitle_shadow: videoConfig.subtitle_shadow,
+    subtitle_bold: videoConfig.subtitle_bold,
+    subtitle_italic: videoConfig.subtitle_italic,
+    subtitle_align: videoConfig.subtitle_align,
+    subtitle_x: videoConfig.subtitle_x,
+    subtitle_y: videoConfig.subtitle_y,
+    subtitle_opacity: videoConfig.subtitle_opacity,
+    subtitle_max_width: videoConfig.subtitle_max_width,
+    fade_in: videoConfig.fade_in,
+    fade_out: videoConfig.fade_out,
+    mute_source_videos: videoConfig.mute_source_videos,
+    bgm_volume: videoConfig.bgm_volume,
+    bgm_loop: videoConfig.bgm_loop,
+    bgm_ducking: videoConfig.bgm_ducking,
+    bgm_fade: videoConfig.bgm_fade,
+    ad_flip_random: videoConfig.ad_flip_random,
+    ad_flip_all: videoConfig.ad_flip_all,
+    ad_zoom: videoConfig.ad_zoom,
+    ad_zoom_factor: videoConfig.ad_zoom_factor,
+    ad_color: videoConfig.ad_color,
+    ad_saturation: videoConfig.ad_saturation,
+    ad_contrast: videoConfig.ad_contrast,
+    ad_gamma: videoConfig.ad_gamma,
+    ad_hue_shift: videoConfig.ad_hue_shift,
+    ad_clip_speed_jitter: videoConfig.ad_clip_speed_jitter,
+    ad_clip_speed_jitter_range: videoConfig.ad_clip_speed_jitter_range,
+    ad_strip_metadata: videoConfig.ad_strip_metadata,
+    visualizer_enabled: videoConfig.visualizer_enabled,
+    visualizer_style: videoConfig.visualizer_style,
+    visualizer_x: videoConfig.visualizer_x,
+    visualizer_y: videoConfig.visualizer_y,
+    visualizer_w: videoConfig.visualizer_w,
+    visualizer_h: videoConfig.visualizer_h,
+    visualizer_color1: videoConfig.visualizer_color1,
+    visualizer_color2: videoConfig.visualizer_color2,
+    visualizer_opacity: videoConfig.visualizer_opacity,
+    visualizer_bg_mode: videoConfig.visualizer_bg_mode,
+    visualizer_bg_color: videoConfig.visualizer_bg_color,
+    visualizer_bg_opacity: videoConfig.visualizer_bg_opacity,
+    visualizer_spectrum_preset: videoConfig.visualizer_spectrum_preset,
+    visualizer_bars_mode: videoConfig.visualizer_bars_mode,
+    visualizer_bars_mirror: videoConfig.visualizer_bars_mirror,
+    visualizer_waveform_mode: videoConfig.visualizer_waveform_mode,
+    visualizer_waveform_mirror: videoConfig.visualizer_waveform_mirror,
+    stickers: videoConfig.stickers.map(toBackendSticker),
+  })
+
+  // Snapshot the wizard's current TTS + video setup into a reusable Build Preset
+  // (voice + full video config + background-clip folder), for the Quick Build page.
+  const saveBuildPreset = () => {
+    if (!videoConfig.folder.trim()) {
+      showToast('Cần chọn folder clip nền trước khi lưu Build Preset', 'error')
+      return
+    }
+    setPresetModal({ isOpen: true, mode: 'create', name: '', presetId: null, target: 'build' })
   }
 
   const renamePreset = () => {
@@ -1961,6 +1982,23 @@ export default function ProcessorPage() {
     }
 
     try {
+      // Full quick-build preset: TTS + video config + background folder.
+      if (presetModal.target === 'build') {
+        await axios.post('/api/v1/build-presets/', {
+          name,
+          tts_config: ttsConfig,
+          video_cfg: buildBackendVideoCfg(),
+          video_folder: videoConfig.folder || null,
+          bgm_path: videoConfig.bgmPath || null,
+          watermark_image: videoConfig.watermarkImage || null,
+          banner_mode: 'by_filename',
+          options: { skip_spellcheck: true, auto_clean: true, auto_subtitle: false },
+        })
+        setPresetModal({ isOpen: false, mode: 'create', name: '', presetId: null })
+        showToast(`Đã lưu Build Preset "${name}"`, 'success')
+        return
+      }
+
       if (presetModal.mode === 'create') {
         const res = await axios.post<VideoPresetRow>('/api/v1/video-presets/', {
           name,
@@ -4919,6 +4957,14 @@ export default function ProcessorPage() {
                   className="text-xs px-3 py-1.5 bg-primary-500 text-white rounded hover:bg-primary-600 disabled:opacity-50"
                 >
                    Lưu config hiện tại
+                </button>
+                <button
+                  onClick={saveBuildPreset}
+                  disabled={isProcessing}
+                  className="text-xs px-3 py-1.5 bg-amber-500 text-white rounded hover:bg-amber-600 disabled:opacity-50"
+                  title="Lưu giọng + toàn bộ config video + folder clip thành 1 Build Preset để dùng ở trang Build nhanh"
+                >
+                  ⚡ Lưu Build Preset
                 </button>
                 <button
                   onClick={() => {
@@ -7971,7 +8017,9 @@ export default function ProcessorPage() {
           <div className="bg-surface rounded-lg w-full max-w-md flex flex-col">
             <div className="p-4 border-b flex items-center justify-between">
               <h3 className="text-lg font-semibold">
-                {presetModal.mode === 'rename' ? ' Đổi tên preset' : ' Lưu config hiện tại'}
+                {presetModal.target === 'build'
+                  ? '⚡ Lưu Build Preset'
+                  : presetModal.mode === 'rename' ? ' Đổi tên preset' : ' Lưu config hiện tại'}
               </h3>
               <button
                 onClick={() => setPresetModal({ isOpen: false, mode: 'create', name: '', presetId: null })}
@@ -7998,9 +8046,14 @@ export default function ProcessorPage() {
                 placeholder="VD: Preset mặc định, Quảng cáo 60s..."
                 className="w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
-              {presetModal.mode === 'create' && (
+              {presetModal.mode === 'create' && presetModal.target !== 'build' && (
                 <p className="text-xs text-dim">
                   Preset sẽ lưu các setting video (transitions, fade, codec, ...) — không lưu folder, audio path, banner/watermark cụ thể.
+                </p>
+              )}
+              {presetModal.target === 'build' && (
+                <p className="text-xs text-dim">
+                  Build Preset lưu <b>giọng đọc + toàn bộ config video + folder clip nền</b> để dùng ở trang <b>Build nhanh</b>. Ảnh banner sẽ tự nhận theo tên file truyện.
                 </p>
               )}
             </div>

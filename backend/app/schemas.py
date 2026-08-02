@@ -537,3 +537,91 @@ class VideoPresetResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ---- Build Preset (full quick-build preset) --------------------------------
+class BuildPresetCreate(BaseModel):
+    name: str
+    tts_config: Dict[str, Any]
+    video_cfg: Dict[str, Any]
+    video_folder: Optional[str] = None
+    bgm_path: Optional[str] = None
+    watermark_image: Optional[str] = None
+    banner_mode: str = "by_filename"
+    banner_fixed: Optional[str] = None
+    options: Optional[Dict[str, Any]] = None
+
+
+class BuildPresetUpdate(BaseModel):
+    name: Optional[str] = None
+    tts_config: Optional[Dict[str, Any]] = None
+    video_cfg: Optional[Dict[str, Any]] = None
+    video_folder: Optional[str] = None
+    bgm_path: Optional[str] = None
+    watermark_image: Optional[str] = None
+    banner_mode: Optional[str] = None
+    banner_fixed: Optional[str] = None
+    options: Optional[Dict[str, Any]] = None
+
+
+class BuildPresetResponse(BaseModel):
+    id: str
+    name: str
+    tts_config: Dict[str, Any]
+    video_cfg: Dict[str, Any]
+    video_folder: Optional[str] = None
+    bgm_path: Optional[str] = None
+    watermark_image: Optional[str] = None
+    banner_mode: str
+    banner_fixed: Optional[str] = None
+    options: Optional[Dict[str, Any]] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ---- Quick Build (batch orchestration) -------------------------------------
+class QuickBuildScanRequest(BaseModel):
+    path: str
+
+
+class QuickBuildScanItem(BaseModel):
+    source_path: str
+    title: str
+    has_banner: bool
+
+
+class QuickBuildJobIn(BaseModel):
+    source_path: str
+    title: Optional[str] = None
+    selected: bool = True
+    overrides: Optional[Dict[str, Any]] = None
+
+
+class QuickBuildStartRequest(BaseModel):
+    preset_id: str
+    jobs: List[QuickBuildJobIn]
+
+
+class QuickBuildJobOut(BaseModel):
+    id: str
+    order_index: int
+    source_path: str
+    title: Optional[str] = None
+    story_id: Optional[str] = None
+    stage: str
+    status: str
+    output_path: Optional[str] = None
+    error_message: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class QuickBuildBatchStatus(BaseModel):
+    id: str
+    status: str
+    total: int
+    jobs: List[QuickBuildJobOut]

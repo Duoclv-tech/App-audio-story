@@ -1,0 +1,397 @@
+<title>Build nhanh — batch + override từng truyện</title>
+<style>
+  :root {
+    --bg: #faf8f4; --surface: #ffffff; --surface-2: #f4f1ea; --surface-3: #efeadf;
+    --border: #e6e0d2; --border-strong: #d8d0bd; --text: #26221a; --dim: #736b5a; --faint: #9a9484;
+    --accent: #c07a12; --accent-hover: #a8680c; --accent-soft: #f6ecd8;
+    --ok: #2f8f4e; --ok-soft: #e5f3e9; --err: #d5453b; --err-soft: #fbe7e5; --run: #b06c0f; --run-soft: #f7ebd6;
+    --shadow: 0 1px 2px rgba(38,34,26,.06), 0 6px 20px rgba(38,34,26,.05);
+    --mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14120e; --surface: #1c1a15; --surface-2: #232019; --surface-3: #2a271f;
+      --border: #35301f; --border-strong: #433d29; --text: #ece7db; --dim: #a49b86; --faint: #7c745f;
+      --accent: #e0a13e; --accent-hover: #eeb254; --accent-soft: #33280f;
+      --ok: #58c47c; --ok-soft: #16301f; --err: #f0766c; --err-soft: #3a1a17; --run: #e0a13e; --run-soft: #332912;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #faf8f4; --surface: #ffffff; --surface-2: #f4f1ea; --surface-3: #efeadf;
+    --border: #e6e0d2; --border-strong: #d8d0bd; --text: #26221a; --dim: #736b5a; --faint: #9a9484;
+    --accent: #c07a12; --accent-hover: #a8680c; --accent-soft: #f6ecd8;
+    --ok: #2f8f4e; --ok-soft: #e5f3e9; --err: #d5453b; --err-soft: #fbe7e5; --run: #b06c0f; --run-soft: #f7ebd6;
+    --shadow: 0 1px 2px rgba(38,34,26,.06), 0 6px 20px rgba(38,34,26,.05);
+  }
+  :root[data-theme="dark"] {
+    --bg: #14120e; --surface: #1c1a15; --surface-2: #232019; --surface-3: #2a271f;
+    --border: #35301f; --border-strong: #433d29; --text: #ece7db; --dim: #a49b86; --faint: #7c745f;
+    --accent: #e0a13e; --accent-hover: #eeb254; --accent-soft: #33280f;
+    --ok: #58c47c; --ok-soft: #16301f; --err: #f0766c; --err-soft: #3a1a17; --run: #e0a13e; --run-soft: #332912;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 32px 24px 72px; }
+
+  .doc-note { display: flex; gap: 12px; align-items: flex-start; background: var(--accent-soft); border: 1px solid var(--border-strong); border-radius: 12px; padding: 13px 16px; margin-bottom: 26px; font-size: 13.5px; color: var(--dim); }
+  .doc-note b { color: var(--text); }
+  .doc-note .tag { flex: none; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; padding: 3px 8px; margin-top: 1px; }
+
+  .page-top { display: flex; align-items: center; gap: 12px; margin: 0 0 6px; }
+  h1.page { font-size: 22px; margin: 0; letter-spacing: -.01em; }
+  .page-top .bolt { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--accent); color: #fff; font-size: 16px; }
+  .page-sub { font-size: 13.5px; color: var(--dim); margin: 0 0 24px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; margin-bottom: 20px; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 20px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .card-head h2 { font-size: 15px; margin: 0; display: flex; align-items: center; gap: 9px; }
+  .card-head h2 .n { width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+  .body { padding: 18px 20px; display: flex; flex-direction: column; gap: 15px; }
+
+  /* folder picker */
+  .dropzone { border: 1.5px dashed var(--border-strong); border-radius: 13px; background: var(--surface-2); padding: 16px 18px; display: flex; align-items: center; gap: 16px; }
+  .dropzone .ic { flex: none; width: 42px; height: 42px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 20px; }
+  .dropzone .dz-main { flex: 1; min-width: 0; }
+  .dropzone .dz-path { font-family: var(--mono); font-size: 13px; color: var(--text); word-break: break-all; }
+  .dropzone .dz-hint { font-size: 12.5px; color: var(--faint); margin-top: 2px; }
+
+  .btn { font-family: var(--sans); font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 9px; padding: 8px 14px; border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text); display: inline-flex; align-items: center; gap: 7px; transition: background .12s, border-color .12s, transform .04s; }
+  .btn:hover { background: var(--surface-3); }
+  .btn:active { transform: translateY(1px); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent-hover); }
+  .btn.ghost { background: transparent; }
+  .btn.big { font-size: 15px; padding: 12px 24px; border-radius: 11px; }
+  .btn.sm { font-size: 12px; padding: 6px 10px; }
+
+  /* select */
+  .select { position: relative; display: inline-block; }
+  .select select { width: 100%; font-family: var(--sans); font-size: 13px; font-weight: 600; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 9px; padding: 8px 30px 8px 11px; appearance: none; cursor: pointer; }
+  .select select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .select .caret { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--faint); pointer-events: none; font-size: 11px; }
+
+  /* common-config bar */
+  .common { background: var(--accent-soft); border: 1px solid var(--border-strong); border-radius: 13px; padding: 14px 16px; }
+  .common .c-title { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); font-weight: 700; margin-bottom: 11px; display: flex; align-items: center; gap: 7px; }
+  .common-grid { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .cfield { display: flex; flex-direction: column; gap: 5px; }
+  .cfield > span { font-size: 11.5px; color: var(--dim); font-weight: 600; }
+  .cfield .select select, .cfield .fake-input { min-width: 210px; }
+  .fake-input { font-size: 13px; font-weight: 600; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 9px; padding: 8px 11px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+  .fake-input .p { font-family: var(--mono); font-size: 12px; color: var(--dim); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+  .common .spacer { flex: 1; }
+
+  /* per-story table */
+  .tbl-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .tbl-head h3 { font-size: 13.5px; margin: 0; }
+  .tbl-head .count { font-size: 12px; color: var(--faint); }
+  .bulk-actions { display: flex; gap: 7px; align-items: center; }
+
+  .row-scroll { overflow-x: auto; }
+  .grid-tbl { min-width: 880px; display: flex; flex-direction: column; gap: 7px; }
+  .col-head, .srow { display: grid; grid-template-columns: 30px 1.4fr 1fr 1fr 118px 34px; gap: 12px; align-items: center; }
+  .col-head { padding: 0 12px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--faint); font-weight: 700; }
+
+  .srow { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; padding: 10px 12px; }
+  .srow.overridden { border-color: var(--border-strong); background: var(--surface-2); }
+  .srow.open { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .ck { width: 17px; height: 17px; border-radius: 5px; border: 1.5px solid var(--border-strong); background: var(--accent); display: grid; place-items: center; color: #fff; font-size: 11px; cursor: pointer; }
+  .sname { min-width: 0; }
+  .sname .t { font-size: 13.5px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sname .f { display: block; font-family: var(--mono); font-size: 11px; color: var(--faint); margin-top: 1px; }
+
+  /* inherit vs override cell */
+  .cell { min-width: 0; }
+  .inh { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--faint); background: var(--surface-2); border: 1px dashed var(--border-strong); border-radius: 8px; padding: 6px 10px; cursor: pointer; width: 100%; }
+  .inh .lp { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .srow.overridden .inh { color: var(--text); background: var(--surface); border-style: solid; border-color: var(--accent); }
+  .ovr-badge { font-size: 10px; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 5px; padding: 1px 5px; letter-spacing: .03em; }
+  .exp-btn { justify-self: center; width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface-2); color: var(--dim); cursor: pointer; display: grid; place-items: center; font-size: 13px; }
+  .exp-btn:hover { background: var(--surface-3); color: var(--text); }
+
+  /* expanded per-story editor */
+  .editor { grid-column: 1 / -1; margin-top: 4px; background: var(--surface); border: 1px solid var(--accent); border-radius: 10px; padding: 15px 16px; }
+  .editor .e-title { font-size: 12px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+  .e-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 13px; }
+  .e-f { display: flex; flex-direction: column; gap: 5px; }
+  .e-f > label { font-size: 12px; font-weight: 600; color: var(--dim); }
+  .e-f .select select, .e-f .fake-input, .e-f input.txt { width: 100%; }
+  input.txt { font-family: var(--sans); font-size: 13px; color: var(--text); background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 9px; padding: 8px 11px; }
+  input.txt:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; }
+  .toggle .sw { width: 36px; height: 21px; border-radius: 999px; background: var(--accent); position: relative; flex: none; }
+  .toggle .sw::after { content: ""; position: absolute; top: 2px; right: 2px; width: 17px; height: 17px; border-radius: 50%; background: #fff; }
+  .toggle.off .sw { background: var(--border-strong); }
+  .toggle.off .sw::after { right: 17px; }
+  .e-actions { display: flex; gap: 8px; margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--border); }
+  .e-reset { font-size: 12px; color: var(--dim); background: transparent; border: none; cursor: pointer; text-decoration: underline; }
+
+  .run-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .run-bar .est { font-size: 12.5px; color: var(--faint); font-family: var(--mono); }
+  .spacer { flex: 1; }
+
+  .foot-note { font-size: 12.5px; color: var(--faint); display: flex; align-items: center; gap: 8px; }
+
+  .divider { display: flex; align-items: center; gap: 12px; margin: 34px 0 20px; color: var(--faint); font-size: 12.5px; }
+  .divider::before, .divider::after { content: ""; height: 1px; background: var(--border); flex: 1; }
+
+  /* progress rows (after Build) */
+  .prows { display: flex; flex-direction: column; gap: 8px; }
+  .prow { display: grid; grid-template-columns: 26px 1fr auto auto; gap: 12px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 11px; padding: 11px 13px; }
+  .prow.is-run { border-color: var(--run); background: var(--run-soft); }
+  .prow.is-done { border-color: color-mix(in srgb, var(--ok) 45%, var(--border)); }
+  .idx { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+  .pn .t { font-size: 13.5px; font-weight: 600; }
+  .pn .m { display: block; font-family: var(--mono); font-size: 11px; color: var(--faint); margin-top: 2px; }
+  .pill { justify-self: end; font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 4px 11px; white-space: nowrap; border: 1px solid transparent; }
+  .pill.done { color: var(--ok); background: var(--ok-soft); border-color: var(--ok); }
+  .pill.running { color: var(--run); background: var(--run-soft); border-color: var(--run); }
+  .pill.pending { color: var(--faint); background: var(--surface-2); border-color: var(--border); }
+  .pill .spin { display: inline-block; width: 8px; height: 8px; margin-right: 5px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; vertical-align: -1px; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .mini { font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--dim); border-radius: 7px; padding: 5px 10px; }
+  .mini.primary { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+
+  @media (max-width: 760px) {
+    .common-grid { flex-direction: column; align-items: stretch; }
+  }
+</style>
+
+<div class="wrap">
+  <div class="doc-note">
+    <span class="tag">Mockup v2</span>
+    <div><b>Build nhanh</b> — chọn 1 folder (mỗi file = 1 truyện) → ra danh sách. Đặt <b>preset & clip nền dùng chung</b> cho cả batch,
+    nhưng vẫn <b>sửa riêng từng truyện</b> khi cần. Bấm 1 nút, backend chạy hết.</div>
+  </div>
+
+  <div class="page-top">
+    <span class="bolt">⚡</span>
+    <h1 class="page">Build nhanh</h1>
+  </div>
+  <p class="page-sub">Đổ cả folder truyện → hàng loạt video. Cấu hình chung + override từng truyện.</p>
+
+  <!-- 1. FOLDER -->
+  <div class="card">
+    <div class="card-head">
+      <h2><span class="n">1</span> Chọn folder truyện</h2>
+      <span style="font-size:12.5px;color:var(--faint)">Mỗi file <b style="color:var(--dim)">.txt</b> = 1 truyện = 1 video</span>
+    </div>
+    <div class="body">
+      <div class="dropzone">
+        <span class="ic">📁</span>
+        <div class="dz-main">
+          <div class="dz-path">D:\Truyện\hàng-đợi-tháng-7\</div>
+          <div class="dz-hint">Tìm thấy <b style="color:var(--dim)">5 truyện</b> — kéo-thả folder hoặc chọn bên phải</div>
+        </div>
+        <button class="btn">📂 Đổi folder</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. COMMON CONFIG -->
+  <div class="card">
+    <div class="card-head">
+      <h2><span class="n">2</span> Cấu hình chung</h2>
+      <button class="btn ghost sm">⚙ Quản lý preset</button>
+    </div>
+    <div class="body">
+      <div class="common">
+        <div class="c-title">⚡ Áp dụng cho tất cả truyện</div>
+        <div class="common-grid">
+          <div class="cfield">
+            <span>Preset build</span>
+            <div class="select">
+              <select>
+                <option>🎙️ Kênh Radio Đêm — VBEE Ngọc Huyền</option>
+                <option>OmniVoice Nam trầm — nền phố đêm</option>
+                <option>Truyện ma — giọng chậm + visualizer</option>
+              </select>
+              <span class="caret">▾</span>
+            </div>
+          </div>
+          <div class="cfield">
+            <span>Folder clip nền</span>
+            <div class="fake-input">📂 <span class="p">D:\clips\city-night\</span></div>
+          </div>
+          <div class="cfield">
+            <span>&nbsp;</span>
+            <label class="toggle"><span class="sw"></span> Tự tạo phụ đề</label>
+          </div>
+          <div class="cfield">
+            <span>&nbsp;</span>
+            <label class="toggle"><span class="sw"></span> Auto-clean text</label>
+          </div>
+        </div>
+      </div>
+      <div class="foot-note">💡 Các truyện bên dưới mặc định <b style="color:var(--dim)">dùng chung</b> cấu hình này. Chỉ cần đụng tới truyện nào muốn khác đi.</div>
+    </div>
+  </div>
+
+  <!-- 3. PER-STORY LIST -->
+  <div class="card">
+    <div class="card-head">
+      <div class="tbl-head" style="flex:1">
+        <h3>Danh sách truyện <span class="count">· 5 truyện · 1 tuỳ chỉnh riêng</span></h3>
+      </div>
+      <div class="bulk-actions">
+        <button class="btn sm ghost">☑ Chọn tất cả</button>
+        <button class="btn sm">✎ Sửa hàng loạt…</button>
+      </div>
+    </div>
+    <div class="body">
+      <div class="row-scroll">
+        <div class="grid-tbl">
+          <div class="col-head">
+            <span></span><span>Truyện</span><span>Preset</span><span>Clip nền</span><span>Banner</span><span></span>
+          </div>
+
+          <!-- inherit row -->
+          <div class="srow">
+            <span class="ck">✓</span>
+            <div class="sname"><div class="t">Hào Môn Đệ Nhất</div><span class="f">chuong-01.txt</span></div>
+            <div class="cell"><span class="inh"><span>⟳</span><span class="lp">Theo chung</span></span></div>
+            <div class="cell"><span class="inh"><span>⟳</span><span class="lp">Theo chung</span></span></div>
+            <div class="cell"><span class="inh"><span class="lp">chuong-01.jpg</span></span></div>
+            <button class="exp-btn">✎</button>
+          </div>
+
+          <!-- inherit row, auto banner fallback -->
+          <div class="srow">
+            <span class="ck">✓</span>
+            <div class="sname"><div class="t">Trọng Sinh Chi Đô Thị</div><span class="f">chuong-02.txt</span></div>
+            <div class="cell"><span class="inh"><span>⟳</span><span class="lp">Theo chung</span></span></div>
+            <div class="cell"><span class="inh"><span>⟳</span><span class="lp">Theo chung</span></span></div>
+            <div class="cell"><span class="inh" style="color:var(--faint)"><span class="lp">— dùng clip nền —</span></span></div>
+            <button class="exp-btn">✎</button>
+          </div>
+
+          <!-- OVERRIDDEN row, expanded -->
+          <div class="srow overridden open" style="grid-template-rows:auto auto">
+            <span class="ck">✓</span>
+            <div class="sname"><div class="t">Truyện Ma Có Thật <span class="ovr-badge">RIÊNG</span></div><span class="f">ngoai-truyen.txt</span></div>
+            <div class="cell"><span class="inh"><span class="lp">Truyện ma — giọng chậm</span></span></div>
+            <div class="cell"><span class="inh"><span class="lp">D:\clips\horror\</span></span></div>
+            <div class="cell"><span class="inh"><span class="lp">ma.png</span></span></div>
+            <button class="exp-btn" style="border-color:var(--accent);color:var(--accent);background:var(--accent-soft)">▲</button>
+
+            <!-- inline editor -->
+            <div class="editor">
+              <div class="e-title">
+                <span>✎ Tuỳ chỉnh riêng — ngoai-truyen.txt</span>
+                <button class="e-reset">↺ Về theo chung</button>
+              </div>
+              <div class="e-grid">
+                <div class="e-f">
+                  <label>Tên truyện (hiển thị)</label>
+                  <input class="txt" value="Truyện Ma Có Thật" />
+                </div>
+                <div class="e-f">
+                  <label>Preset</label>
+                  <div class="select"><select><option>Truyện ma — giọng chậm + visualizer</option><option>🎙️ Kênh Radio Đêm — VBEE Ngọc Huyền</option></select><span class="caret">▾</span></div>
+                </div>
+                <div class="e-f">
+                  <label>Giọng đọc (ghi đè preset)</label>
+                  <div class="select"><select><option>OmniVoice · Nam trầm</option><option>VBEE · Ngọc Huyền</option></select><span class="caret">▾</span></div>
+                </div>
+                <div class="e-f">
+                  <label>Tốc độ đọc</label>
+                  <input class="txt" value="0.95×" />
+                </div>
+                <div class="e-f">
+                  <label>Folder clip nền</label>
+                  <div class="fake-input">📂 <span class="p">D:\clips\horror\</span></div>
+                </div>
+                <div class="e-f">
+                  <label>Banner / ảnh nền</label>
+                  <div class="fake-input">🖼️ <span class="p">ma.png</span></div>
+                </div>
+                <div class="e-f">
+                  <label>Phụ đề</label>
+                  <label class="toggle"><span class="sw"></span> Tự tạo từ TTS</label>
+                </div>
+                <div class="e-f">
+                  <label>Làm sạch text</label>
+                  <label class="toggle off"><span class="sw"></span> Tắt cho truyện này</label>
+                </div>
+              </div>
+              <div class="e-actions">
+                <button class="btn primary sm">✓ Lưu tuỳ chỉnh</button>
+                <button class="btn sm ghost">Huỷ</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- inherit rows -->
+          <div class="srow">
+            <span class="ck">✓</span>
+            <div class="sname"><div class="t">Thần Y Đích Nữ</div><span class="f">chuong-03.txt</span></div>
+            <div class="cell"><span class="inh"><span>⟳</span><span class="lp">Theo chung</span></span></div>
+            <div class="cell"><span class="inh"><span>⟳</span><span class="lp">Theo chung</span></span></div>
+            <div class="cell"><span class="inh"><span class="lp">chuong-03.jpg</span></span></div>
+            <button class="exp-btn">✎</button>
+          </div>
+
+          <div class="srow" style="opacity:.55">
+            <span class="ck" style="background:var(--surface-2);border-color:var(--border-strong)"></span>
+            <div class="sname"><div class="t">Đô Thị Cực Phẩm</div><span class="f">chuong-04.txt · bỏ chọn, không build</span></div>
+            <div class="cell"><span class="inh"><span>⟳</span><span class="lp">Theo chung</span></span></div>
+            <div class="cell"><span class="inh"><span>⟳</span><span class="lp">Theo chung</span></span></div>
+            <div class="cell"><span class="inh"><span class="lp">chuong-04.jpg</span></span></div>
+            <button class="exp-btn">✎</button>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="run-bar">
+        <button class="btn primary big">⚡ Build 4 truyện đã chọn</button>
+        <span class="est">tuần tự · ~8–12 phút / video · ≈ 40 phút</span>
+        <span class="spacer"></span>
+        <button class="btn ghost sm">💾 Lưu setup wizard thành preset…</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AFTER BUILD -->
+  <div class="divider">▼ Sau khi bấm Build, bảng chuyển sang chế độ tiến độ</div>
+
+  <div class="card">
+    <div class="card-head">
+      <h2 style="font-size:15px">Tiến độ batch <span style="font-size:12.5px;color:var(--faint);font-weight:400">· <span style="color:var(--ok)">1 xong</span> · <span style="color:var(--run)">1 đang chạy</span> · 2 chờ</span></h2>
+      <button class="btn ghost sm" style="color:var(--err);border-color:var(--err)">⏹ Dừng</button>
+    </div>
+    <div class="body">
+      <div class="prows">
+        <div class="prow is-done">
+          <span class="idx">01</span>
+          <div class="pn"><span class="t">Hào Môn Đệ Nhất</span><span class="m">→ hao-mon-de-nhat.mp4 · 24.8 MB · 09:41</span></div>
+          <span class="pill done">✓ Hoàn tất</span>
+          <button class="mini primary">▶ Mở</button>
+        </div>
+        <div class="prow is-run">
+          <span class="idx">02</span>
+          <div class="pn"><span class="t">Trọng Sinh Chi Đô Thị</span><span class="m">Render video · 62% · frame 4210/6800</span></div>
+          <span class="pill running"><span class="spin"></span>Render video (4/4)</span>
+          <button class="mini">👁 Log</button>
+        </div>
+        <div class="prow">
+          <span class="idx">03</span>
+          <div class="pn"><span class="t">Truyện Ma Có Thật</span><span class="m">Trong hàng đợi… (cấu hình riêng)</span></div>
+          <span class="pill pending">Chờ</span>
+          <button class="mini">✕ Bỏ</button>
+        </div>
+        <div class="prow">
+          <span class="idx">04</span>
+          <div class="pn"><span class="t">Thần Y Đích Nữ</span><span class="m">Trong hàng đợi…</span></div>
+          <span class="pill pending">Chờ</span>
+          <button class="mini">✕ Bỏ</button>
+        </div>
+      </div>
+      <div class="foot-note">💡 Chạy nền ở backend — đóng cửa sổ vẫn render tiếp. Mở lại app xem tiến độ.</div>
+    </div>
+  </div>
+</div>

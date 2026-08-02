@@ -232,3 +232,63 @@ class VideoPreset(Base):
     cfg = Column(JSON, nullable=False)
     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+
+class BuildPreset(Base):
+    """A full 'quick build' preset: everything needed to turn a story .txt into a
+    finished video in one shot — TTS voice/engine, the whole video config, the
+    background-clip folder, plus per-run options. Kept separate from VideoPreset
+    because VideoPreset deliberately strips folder/banner/bgm paths, while a build
+    preset must carry them so no manual step is needed.
+    """
+    __tablename__ = "build_presets"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    name = Column(String(255), nullable=False, unique=True, index=True)
+    tts_config = Column(JSON, nullable=False)     # {engine, voice_code, speed, bitrate, preset_id, mode, ...}
+    video_cfg = Column(JSON, nullable=False)      # the whole FE VideoCfgPreset (per-story paths nulled)
+    video_folder = Column(Text, nullable=True)    # background-clip folder
+    bgm_path = Column(Text, nullable=True)
+    watermark_image = Column(Text, nullable=True)
+    banner_mode = Column(String(20), default="by_filename")   # by_filename | none | fixed
+    banner_fixed = Column(Text, nullable=True)
+    options = Column(JSON, nullable=True)         # {skip_spellcheck, auto_clean, auto_subtitle}
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+
+class BuildBatch(Base):
+    """One 'quick build' run over a folder of story files."""
+    __tablename__ = "build_batches"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    status = Column(String(20), default="queued")   # queued | running | done | stopped
+    total = Column(Integer, default=0)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+    jobs = relationship("BuildJob", back_populates="batch", cascade="all, delete-orphan")
+
+
+class BuildJob(Base):
+    """One story file in a batch → one video. Tracks which pipeline stage it's on
+    so the frontend can render live progress and isolate per-file failures.
+    """
+    __tablename__ = "build_jobs"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    batch_id = Column(String(36), ForeignKey('build_batches.id', ondelete='CASCADE'), nullable=False, index=True)
+    order_index = Column(Integer, default=0)
+    source_path = Column(Text, nullable=False)
+    title = Column(String(500))
+    story_id = Column(String(36), nullable=True)   # filled once the Story row is created
+    preset_id = Column(String(36), nullable=True)
+    overrides = Column(JSON, nullable=True)        # per-job overrides merged over the preset
+    stage = Column(String(20), default="create")   # create | tts | video | done
+    status = Column(String(20), default="pending") # pending | running | done | error
+    output_path = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+    batch = relationship("BuildBatch", back_populates="jobs")

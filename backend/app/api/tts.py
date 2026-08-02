@@ -432,6 +432,12 @@ async def start_tts_merged(
     if not story.merged_content or story.merged_content.strip() == "":
         raise HTTPException(status_code=400, detail="No merged content found. Please edit content in Grammar step first.")
 
+    # OmniVoice runs on the GPU — don't start it on top of a quick-build batch.
+    if (request.engine or "vbee").lower() == "omnivoice":
+        from app.services import gpu_guard
+        if gpu_guard.is_busy():
+            raise HTTPException(status_code=409, detail="Đang chạy build hàng loạt — vui lòng đợi xong.")
+
     # Create task
     task = models.Task(
         story_id=request.story_id,
@@ -590,6 +596,11 @@ async def run_segments(
     config — the "Tạo lại toàn bộ" path after changing the voice/settings.
     """
     from app.workers.tts_worker import process_segments_task, try_acquire_story, release_story
+    from app.services import gpu_guard
+
+    # OmniVoice segment generation is GPU-heavy — don't run it on top of a batch.
+    if gpu_guard.is_busy():
+        raise HTTPException(status_code=409, detail="Đang chạy build hàng loạt — vui lòng đợi xong.")
 
     story = db.query(models.Story).filter(models.Story.id == request.story_id).first()
     if not story:

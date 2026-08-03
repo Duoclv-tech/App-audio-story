@@ -99,6 +99,12 @@ async def startup_event():
     logger.info(f"Debug mode: {settings.DEBUG}")
     logger.info(f"CORS origins: {settings.cors_origins_list}")
 
+    # Fresh install: lay down the bundled seed DB (+ media for a full-dev build)
+    # BEFORE the engine connects — otherwise SQLite creates an empty file first
+    # and this is skipped. No-op when a user DB already exists.
+    from app.seed import restore_seed_data_if_fresh
+    restore_seed_data_if_fresh()
+
     # Create tables (SQLite file is created on first run) then seed defaults.
     init_db()
 

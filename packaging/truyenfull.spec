@@ -74,6 +74,18 @@ if os.path.isdir(_def_stickers):
 _fonts = os.path.join(BACKEND, "assets", "fonts")
 if os.path.isdir(_fonts) and os.listdir(_fonts):
     datas.append((_fonts, "assets/fonts"))
+# Reference DB (curated banned words + AI prompts, NO stories). Shipped at the
+# bundle root so paths.DEFAULT_SEED_DB finds it; copied to the user's writable
+# DB on first run only. See app/seed.py::restore_seed_db_if_fresh.
+_seed_db = os.path.join(BACKEND, "default_seed.db")
+if os.path.isfile(_seed_db):
+    datas.append((_seed_db, "."))
+# Full-dev build: build.ps1 -Mode fulldev sets SEED_STORAGE_DIR to the storage
+# tree to ship alongside the (full) seed DB. Unset in a product build -> no media.
+_seed_storage = os.environ.get("SEED_STORAGE_DIR", "").strip()
+if _seed_storage and os.path.isdir(_seed_storage):
+    datas.append((_seed_storage, "default_storage"))
+    print(f"[spec] full-dev: bundling storage from {_seed_storage}")
 
 a = Analysis(
     [os.path.join(BACKEND, "desktop.py")],

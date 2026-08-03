@@ -30,3 +30,6 @@ logs/
 *.db
 *.sqlite
 *.sqlite3
+# ...except the shipped reference DB (curated banned words + prompts, no stories).
+# It's a real build artifact bundled into the .exe — see packaging/make_seed_db.py.
+!default_seed.db

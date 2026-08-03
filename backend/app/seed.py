@@ -8,10 +8,51 @@ creates empty tables — this module fills them on first run.
 
 Idempotent: skips rows that already exist, so it's safe to call every startup.
 """
+import shutil
+
 from loguru import logger
 from sqlalchemy.orm import Session
 
 from app import models
+from app import paths
+
+
+def restore_seed_data_if_fresh() -> None:
+    """On a brand-new install (no user DB yet), lay down the bundled seed data.
+
+    Copies the shipped ``default_seed.db`` into the writable DB, and — if this is
+    a "full dev" build that also bundled ``default_storage`` — copies that media
+    tree into STORAGE_DIR so the seeded stories' audio/video resolve (all media
+    paths in the DB are relative to DATA_DIR, so the copy works on any machine).
+
+    A product build ships only the reference DB (curated banned words + prompts,
+    no stories) and no storage, so a fresh install gets those tables pre-filled
+    while carrying none of the developer's content.
+
+    Keyed off the DB not existing yet, so it runs exactly once and never clobbers
+    a user's own data. No-op when running from source without a bundled seed.
+    Must run BEFORE the SQLAlchemy engine first connects — otherwise SQLite
+    creates an empty DB file first and this whole copy is skipped.
+    """
+    try:
+        if paths.DB_PATH.exists():
+            return  # already initialised — never touch existing user data
+        if not paths.DEFAULT_SEED_DB.exists():
+            return  # nothing bundled (e.g. dev run) — start with an empty DB
+
+        paths.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(paths.DEFAULT_SEED_DB, paths.DB_PATH)
+        logger.info(f"Fresh install: seeded DB from {paths.DEFAULT_SEED_DB.name}")
+
+        # Full-dev build only: bring the bundled media alongside the seeded DB.
+        if paths.DEFAULT_STORAGE_DIR.is_dir():
+            shutil.copytree(
+                paths.DEFAULT_STORAGE_DIR, paths.STORAGE_DIR, dirs_exist_ok=True
+            )
+            logger.info(f"Fresh install: seeded storage from {paths.DEFAULT_STORAGE_DIR.name}")
+    except Exception as e:
+        # Never block startup on this — the app still works with an empty DB.
+        logger.warning(f"Could not restore seed data (continuing empty): {e}")
 
 # (code, name, gender, locale, category, description, demo_url, rank)
 # Full Vietnamese VBEE catalog (25 voices) pulled from the public voice list

@@ -43,6 +43,14 @@ DEFAULT_CLONE_PRESETS_DIR = BUNDLE_DIR / "default_clone_presets"
 # In dev this points at a non-existent path so seeding is a harmless no-op —
 # the dev sticker files already live in STICKERS_DIR (backend/stickers).
 DEFAULT_STICKERS_DIR = BUNDLE_DIR / "default_stickers"
+# Reference DB shipped read-only with the app — pre-populated with the curated
+# banned-words list + AI prompts (NO stories). Copied to DB_PATH on the very
+# first run so a fresh install ships those without shipping any user content.
+DEFAULT_SEED_DB = BUNDLE_DIR / "default_seed.db"
+# Optional bundled storage tree (audio/videos/merged...) shipped only by a
+# "full dev" build. Copied into STORAGE_DIR on the first run alongside the seed
+# DB so the bundled stories' media resolve. Absent in a product build.
+DEFAULT_STORAGE_DIR = BUNDLE_DIR / "default_storage"
 
 # The frontend build lives next to the app when frozen, but in dev it sits at
 # <repo>/frontend/dist (a sibling of backend/, i.e. BUNDLE_DIR.parent).

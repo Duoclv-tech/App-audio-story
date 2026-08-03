@@ -7,7 +7,7 @@ from typing import List
 from app.database import get_db
 from app import models, schemas
 from app.api.video import require_localhost
-from app.services import build_orchestrator, gpu_guard
+from app.services import build_orchestrator, gpu_guard, clone_preset_store
 from app.workers import tts_worker
 
 router = APIRouter()
@@ -41,6 +41,40 @@ def _preset_or_404(db: Session, preset_id: str) -> models.BuildPreset:
     if not preset:
         raise HTTPException(status_code=404, detail="Build preset không tồn tại")
     return preset
+
+
+def _build_config_snapshot(preset: models.BuildPreset, common_overrides: dict | None) -> dict:
+    """Freeze the effective build config so the history feed can show the exact
+    settings used, even after the preset is later edited or deleted. Batch-level
+    preset values, plus the per-run common toggles (auto_clean / auto_subtitle /
+    video_folder) that Quick Build applies to every job."""
+    tts = preset.tts_config or {}
+    opts = preset.options or {}
+    ov = common_overrides or {}
+    engine = tts.get("engine") or "vbee"
+    # OmniVoice identifies its voice by mode (auto/design/clone), not voice_code.
+    # For clone mode, freeze the human-readable preset name (a per-job override
+    # wins, mirroring the other snapshot fields) so history shows the actual voice.
+    mode = (tts.get("mode") or "auto") if engine == "omnivoice" else None
+    clone_id = ov.get("clone_preset_id") or tts.get("preset_id")
+    clone_preset_name = (clone_preset_store.get_preset_name(clone_id)
+                         if engine == "omnivoice" and mode == "clone" else None)
+    return {
+        "preset_name": preset.name,
+        "engine": engine,
+        "voice_code": tts.get("voice_code"),
+        "mode": mode,
+        "clone_preset_name": clone_preset_name,
+        "speed": tts.get("speed"),
+        "resolution": (preset.video_cfg or {}).get("resolution"),
+        "video_folder": ov.get("video_folder") or preset.video_folder,
+        "has_bgm": bool(preset.bgm_path),
+        "skip_spellcheck": bool(opts.get("skip_spellcheck", True)),
+        "auto_clean": ov.get("auto_clean") if ov.get("auto_clean") is not None
+                      else bool(opts.get("auto_clean", False)),
+        "auto_subtitle": ov.get("auto_subtitle") if ov.get("auto_subtitle") is not None
+                         else bool(opts.get("auto_subtitle", False)),
+    }
 
 
 @router.post("/scan-folder", response_model=List[schemas.QuickBuildScanItem],
@@ -113,7 +147,13 @@ async def start_batch(req: schemas.QuickBuildStartRequest, db: Session = Depends
     # starts can't both pass (the worker thread inherits ownership).
     _acquire_gpu_or_409(db)
     try:
-        batch = models.BuildBatch(status="queued", total=len(selected))
+        # Freeze the batch-level config from its preset + the common per-run
+        # toggles (carried identically on every job's overrides).
+        snapshot = _build_config_snapshot(preset_cache[req.preset_id], selected[0].overrides) \
+            if req.preset_id in preset_cache else \
+            _build_config_snapshot(_preset_or_404(db, req.preset_id), selected[0].overrides)
+        batch = models.BuildBatch(status="queued", total=len(selected),
+                                  config_snapshot=snapshot)
         db.add(batch)
         db.commit()
         db.refresh(batch)
@@ -218,7 +258,11 @@ async def retry_job(job_id: str, db: Session = Depends(get_db)):
     # Same full GPU guard as start (start had it, retry used to skip half of it).
     _acquire_gpu_or_409(db)
     try:
-        batch = models.BuildBatch(status="queued", total=1)
+        retry_preset = db.query(models.BuildPreset).filter(
+            models.BuildPreset.id == job.preset_id
+        ).first() if job.preset_id else None
+        snapshot = _build_config_snapshot(retry_preset, job.overrides) if retry_preset else None
+        batch = models.BuildBatch(status="queued", total=1, config_snapshot=snapshot)
         db.add(batch)
         db.commit()
         db.refresh(batch)

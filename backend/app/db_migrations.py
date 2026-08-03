@@ -51,6 +51,7 @@ def run_light_migrations() -> None:
     process."""
     patches = [
         ("stories", "batch_id", "VARCHAR(36)"),  # groups Quick Build stories in history
+        ("build_batches", "config_snapshot", "JSON"),  # frozen build config for history
     ]
     for table, column, ddl in patches:
         try:

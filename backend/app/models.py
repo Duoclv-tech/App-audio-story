@@ -275,6 +275,12 @@ class BuildBatch(Base):
     id = Column(String(36), primary_key=True, default=generate_uuid)
     status = Column(String(20), default="queued")   # queued | running | done | stopped
     total = Column(Integer, default=0)
+    # Config chosen at build time, frozen so the history feed shows the exact
+    # settings used even after the source preset is later edited or deleted.
+    # {preset_name, engine, voice_code, mode, clone_preset_name, speed,
+    #  resolution, video_folder, has_bgm, skip_spellcheck, auto_clean,
+    #  auto_subtitle}  (mode/clone_preset_name are OmniVoice-only)
+    config_snapshot = Column(JSON, nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 

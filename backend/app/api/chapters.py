@@ -697,30 +697,43 @@ async def run_ai_grammar_check(text: str, db: Session) -> Dict:
     """Run AI grammar/spell check using the configured provider.
 
     Provider is chosen by the ``AI_GRAMMAR_PROVIDER`` setting (default
-    ``openai``). We prefer that provider but fall back to the other one when its
-    key is missing, so a single configured key always works. Both providers
-    return the same result shape (see ``OpenAISpellChecker.check_grammar``).
+    ``openai``). We prefer that provider but fall back to any other provider that
+    has a key, so a single configured key always works. DeepSeek is served by the
+    OpenAI-compatible ``OpenAISpellChecker`` with a different endpoint/model. All
+    providers return the same result shape (see ``OpenAISpellChecker.check_grammar``).
     """
     from app.config import settings as cfg
 
     provider = (_get_setting_value(db, "AI_GRAMMAR_PROVIDER") or "openai").lower()
-    openai_key = _get_setting_value(db, "OPENAI_API_KEY") or cfg.OPENAI_API_KEY
-    gemini_key = _get_setting_value(db, "GEMINI_API_KEY") or cfg.GEMINI_API_KEY
+    keys = {
+        "openai": _get_setting_value(db, "OPENAI_API_KEY") or cfg.OPENAI_API_KEY,
+        "gemini": _get_setting_value(db, "GEMINI_API_KEY") or cfg.GEMINI_API_KEY,
+        "deepseek": _get_setting_value(db, "DEEPSEEK_API_KEY") or cfg.DEEPSEEK_API_KEY,
+    }
 
-    # Priority order: selected provider first, the other as fallback.
-    order = ["gemini", "openai"] if provider == "gemini" else ["openai", "gemini"]
+    # Priority order: selected provider first, the rest as fallback.
+    order = [provider] + [p for p in ("openai", "gemini", "deepseek") if p != provider]
 
     for name in order:
-        if name == "openai" and openai_key:
-            checker = OpenAISpellChecker(api_key=openai_key)
+        key = keys.get(name)
+        if not key:
+            continue
+        if name == "openai":
+            return OpenAISpellChecker(api_key=key).check_grammar(text)
+        if name == "deepseek":
+            checker = OpenAISpellChecker(
+                api_key=key,
+                model="deepseek-chat",
+                base_url="https://api.deepseek.com/chat/completions",
+                provider_label="DeepSeek",
+            )
             return checker.check_grammar(text)
-        if name == "gemini" and gemini_key:
-            gemini = GeminiService(api_key=gemini_key, db=db)
-            return await gemini.check_grammar(text)
+        if name == "gemini":
+            return await GeminiService(api_key=key, db=db).check_grammar(text)
 
     return {
         "success": False,
-        "error": "Chưa cấu hình OPENAI_API_KEY hoặc GEMINI_API_KEY. Vào Cài đặt để nhập key.",
+        "error": "Chưa cấu hình API key nào (OpenAI / Gemini / DeepSeek). Vào Cài đặt để nhập key.",
     }
 
 

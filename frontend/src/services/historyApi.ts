@@ -32,6 +32,23 @@ export interface HistBatchJob {
   error_message: string | null
 }
 
+// Build config frozen at run time (or reconstructed from the live preset for
+// batches created before snapshotting). Shown as chips when the group expands.
+export interface HistBatchConfig {
+  preset_name: string | null
+  engine: string | null
+  voice_code: string | null       // VBEE voice id
+  mode: string | null             // OmniVoice: auto | design | clone
+  clone_preset_name: string | null // OmniVoice clone voice display name
+  speed: number | null
+  resolution: string | null
+  video_folder: string | null
+  has_bgm: boolean
+  skip_spellcheck: boolean
+  auto_clean: boolean
+  auto_subtitle: boolean
+}
+
 export interface HistBatch {
   id: string
   status: string                 // queued | running | done | stopped
@@ -41,6 +58,7 @@ export interface HistBatch {
   source_folder: string | null
   folder_label: string | null
   preset_name: string | null
+  config: HistBatchConfig | null
   created_at: string
   updated_at: string
   jobs: HistBatchJob[]

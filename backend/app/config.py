@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     # OpenAI (for spellcheck) — only used by the auto_run.py CLI
     OPENAI_API_KEY: str = ""  # set in .env if you use the CLI spellcheck step
 
+    # DeepSeek (OpenAI-compatible spellcheck) — configured via Settings UI (DB)
+    DEEPSEEK_API_KEY: str = ""  # optional .env fallback; primary source is DB
+
     # --- Licensing (node-locked activation) ---------------------------------
     # Storefront that signs/issues license tokens (see app/license/*).
     LICENSE_SERVER_URL: str = "https://storetoolmmo.com"

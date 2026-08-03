@@ -12,7 +12,7 @@ from loguru import logger
 from app.database import get_db
 from app import models
 from app.api.video import require_localhost
-from app.services import build_orchestrator
+from app.services import build_orchestrator, clone_preset_store
 
 router = APIRouter()
 
@@ -47,6 +47,37 @@ def _story_with_stats(db: Session, story: models.Story) -> dict:
     }
 
 
+def _config_from_preset(db: Session, preset_id) -> dict | None:
+    """Reconstruct a config snapshot from the referenced preset for batches built
+    before the snapshot column existed. Best-effort: reflects the preset's CURRENT
+    state, so it can be stale if the preset was edited (or None if deleted)."""
+    if not preset_id:
+        return None
+    p = db.query(models.BuildPreset).filter(models.BuildPreset.id == preset_id).first()
+    if not p:
+        return None
+    tts = p.tts_config or {}
+    opts = p.options or {}
+    engine = tts.get("engine") or "vbee"
+    mode = (tts.get("mode") or "auto") if engine == "omnivoice" else None
+    clone_preset_name = (clone_preset_store.get_preset_name(tts.get("preset_id"))
+                         if engine == "omnivoice" and mode == "clone" else None)
+    return {
+        "preset_name": p.name,
+        "engine": engine,
+        "voice_code": tts.get("voice_code"),
+        "mode": mode,
+        "clone_preset_name": clone_preset_name,
+        "speed": tts.get("speed"),
+        "resolution": (p.video_cfg or {}).get("resolution"),
+        "video_folder": p.video_folder,
+        "has_bgm": bool(p.bgm_path),
+        "skip_spellcheck": bool(opts.get("skip_spellcheck", True)),
+        "auto_clean": bool(opts.get("auto_clean", False)),
+        "auto_subtitle": bool(opts.get("auto_subtitle", False)),
+    }
+
+
 def _batch_entry(db: Session, batch: models.BuildBatch) -> dict:
     jobs = db.query(models.BuildJob).filter(
         models.BuildJob.batch_id == batch.id
@@ -58,13 +89,13 @@ def _batch_entry(db: Session, batch: models.BuildBatch) -> dict:
     # Derive the header label from the jobs (no snapshot column needed): the
     # folder is the parent dir of the source files, the preset is the batch preset.
     source_folder = os.path.dirname(jobs[0].source_path) if jobs else None
-    preset_name = None
     preset_id = next((j.preset_id for j in jobs if j.preset_id), None)
-    if preset_id:
-        p = db.query(models.BuildPreset.name).filter(
-            models.BuildPreset.id == preset_id
-        ).first()
-        preset_name = p[0] if p else None
+
+    # Frozen config chosen at build time. Batches created before the snapshot
+    # column existed fall back to reading the referenced preset live (may be
+    # stale/missing if the preset was since edited or deleted).
+    config = batch.config_snapshot or _config_from_preset(db, preset_id)
+    preset_name = config.get("preset_name") if config else None
 
     job_rows = []
     for j in jobs:
@@ -90,6 +121,7 @@ def _batch_entry(db: Session, batch: models.BuildBatch) -> dict:
         "source_folder": source_folder,
         "folder_label": os.path.basename(source_folder) if source_folder else None,
         "preset_name": preset_name,
+        "config": config,
         "created_at": batch.created_at,
         "updated_at": batch.updated_at,
         "jobs": job_rows,

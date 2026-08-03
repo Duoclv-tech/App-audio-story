@@ -240,6 +240,12 @@ def _build_video_config(cfg: Dict, audio_path: str, banner: Optional[str],
     """The preset stores video_cfg in backend format already (snake_case keys,
     stickers pre-converted), so we just overlay the per-story bits."""
     vcfg = dict(cfg.get("video_cfg") or {})
+    # The preset bakes in a fixed clip_seed, so reusing it verbatim makes every
+    # story in the batch shuffle its background clips into the SAME order. Give
+    # each story a fresh seed so their clip sequences differ (only when shuffling;
+    # "name" order stays deterministic A→Z by design).
+    if vcfg.get("clip_order", "shuffle") == "shuffle":
+        vcfg["clip_seed"] = random.randint(1, 1_000_000_000)
     pool = vcfg.get("transitions_pool") or [vcfg.get("transition_effect") or "crossfade"]
     vcfg.update({
         "video_source_folder": cfg.get("video_folder") or "",

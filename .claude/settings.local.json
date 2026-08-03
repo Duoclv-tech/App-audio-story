@@ -117,7 +117,11 @@
       "Bash(node_modules/.bin/tsc --noEmit -p tsconfig.json)",
       "Bash(PYTHONIOENCODING=utf-8 LICENSE_ENFORCE=0 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000)",
       "Bash(curl -s http://127.0.0.1:8000/api/v1/quick-build/39fd821f-9cb6-4d15-b356-d73e219df3ac/status)",
-      "Bash(curl -s \"http://127.0.0.1:8000/api/v1/history/feed?page=1&page_size=3\")"
+      "Bash(curl -s \"http://127.0.0.1:8000/api/v1/history/feed?page=1&page_size=3\")",
+      "Bash(ls -1 *.bat *.ps1 *.sh build*.*)",
+      "Bash(ls -d */)",
+      "PowerShell($iscc = Get-Command iscc -ErrorAction SilentlyContinue; if \\($iscc\\) { \"iscc: $\\($iscc.Source\\)\" } else { \"iscc NOT on PATH\" }; $p = \"${env:ProgramFiles\\(x86\\)}\\\\Inno Setup 6\\\\ISCC.exe\"; if \\(Test-Path $p\\) { \"Found: $p\" } else { \"Not in Program Files \\(x86\\)\" })",
+      "PowerShell($exe = \"D:\\\\Project\\\\web_app\\\\dist\\\\TruyenFullProcessor\\\\TruyenFullProcessor.exe\"; if \\(Test-Path $exe\\) { $f = Get-Item $exe; \"EXE: {0}  |  {1:N1} MB  |  {2}\" -f $f.Name, \\($f.Length/1MB\\), $f.LastWriteTime } else { \"EXE NOT FOUND\" })"
     ],
     "deny": [
       "Bash(sudo:*)"

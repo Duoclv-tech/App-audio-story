@@ -97,6 +97,8 @@ class OpenAISpellChecker:
         api_key: Optional[str] = None,
         model: str = DEFAULT_MODEL,
         timeout: int = DEFAULT_TIMEOUT,
+        base_url: str = "https://api.openai.com/v1/chat/completions",
+        provider_label: str = "OpenAI",
     ):
         if api_key:
             self.api_key = api_key
@@ -105,13 +107,17 @@ class OpenAISpellChecker:
             self.api_key = settings.OPENAI_API_KEY
         self.model = model
         self.timeout = timeout
+        # Endpoint + label let this class also drive OpenAI-compatible APIs
+        # (e.g. DeepSeek) without duplicating the request/parse logic.
+        self.base_url = base_url
+        self.provider_label = provider_label
 
     def is_available(self) -> bool:
         return bool(self.api_key)
 
     def _call_api(self, user_prompt: str) -> str:
         resp = requests.post(
-            "https://api.openai.com/v1/chat/completions",
+            self.base_url,
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
@@ -224,10 +230,10 @@ class OpenAISpellChecker:
         misleading "0 lỗi".
         """
         if not self.api_key:
-            return {"success": False, "error": "OPENAI_API_KEY not configured"}
+            return {"success": False, "error": f"{self.provider_label} API key not configured"}
         if not text or not text.strip():
             return {
-                "success": True, "provider": "openai", "total_issues": 0,
+                "success": True, "provider": self.provider_label.lower(), "total_issues": 0,
                 "spelling_errors": [], "watermarks": [], "total_watermarks": 0,
                 "summary": "Không có nội dung để kiểm tra.",
             }
@@ -236,7 +242,7 @@ class OpenAISpellChecker:
         # instead of only the first slice.
         chunks = _split_text(text, DEFAULT_CHUNK_CHARS)
         logger.info(
-            f"OpenAI grammar check: {len(text):,} chars -> {len(chunks)} chunk(s) "
+            f"{self.provider_label} grammar check: {len(text):,} chars -> {len(chunks)} chunk(s) "
             f"via {self.model}"
         )
 
@@ -258,12 +264,12 @@ class OpenAISpellChecker:
                         detail = resp.json()
                     except Exception:
                         detail = resp.text
-                logger.error(f"OpenAI grammar check failed (chunk {i}/{len(chunks)}): {detail or e}")
+                logger.error(f"{self.provider_label} grammar check failed (chunk {i}/{len(chunks)}): {detail or e}")
                 # Surface auth/rate errors (which fail deterministically on the
                 # first chunk) instead of a misleading "0 lỗi". If we already
                 # gathered hits from earlier chunks, return them and flag partial.
                 if not spelling_errors:
-                    return {"success": False, "error": f"OpenAI API error: {detail or e}"}
+                    return {"success": False, "error": f"{self.provider_label} API error: {detail or e}"}
                 truncated = True
                 break
 
@@ -293,13 +299,13 @@ class OpenAISpellChecker:
                     "context": str(it.get("explanation", "")).strip(),
                 })
 
-        summary = f"OpenAI ({self.model}): tìm thấy {len(spelling_errors)} lỗi chính tả."
+        summary = f"{self.provider_label} ({self.model}): tìm thấy {len(spelling_errors)} lỗi chính tả."
         if truncated:
             summary += " (Kiểm tra dừng giữa chừng do lỗi API, kết quả có thể chưa đầy đủ.)"
 
         return {
             "success": True,
-            "provider": "openai",
+            "provider": self.provider_label.lower(),
             "total_issues": len(spelling_errors),
             "spelling_errors": spelling_errors,
             "watermarks": [],

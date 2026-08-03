@@ -6,8 +6,15 @@ import {
 } from 'lucide-react'
 import {
   historyFeed, deleteBatch,
-  type FeedEntry, type HistStory, type HistBatch, type HistBatchJob, type FeedMeta,
+  type FeedEntry, type HistStory, type HistBatch, type HistBatchJob,
+  type HistBatchConfig, type FeedMeta,
 } from '../services/historyApi'
+
+const baseName = (p: string) => p.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p
+
+// OmniVoice picks its voice by mode, not a voice_code; label it for humans.
+const omniModeLabel = (mode: string | null | undefined) =>
+  mode === 'design' ? 'thiết kế' : mode === 'clone' ? 'clone' : 'mặc định'
 
 export default function HistoryPage() {
   const navigate = useNavigate()
@@ -193,7 +200,7 @@ export default function HistoryPage() {
           </div>
           <div className="bg-orange-50 dark:bg-orange-500/10 p-4 rounded-lg">
             <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{batchCount}</div>
-            <div className="text-sm text-dim">Mẻ Build nhanh (trang này)</div>
+            <div className="text-sm text-dim">Mẻ Build Batch (trang này)</div>
           </div>
         </div>
 
@@ -278,7 +285,7 @@ export default function HistoryPage() {
       {delBatch && (
         <ConfirmDialog
           title="Xác nhận xoá mẻ build"
-          body={<>Xoá cả mẻ <span className="font-medium text-strong">Build nhanh · {delBatch.folder_label || '—'}</span> ({delBatch.total} truyện)?</>}
+          body={<>Xoá cả mẻ <span className="font-medium text-strong">Build Batch · {delBatch.folder_label || '—'}</span> ({delBatch.total} truyện)?</>}
           warn="Xoá toàn bộ truyện + audio trung gian của mẻ. File video đã xuất ở thư mục Downloads KHÔNG bị xoá."
           busy={busy}
           onCancel={() => setDelBatch(null)}
@@ -362,7 +369,7 @@ function BatchGroup({ batch, open, onToggle, onOpenBatch, onDelete }: {
   const running = batch.status === 'running' || batch.status === 'queued'
   return (
     <div className="border rounded-lg overflow-hidden">
-      {/* Header — expand toggles the status list; actions live in Build nhanh */}
+      {/* Header — expand toggles the status list; actions live in Build Batch */}
       <div className="flex items-center gap-3 p-4 bg-surface-2/50 hover:bg-surface-2 cursor-pointer" onClick={onToggle}>
         {open ? <ChevronDown className="w-5 h-5 text-dim flex-shrink-0" /> : <ChevronRight className="w-5 h-5 text-dim flex-shrink-0" />}
         <div className="w-9 h-9 rounded-lg bg-orange-500 flex items-center justify-center flex-shrink-0">
@@ -370,7 +377,7 @@ function BatchGroup({ batch, open, onToggle, onOpenBatch, onDelete }: {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-semibold truncate">Build nhanh · {batch.folder_label || '—'}</span>
+            <span className="font-semibold truncate">Build Batch · {batch.folder_label || '—'}</span>
             <BatchBadge status={batch.status} />
           </div>
           <div className="text-sm text-dim">
@@ -384,8 +391,8 @@ function BatchGroup({ batch, open, onToggle, onOpenBatch, onDelete }: {
           <button
             onClick={onOpenBatch}
             className="px-3 py-1.5 text-sm rounded-md bg-orange-500 text-white hover:bg-orange-600 inline-flex items-center gap-1.5"
-            title="Mở mẻ này trong tab Build nhanh để thao tác"
-          ><ExternalLink className="w-4 h-4" /> Mở trong Build nhanh</button>
+            title="Mở mẻ này trong tab Build Batch để thao tác"
+          ><ExternalLink className="w-4 h-4" /> Mở trong Build Batch</button>
           {!running && (
             <button onClick={onDelete} className="p-2 text-dim hover:text-red-500" title="Xoá mẻ build">
               <Trash2 className="w-4 h-4" />
@@ -394,14 +401,41 @@ function BatchGroup({ batch, open, onToggle, onOpenBatch, onDelete }: {
         </div>
       </div>
 
-      {/* Children — status only; any action is done inside Build nhanh */}
+      {/* Children — config chips (frozen at build time) then status-only rows */}
       {open && (
-        <div className="divide-y">
-          {batch.jobs.map(job => (
-            <BatchJobRow key={job.id} job={job} />
-          ))}
+        <div>
+          {batch.config && <ConfigChips config={batch.config} />}
+          <div className="divide-y">
+            {batch.jobs.map(job => (
+              <BatchJobRow key={job.id} job={job} />
+            ))}
+          </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// Frozen build config, mirroring the chip row on the Quick Build setup screen.
+function ConfigChips({ config: c }: { config: HistBatchConfig }) {
+  const chip = (label: string, val: string, strike = false) => (
+    <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-surface-2 border ${strike ? 'opacity-70 line-through' : ''}`}>
+      <span className="text-faint">{label}</span> <b className="text-strong">{val}</b>
+    </span>
+  )
+  return (
+    <div className="flex flex-wrap gap-2 px-4 py-3 pl-14 bg-surface-2/30 border-b">
+      {chip('Engine', (c.engine || 'vbee').toUpperCase())}
+      {c.engine === 'omnivoice'
+        ? chip('Giọng', c.clone_preset_name || omniModeLabel(c.mode))
+        : c.voice_code && chip('Giọng', c.voice_code)}
+      {c.speed != null && chip('Tốc độ', `${c.speed}×`)}
+      {c.resolution && chip('Video', c.resolution)}
+      {c.video_folder && chip('Clip nền', baseName(c.video_folder))}
+      {c.has_bgm && chip('Nhạc nền', '✓')}
+      {c.skip_spellcheck && chip('Spellcheck', 'bỏ qua', true)}
+      {c.auto_clean && chip('Auto-clean', '✓')}
+      {c.auto_subtitle && chip('Phụ đề', '✓')}
     </div>
   )
 }

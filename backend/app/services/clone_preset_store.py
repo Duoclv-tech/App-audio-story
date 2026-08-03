@@ -115,6 +115,23 @@ def list_presets() -> List[Dict]:
     return items
 
 
+def get_preset_name(preset_id: Optional[str]) -> Optional[str]:
+    """Best-effort display name for a clone preset id, read straight from its
+    meta.json (no dir scan / seeding side effects). Returns None for an invalid,
+    missing, or unreadable preset — callers use this for labels only, so a miss
+    just falls back to showing the raw id or nothing."""
+    if not preset_id or not re.fullmatch(r"[a-zA-Z0-9_-]+", preset_id):
+        return None
+    meta_path = PRESETS_DIR / preset_id / "meta.json"
+    if not meta_path.exists():
+        return None
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return meta.get("name") or preset_id
+
+
 def _load_meta(preset_id: str) -> Tuple[Path, Path, Dict]:
     preset_dir = _preset_path(preset_id)
     meta_path = preset_dir / "meta.json"

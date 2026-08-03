@@ -152,7 +152,7 @@ export default function HomePage() {
               to="/quick-build"
               className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border border-token-strong text-strong hover:bg-surface-2 transition"
             >
-              <Zap size={16} style={{ color: 'var(--accent)' }} /> Build nhanh
+              <Zap size={16} style={{ color: 'var(--accent)' }} /> Build Batch
             </Link>
             <Link
               to="/settings"

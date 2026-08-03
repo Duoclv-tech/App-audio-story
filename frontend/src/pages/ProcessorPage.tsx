@@ -4969,7 +4969,7 @@ export default function ProcessorPage() {
                   onClick={savePreset}
                   disabled={isProcessing}
                   className="text-xs px-3 py-1.5 bg-primary-500 text-white rounded hover:bg-primary-600 disabled:opacity-50"
-                  title="Lưu giọng + toàn bộ config video + folder clip thành 1 preset — dùng chung cho cả wizard và trang Build nhanh"
+                  title="Lưu giọng + toàn bộ config video + folder clip thành 1 preset — dùng chung cho cả wizard và trang Build Batch"
                 >
                   💾 Lưu preset
                 </button>
@@ -8053,7 +8053,7 @@ export default function ProcessorPage() {
               />
               {presetModal.mode === 'create' && (
                 <p className="text-xs text-dim">
-                  Preset lưu <b>giọng đọc + toàn bộ config video + folder clip nền</b>, dùng chung cho cả wizard này lẫn trang <b>Build nhanh</b>. Ảnh banner ở Build nhanh tự nhận theo tên file truyện.
+                  Preset lưu <b>giọng đọc + toàn bộ config video + folder clip nền</b>, dùng chung cho cả wizard này lẫn trang <b>Build Batch</b>. Ảnh banner ở Build Batch tự nhận theo tên file truyện.
                 </p>
               )}
             </div>

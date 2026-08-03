@@ -7,9 +7,9 @@ import {
 } from 'lucide-react'
 import { hasNativeDialogs, pickFolderNative } from '../services/nativeDialog'
 import {
-  listBuildPresets, deleteBuildPreset, renameBuildPreset,
+  listBuildPresets, deleteBuildPreset, renameBuildPreset, listClonePresets,
   scanFolder, startBatch, getBatchStatus, stopBatch, retryJob, cancelJob,
-  BuildPreset, ScanItem, JobOverrides, BatchStatus, JobOut,
+  BuildPreset, ScanItem, JobOverrides, BatchStatus, JobOut, ClonePreset,
 } from '../services/quickBuildApi'
 
 interface Row extends ScanItem {
@@ -31,8 +31,13 @@ function errMsg(e: any, fallback: string): string {
 
 const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() || p
 
+// OmniVoice picks its voice by mode (not a voice_code); label it for humans.
+const omniModeLabel = (mode: string | undefined) =>
+  mode === 'design' ? 'thiết kế' : mode === 'clone' ? 'clone' : 'mặc định'
+
 export default function QuickBuildPage() {
   const [presets, setPresets] = useState<BuildPreset[]>([])
+  const [clonePresets, setClonePresets] = useState<ClonePreset[]>([])
   const [presetId, setPresetId] = useState('')
   const [folder, setFolder] = useState('')
   const [rows, setRows] = useState<Row[]>([])
@@ -40,7 +45,7 @@ export default function QuickBuildPage() {
   const [notice, setNotice] = useState<{ kind: 'err' | 'ok'; text: string } | null>(null)
 
   // Batch-wide options (apply to every story unless a row overrides them).
-  const [commonAutoClean, setCommonAutoClean] = useState(true)
+  const [commonAutoClean, setCommonAutoClean] = useState(false)
   // Shared clip folder for the whole batch. Empty = use the preset's folder.
   const [commonFolder, setCommonFolder] = useState('')
   // Auto-generate burned subtitles from the TTS timing (estimated). Default off.
@@ -81,6 +86,9 @@ export default function QuickBuildPage() {
       .then(p => { setPresets(p); setPresetId(cur => (p.some(x => x.id === cur) ? cur : (p[0]?.id ?? ''))) })
       .catch(e => setNotice({ kind: 'err', text: errMsg(e, 'Không tải được danh sách preset') }))
   useEffect(() => { reloadPresets() }, [])
+  // OmniVoice clone voices — used to show/pick a voice by name (VBEE presets
+  // ignore this; the fetch swallows errors and yields []).
+  useEffect(() => { listClonePresets().then(setClonePresets) }, [])
 
   const selectedPreset = presets.find(p => p.id === presetId) || null
   const selectedCount = rows.filter(r => r.selected).length
@@ -410,10 +418,11 @@ export default function QuickBuildPage() {
                     </div>
                   </label>
                 </div>
-                {selectedPreset && <PresetChips preset={selectedPreset} />}
+                {selectedPreset && <PresetChips preset={selectedPreset} clonePresets={clonePresets} />}
                 <div className="flex flex-wrap gap-5 pt-1">
                   <Toggle on={commonAutoClean} onChange={setCommonAutoClean} label="Auto-clean text"
-                    hint="(bỏ dòng rác: nguồn, web, quảng cáo)" />
+                    hint="(bỏ dòng rác: nguồn, web, quảng cáo)"
+                    tooltip={"Tự động xóa NGUYÊN các dòng rác trước khi build:\n• Link/web: http, www., .com, .net, .vn\n• Dòng ghi nguồn: 'nguồn:', 'đọc truyện tại', 'vui lòng ghi rõ nguồn'…\n• Dòng credit: 'converter:', 'dịch:', 'beta:'\n• Gộp nhiều dòng trống liên tiếp\n\nChỉ xóa dòng rác rõ ràng, KHÔNG sửa nội dung câu văn. Lưu ý: nếu một dòng vừa có chữ truyện vừa có link thì cả dòng sẽ bị bỏ."} />
                   <Toggle on={commonAutoSubtitle} onChange={setCommonAutoSubtitle} label="Tự tạo phụ đề"
                     hint="(sinh từ giọng đọc — canh giờ ước lượng)" />
                 </div>
@@ -458,6 +467,25 @@ export default function QuickBuildPage() {
               {rows.map((r, i) => {
                 const ov = r.overrides
                 const overridden = hasOverride(ov)
+                // Resolve the value each field would actually use (override → common → preset)
+                // so the editor shows real numbers/paths as if already chosen, not "Theo chung".
+                const rowPreset = (ov.preset_id ? presets.find(p => p.id === ov.preset_id) : selectedPreset) || null
+                const pt = rowPreset?.tts_config || {}
+                const engine = (pt.engine || 'vbee') as string
+                const bannerDef = (['by_filename', 'none'].includes(rowPreset?.banner_mode as any)
+                  ? rowPreset!.banner_mode : 'by_filename') as 'by_filename' | 'none'
+                const folderDef = commonFolder || rowPreset?.video_folder || ''
+                const eff = {
+                  preset_id: ov.preset_id || presetId,
+                  voice_code: ov.voice_code ?? (pt.voice_code || ''),
+                  // OmniVoice clone voice: override → preset's clone (tts.preset_id).
+                  clone_preset_id: ov.clone_preset_id ?? (pt.preset_id || ''),
+                  speed: ov.speed ?? (pt.speed ?? ''),
+                  banner_mode: ov.banner_mode ?? bannerDef,
+                  auto_clean: ov.auto_clean ?? commonAutoClean,
+                  auto_subtitle: ov.auto_subtitle ?? commonAutoSubtitle,
+                  video_folder: ov.video_folder ?? folderDef,
+                }
                 return (
                   <div key={r.source_path}
                     className={`rounded-xl border ${r.expanded ? 'border-primary-400 ring-2 ring-primary-500/20' : overridden ? 'border-token-strong bg-surface-2' : 'border-token'} px-3 py-2.5`}>
@@ -473,7 +501,7 @@ export default function QuickBuildPage() {
                       </div>
                       <Cell overridden={!!ov.preset_id} value={ov.preset_id ? (presetName(ov.preset_id) || 'preset') : null} />
                       <Cell overridden={!!ov.video_folder} value={ov.video_folder ? baseName(ov.video_folder) : null}
-                        fallback={baseName((commonFolder || selectedPreset?.video_folder || '').trim()) || undefined} />
+                        fallback={baseName(folderDef.trim()) || undefined} />
                       <Cell overridden={!!ov.banner_mode}
                         value={ov.banner_mode ? (ov.banner_mode === 'none' ? 'Không' : 'Theo tên') : null}
                         fallback={r.has_banner ? '🖼️ theo tên' : 'clip nền'} />
@@ -492,65 +520,86 @@ export default function QuickBuildPage() {
                         </label>
                         <label className="flex flex-col gap-1">
                           <span className="text-xs font-semibold text-dim">Preset riêng</span>
-                          <select value={ov.preset_id || ''} onChange={e => patchOverride(i, { preset_id: e.target.value || undefined })}
+                          <select value={eff.preset_id}
+                            onChange={e => patchOverride(i, { preset_id: e.target.value === presetId ? undefined : e.target.value })}
                             className="px-2.5 py-1.5 text-sm border border-token-strong rounded bg-surface">
-                            <option value="">⟳ Theo chung</option>
                             {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                           </select>
                         </label>
-                        <label className="flex flex-col gap-1">
-                          <span className="text-xs font-semibold text-dim">Giọng ghi đè <span className="text-faint font-normal">(voice_code)</span></span>
-                          <input value={ov.voice_code || ''} onChange={e => patchOverride(i, { voice_code: e.target.value || undefined })}
-                            placeholder="để trống = theo preset" className="px-2.5 py-1.5 text-sm font-mono border border-token-strong rounded bg-surface" />
-                        </label>
+                        {engine === 'omnivoice' ? (
+                          <label className="flex flex-col gap-1">
+                            <span className="text-xs font-semibold text-dim">Giọng OmniVoice <span className="text-faint font-normal">({omniModeLabel(pt.mode)})</span></span>
+                            {(pt.mode || 'auto') === 'clone' ? (
+                              <select value={eff.clone_preset_id}
+                                onChange={e => { const v = e.target.value; patchOverride(i, { clone_preset_id: (!v || v === (pt.preset_id || '')) ? undefined : v }) }}
+                                className="px-2.5 py-1.5 text-sm border border-token-strong rounded bg-surface">
+                                <option value="">— Theo preset —</option>
+                                {clonePresets.map(cp => <option key={cp.id} value={cp.id}>{cp.name}</option>)}
+                              </select>
+                            ) : (
+                              <input value={omniModeLabel(pt.mode)} disabled
+                                title="Chế độ auto/design lấy giọng từ preset — đổi ở màn Xử lý"
+                                className="px-2.5 py-1.5 text-sm border border-token rounded bg-surface-2 text-faint" />
+                            )}
+                          </label>
+                        ) : (
+                          <label className="flex flex-col gap-1">
+                            <span className="text-xs font-semibold text-dim">Giọng ghi đè <span className="text-faint font-normal">(voice_code)</span></span>
+                            <input value={eff.voice_code}
+                              onChange={e => { const v = e.target.value; patchOverride(i, { voice_code: (!v || v === (pt.voice_code || '')) ? undefined : v }) }}
+                              placeholder="voice_code" className="px-2.5 py-1.5 text-sm font-mono border border-token-strong rounded bg-surface" />
+                          </label>
+                        )}
                         <label className="flex flex-col gap-1">
                           <span className="text-xs font-semibold text-dim">Tốc độ đọc</span>
-                          <input type="number" step="0.01" min="0.5" max="2" placeholder="theo chung"
-                            value={ov.speed ?? ''} onChange={e => patchOverride(i, { speed: e.target.value ? Number(e.target.value) : undefined })}
+                          <input type="number" step="0.01" min="0.5" max="2"
+                            value={eff.speed}
+                            onChange={e => { const v = e.target.value ? Number(e.target.value) : undefined; patchOverride(i, { speed: (v === undefined || v === pt.speed) ? undefined : v }) }}
                             className="px-2.5 py-1.5 text-sm border border-token-strong rounded bg-surface" />
                         </label>
                         <label className="flex flex-col gap-1">
                           <span className="text-xs font-semibold text-dim">Banner</span>
-                          <select value={ov.banner_mode || ''} onChange={e => patchOverride(i, { banner_mode: (e.target.value || undefined) as any })}
+                          <select value={eff.banner_mode}
+                            onChange={e => patchOverride(i, { banner_mode: (e.target.value === bannerDef ? undefined : e.target.value) as any })}
                             className="px-2.5 py-1.5 text-sm border border-token-strong rounded bg-surface">
-                            <option value="">⟳ Theo chung</option>
                             <option value="by_filename">Theo tên file</option>
                             <option value="none">Không banner</option>
                           </select>
                         </label>
                         <label className="flex flex-col gap-1">
                           <span className="text-xs font-semibold text-dim">Làm sạch text</span>
-                          <select value={ov.auto_clean === undefined ? '' : ov.auto_clean ? 'on' : 'off'}
-                            onChange={e => patchOverride(i, { auto_clean: e.target.value === '' ? undefined : e.target.value === 'on' })}
+                          <select value={eff.auto_clean ? 'on' : 'off'}
+                            onChange={e => { const v = e.target.value === 'on'; patchOverride(i, { auto_clean: v === commonAutoClean ? undefined : v }) }}
                             className="px-2.5 py-1.5 text-sm border border-token-strong rounded bg-surface">
-                            <option value="">⟳ Theo chung</option>
                             <option value="on">Bật</option>
                             <option value="off">Tắt</option>
                           </select>
                         </label>
                         <label className="flex flex-col gap-1">
                           <span className="text-xs font-semibold text-dim">Phụ đề</span>
-                          <select value={ov.auto_subtitle === undefined ? '' : ov.auto_subtitle ? 'on' : 'off'}
-                            onChange={e => patchOverride(i, { auto_subtitle: e.target.value === '' ? undefined : e.target.value === 'on' })}
+                          <select value={eff.auto_subtitle ? 'on' : 'off'}
+                            onChange={e => { const v = e.target.value === 'on'; patchOverride(i, { auto_subtitle: v === commonAutoSubtitle ? undefined : v }) }}
                             className="px-2.5 py-1.5 text-sm border border-token-strong rounded bg-surface">
-                            <option value="">⟳ Theo chung</option>
                             <option value="on">Bật</option>
                             <option value="off">Tắt</option>
                           </select>
                         </label>
                         <label className="flex flex-col gap-1 sm:col-span-2 lg:col-span-3">
-                          <span className="text-xs font-semibold text-dim">Folder clip nền riêng (tuỳ chọn)</span>
+                          <span className="text-xs font-semibold text-dim">Folder clip nền riêng</span>
                           <div className="flex gap-2">
-                            <input value={ov.video_folder || ''} onChange={e => patchOverride(i, { video_folder: e.target.value || undefined })}
-                              placeholder="Để trống = theo chung" className="flex-1 px-2.5 py-1.5 text-sm font-mono border border-token-strong rounded bg-surface" />
+                            <input value={eff.video_folder}
+                              onChange={e => { const v = e.target.value; patchOverride(i, { video_folder: (!v || v === folderDef) ? undefined : v }) }}
+                              placeholder="folder clip nền" className="flex-1 px-2.5 py-1.5 text-sm font-mono border border-token-strong rounded bg-surface" />
                             {hasNativeDialogs() && (
-                              <button onClick={async () => { const p = await pickFolderNative(); if (p) patchOverride(i, { video_folder: p }) }}
+                              <button onClick={async () => { const p = await pickFolderNative(); if (p) patchOverride(i, { video_folder: p === folderDef ? undefined : p }) }}
                                 className="text-xs px-2.5 rounded border border-token-strong text-dim hover:bg-surface-2">📂</button>
                             )}
                           </div>
                         </label>
                         <button onClick={() => patchRow(i, { overrides: {} })}
-                          className="text-xs text-dim underline justify-self-start">↺ Về theo chung</button>
+                          className="text-xs justify-self-start inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-token-strong text-dim hover:bg-surface-2"
+                          title="Xoá mọi thay đổi riêng, dùng lại cấu hình chung">
+                          <RotateCcw size={13} /> Về cấu hình chung</button>
                       </div>
                     )}
                   </div>
@@ -614,14 +663,14 @@ function Header() {
     <div>
       <div className="flex items-center gap-3">
         <span className="w-8 h-8 rounded-lg grid place-items-center text-white" style={{ background: 'var(--accent)' }}><Zap size={17} /></span>
-        <h1 className="text-xl font-bold tracking-tight">Build nhanh</h1>
+        <h1 className="text-xl font-bold tracking-tight">Build Batch</h1>
       </div>
       <p className="text-sm text-dim mt-1">Đổ cả folder truyện → hàng loạt video. Cấu hình chung + override từng truyện.</p>
     </div>
   )
 }
 
-function Toggle({ on, onChange, label, hint, disabled }: { on: boolean; onChange: (v: boolean) => void; label: string; hint?: string; disabled?: boolean }) {
+function Toggle({ on, onChange, label, hint, tooltip, disabled }: { on: boolean; onChange: (v: boolean) => void; label: string; hint?: string; tooltip?: string; disabled?: boolean }) {
   return (
     <button type="button" disabled={disabled} onClick={() => onChange(!on)}
       className={`inline-flex items-center gap-2 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
@@ -629,6 +678,12 @@ function Toggle({ on, onChange, label, hint, disabled }: { on: boolean; onChange
         <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${on ? 'left-[18px]' : 'left-0.5'}`} />
       </span>
       <span className="text-sm font-semibold">{label}{hint && <span className="text-faint font-normal"> {hint}</span>}</span>
+      {tooltip && (
+        <span title={tooltip} onClick={e => e.stopPropagation()}
+          className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-token-strong text-faint text-[10px] font-bold cursor-help">
+          ?
+        </span>
+      )}
     </button>
   )
 }
@@ -765,17 +820,24 @@ function ManagePresetsModal({ presets, onClose, onChanged }:
   )
 }
 
-function PresetChips({ preset }: { preset: BuildPreset }) {
+function PresetChips({ preset, clonePresets }: { preset: BuildPreset; clonePresets: ClonePreset[] }) {
   const t = preset.tts_config || {}
+  const engine = (t.engine || 'vbee') as string
   const chip = (label: string, val: any) => (
     <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-surface border border-token">
       <span className="text-faint">{label}</span> <b className="text-strong">{String(val)}</b>
     </span>
   )
+  // OmniVoice shows its voice by mode; clone mode resolves the preset_id to a name.
+  const omniVoice = engine === 'omnivoice'
+    ? ((t.mode || 'auto') === 'clone'
+        ? (clonePresets.find(c => c.id === t.preset_id)?.name || t.preset_id || 'clone')
+        : omniModeLabel(t.mode))
+    : null
   return (
     <div className="flex flex-wrap gap-2">
-      {chip('Engine', (t.engine || 'vbee').toUpperCase())}
-      {t.voice_code && chip('Giọng', t.voice_code)}
+      {chip('Engine', engine.toUpperCase())}
+      {engine === 'omnivoice' ? chip('Giọng', omniVoice) : t.voice_code && chip('Giọng', t.voice_code)}
       {t.speed && chip('Tốc độ', `${t.speed}×`)}
       {preset.video_cfg?.resolution && chip('Video', preset.video_cfg.resolution)}
       {preset.video_folder && chip('Clip nền', baseName(preset.video_folder))}

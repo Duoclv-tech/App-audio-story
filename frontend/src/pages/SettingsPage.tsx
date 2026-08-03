@@ -9,8 +9,112 @@ interface Settings {
   AI_GRAMMAR_PROVIDER?: string
   OPENAI_API_KEY?: string
   GEMINI_API_KEY?: string
+  DEEPSEEK_API_KEY?: string
   output_folder?: string
 }
+
+// AI grammar-check providers. Selecting one in the dropdown reveals only that
+// provider's key input + its own "how to get a key" tooltip. Adding a provider
+// here is all the UI needs — the backend picks the key by AI_GRAMMAR_PROVIDER.
+interface ProviderConfig {
+  value: string
+  label: string
+  keyField: 'OPENAI_API_KEY' | 'GEMINI_API_KEY' | 'DEEPSEEK_API_KEY'
+  keyLabel: string
+  placeholder: string
+  note: ReactNode
+  tooltip: ReactNode
+}
+
+const AI_PROVIDERS: ProviderConfig[] = [
+  {
+    value: 'openai',
+    label: 'OpenAI (mặc định)',
+    keyField: 'OPENAI_API_KEY',
+    keyLabel: 'OpenAI API Key',
+    placeholder: 'sk-...',
+    note: (
+      <>
+        Lấy tại{' '}
+        <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="underline">
+          platform.openai.com/api-keys
+        </a>{' '}
+        (dùng model gpt-4o-mini).
+      </>
+    ),
+    tooltip: (
+      <>
+        <ol className="text-sm text-primary-700 dark:text-primary-400 space-y-1 list-decimal list-inside">
+          <li>Đăng nhập <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="underline">platform.openai.com/api-keys</a></li>
+          <li>Bấm <strong>"Create new secret key"</strong></li>
+          <li>Copy key <strong>ngay</strong> — key chỉ hiển thị 1 lần duy nhất</li>
+          <li>Vào <strong>Billing</strong> nạp credit thì key mới dùng được</li>
+        </ol>
+        <div className="text-xs text-primary-700 dark:text-primary-400 mt-2">
+          ⚠️ Chưa nạp credit sẽ báo lỗi <span className="font-mono">insufficient_quota</span> dù key hợp lệ.
+        </div>
+      </>
+    ),
+  },
+  {
+    value: 'deepseek',
+    label: 'DeepSeek',
+    keyField: 'DEEPSEEK_API_KEY',
+    keyLabel: 'DeepSeek API Key',
+    placeholder: 'sk-...',
+    note: (
+      <>
+        Lấy tại{' '}
+        <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer" className="underline">
+          platform.deepseek.com/api_keys
+        </a>{' '}
+        (dùng model deepseek-chat, giá rẻ).
+      </>
+    ),
+    tooltip: (
+      <>
+        <ol className="text-sm text-primary-700 dark:text-primary-400 space-y-1 list-decimal list-inside">
+          <li>Đăng nhập <a href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer" className="underline">platform.deepseek.com</a></li>
+          <li>Mở mục <strong>"API keys"</strong>, bấm <strong>"Create new API key"</strong></li>
+          <li>Copy key <strong>ngay</strong> — key chỉ hiển thị 1 lần duy nhất</li>
+          <li>Vào <strong>"Top up"</strong> nạp credit thì key mới dùng được</li>
+        </ol>
+        <div className="text-xs text-primary-700 dark:text-primary-400 mt-2">
+          💡 DeepSeek dùng API tương thích OpenAI, chi phí thấp hơn nhiều.
+        </div>
+      </>
+    ),
+  },
+  {
+    value: 'gemini',
+    label: 'Google AI Studio (Gemini)',
+    keyField: 'GEMINI_API_KEY',
+    keyLabel: 'Gemini API Key',
+    placeholder: 'AIza...',
+    note: (
+      <>
+        Lấy miễn phí tại{' '}
+        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="underline">
+          aistudio.google.com/apikey
+        </a>{' '}
+        (xem hướng dẫn ở nút <strong>?</strong>).
+      </>
+    ),
+    tooltip: (
+      <>
+        <ol className="text-sm text-primary-700 dark:text-primary-400 space-y-1 list-decimal list-inside">
+          <li>Mở <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="underline">aistudio.google.com/apikey</a></li>
+          <li>Đăng nhập tài khoản Google</li>
+          <li>Bấm <strong>"Create API key"</strong></li>
+          <li>Copy key vừa tạo</li>
+        </ol>
+        <div className="text-xs text-primary-700 dark:text-primary-400 mt-2">
+          ✅ Gemini có <strong>gói miễn phí</strong> — không cần thẻ thanh toán.
+        </div>
+      </>
+    ),
+  },
+]
 
 function HelpTooltip({ children }: { children: ReactNode }) {
   return (
@@ -103,6 +207,10 @@ export default function SettingsPage() {
       </div>
     )
   }
+
+  const activeProvider =
+    AI_PROVIDERS.find((p) => p.value === (settings.AI_GRAMMAR_PROVIDER || 'openai')) ||
+    AI_PROVIDERS[0]
 
   return (
     <div className="bg-surface rounded-lg shadow-sm p-8">
@@ -222,7 +330,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* AI Grammar Check Configuration (OpenAI / Gemini) */}
+      {/* AI Grammar Check Configuration — pick a provider, enter only its key */}
       <div className="mb-8">
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <span className="text-primary-600 dark:text-primary-400"></span>
@@ -235,82 +343,32 @@ export default function SettingsPage() {
             Nhà cung cấp AI
           </label>
           <select
-            value={settings.AI_GRAMMAR_PROVIDER || 'openai'}
+            value={activeProvider.value}
             onChange={(e) => handleInputChange('AI_GRAMMAR_PROVIDER', e.target.value)}
             className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm bg-surface"
           >
-            <option value="openai">OpenAI (ưu tiên)</option>
-            <option value="gemini">Gemini</option>
+            {AI_PROVIDERS.map((p) => (
+              <option key={p.value} value={p.value}>{p.label}</option>
+            ))}
           </select>
           <p className="text-xs text-dim mt-1">
-            Chọn AI dùng để kiểm tra chính tả. Nếu key của nhà cung cấp được chọn
-            chưa nhập, hệ thống tự dùng nhà cung cấp còn lại.
+            Chọn AI dùng để kiểm tra chính tả, rồi nhập key của nhà cung cấp đó bên dưới.
+            Nếu key để trống, hệ thống tự dùng nhà cung cấp khác đã có key.
           </p>
         </div>
 
-        {/* OpenAI API Key */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-1 flex items-center gap-2">
-            OpenAI API Key
-            <HelpTooltip>
-              <ol className="text-sm text-primary-700 dark:text-primary-400 space-y-1 list-decimal list-inside">
-                <li>Đăng nhập <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="underline">platform.openai.com/api-keys</a></li>
-                <li>Bấm <strong>"Create new secret key"</strong></li>
-                <li>Copy key <strong>ngay</strong> — key chỉ hiển thị 1 lần duy nhất</li>
-                <li>Vào <strong>Billing</strong> nạp credit thì key mới dùng được</li>
-              </ol>
-              <div className="text-xs text-primary-700 dark:text-primary-400 mt-2">
-                ⚠️ Chưa nạp credit sẽ báo lỗi <span className="font-mono">insufficient_quota</span> dù key hợp lệ.
-              </div>
-            </HelpTooltip>
-          </label>
-          <div className="relative">
-            <input
-              type={showTokens ? "text" : "password"}
-              value={settings.OPENAI_API_KEY || ''}
-              onChange={(e) => handleInputChange('OPENAI_API_KEY', e.target.value)}
-              placeholder="sk-..."
-              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 pr-20 font-mono text-sm"
-            />
-            <button
-              type="button"
-              onClick={() => setShowTokens(!showTokens)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300"
-            >
-              {showTokens ? 'Ẩn' : 'Hiện'}
-            </button>
-          </div>
-          <p className="text-xs text-dim mt-1">
-            Lấy tại{' '}
-            <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="underline">
-              platform.openai.com/api-keys
-            </a>{' '}
-            (dùng model gpt-4o-mini).
-          </p>
-        </div>
-
-        {/* Gemini API Key */}
+        {/* API key of the selected provider only */}
         <div>
           <label className="block text-sm font-medium mb-1 flex items-center gap-2">
-            Gemini API Key
-            <HelpTooltip>
-              <ol className="text-sm text-primary-700 dark:text-primary-400 space-y-1 list-decimal list-inside">
-                <li>Mở <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="underline">aistudio.google.com/apikey</a></li>
-                <li>Đăng nhập tài khoản Google</li>
-                <li>Bấm <strong>"Create API key"</strong></li>
-                <li>Copy key vừa tạo</li>
-              </ol>
-              <div className="text-xs text-primary-700 dark:text-primary-400 mt-2">
-                ✅ Gemini có <strong>gói miễn phí</strong> — không cần thẻ thanh toán.
-              </div>
-            </HelpTooltip>
+            {activeProvider.keyLabel}
+            <HelpTooltip>{activeProvider.tooltip}</HelpTooltip>
           </label>
           <div className="relative">
             <input
               type={showTokens ? "text" : "password"}
-              value={settings.GEMINI_API_KEY || ''}
-              onChange={(e) => handleInputChange('GEMINI_API_KEY', e.target.value)}
-              placeholder="AIza..."
+              value={settings[activeProvider.keyField] || ''}
+              onChange={(e) => handleInputChange(activeProvider.keyField, e.target.value)}
+              placeholder={activeProvider.placeholder}
               className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 pr-20 font-mono text-sm"
             />
             <button
@@ -321,13 +379,7 @@ export default function SettingsPage() {
               {showTokens ? 'Ẩn' : 'Hiện'}
             </button>
           </div>
-          <p className="text-xs text-dim mt-1">
-            Lấy miễn phí tại{' '}
-            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="underline">
-              aistudio.google.com/apikey
-            </a>{' '}
-            (xem hướng dẫn ở nút <strong>?</strong>).
-          </p>
+          <p className="text-xs text-dim mt-1">{activeProvider.note}</p>
         </div>
       </div>
 

@@ -18,7 +18,7 @@ const NAV_SECTIONS: { title: string; items: NavEntry[] }[] = [
     title: 'Sản xuất',
     items: [
       { to: '/', label: 'Trang chủ', icon: Home },
-      { to: '/quick-build', label: 'Build nhanh', icon: Zap },
+      { to: '/quick-build', label: 'Build Batch', icon: Zap },
       { to: '/history', label: 'Lịch sử', icon: History },
       { to: '/video-trimmer', label: 'Cắt video', icon: Scissors },
     ],

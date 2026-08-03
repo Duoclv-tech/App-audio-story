@@ -81,7 +81,7 @@ export default function Layout({ children }: LayoutProps) {
               <div className="min-w-0 flex-1">
                 <div className="font-bold text-[15px] tracking-tight leading-tight">Audio Story</div>
                 <div className="font-mono text-[10px] text-faint tracking-wide">STUDIO · v1.0</div>
-                <div className="font-mono text-[7.5px] text-faint tracking-wide">https://www.storetoolmmo.com/.com</div>
+                <div className="font-mono text-[7.5px] text-faint tracking-wide">https://www.storetoolmmo.com</div>
               </div>
               <button
                 onClick={() => setSidebarOpen(false)}

@@ -503,7 +503,18 @@ export default function ProcessorPage() {
     }
   })
 
-  type VideoPresetRow = { id: string; name: string; cfg: VideoCfgPreset }
+  // A row from the unified build_presets table. The wizard reloads its UI from
+  // `cfg` (FE videoConfig); the other fields let a load restore folder/bgm/
+  // watermark/voice too. Legacy-migrated presets may have cfg=null.
+  type VideoPresetRow = {
+    id: string; name: string; cfg: VideoCfgPreset | null
+    tts_config?: Record<string, any> | null
+    video_folder?: string | null
+    bgm_path?: string | null
+    watermark_image?: string | null
+    banner_mode?: string | null
+    banner_fixed?: string | null
+  }
   const [videoPresets, setVideoPresets] = useState<VideoPresetRow[]>([])
   const [selectedPresetId, setSelectedPresetId] = useState<string>('')
   const [presetModal, setPresetModal] = useState<{
@@ -511,7 +522,6 @@ export default function ProcessorPage() {
     mode: 'create' | 'rename'
     name: string
     presetId: string | null
-    target?: 'video' | 'build'   // 'build' → save a full quick-build preset instead
   }>({ isOpen: false, mode: 'create', name: '', presetId: null })
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean
@@ -1852,12 +1862,13 @@ export default function ProcessorPage() {
     return () => window.clearTimeout(timer)
   }, [ttsConfig, dbVoiceCode, storyData.id])
 
-  // Load presets from server on mount
+  // Load presets from server on mount (unified build_presets — same list Quick
+  // Build uses).
   useEffect(() => {
-    axios.get<VideoPresetRow[]>('/api/v1/video-presets/')
+    axios.get<VideoPresetRow[]>('/api/v1/build-presets/')
       .then(res => setVideoPresets(res.data))
       .catch(err => {
-        console.error('Failed to load video presets:', err)
+        console.error('Failed to load presets:', err)
         showToast('Không tải được danh sách preset', 'error')
       })
   }, [])
@@ -1869,7 +1880,7 @@ export default function ProcessorPage() {
   }
 
   const savePreset = () => {
-    setPresetModal({ isOpen: true, mode: 'create', name: '', presetId: null, target: 'video' })
+    setPresetModal({ isOpen: true, mode: 'create', name: '', presetId: null })
   }
 
   // Backend-format video config for a Build Preset: the exact flattened payload
@@ -1958,15 +1969,24 @@ export default function ProcessorPage() {
     stickers: videoConfig.stickers.map(toBackendSticker),
   })
 
-  // Snapshot the wizard's current TTS + video setup into a reusable Build Preset
-  // (voice + full video config + background-clip folder), for the Quick Build page.
-  const saveBuildPreset = () => {
-    if (!videoConfig.folder.trim()) {
-      showToast('Cần chọn folder clip nền trước khi lưu Build Preset', 'error')
-      return
-    }
-    setPresetModal({ isOpen: true, mode: 'create', name: '', presetId: null, target: 'build' })
-  }
+  // The full unified-preset payload from the wizard's current state — both video
+  // shapes (cfg for the wizard, video_cfg for the render worker) plus voice,
+  // folder and paths so the one preset works in both the wizard and Quick Build.
+  const buildUnifiedPresetPayload = (name: string) => ({
+    name,
+    tts_config: ttsConfig,
+    cfg: extractCfgFromConfig(),
+    video_cfg: buildBackendVideoCfg(),
+    video_folder: videoConfig.folder || null,
+    bgm_path: videoConfig.bgmPath || null,
+    watermark_image: videoConfig.watermarkImage || null,
+    // Persist the wizard's chosen banner image into the preset so Quick Build
+    // reuses it. With an image we pin banner_mode to 'fixed'; without one we
+    // fall back to the by-filename lookup (sibling image next to the story).
+    banner_mode: videoConfig.bannerImage ? 'fixed' : 'by_filename',
+    banner_fixed: videoConfig.bannerImage || null,
+    options: { skip_spellcheck: true, auto_clean: true, auto_subtitle: false },
+  })
 
   const renamePreset = () => {
     const cur = videoPresets.find(p => p.id === selectedPresetId)
@@ -1982,35 +2002,17 @@ export default function ProcessorPage() {
     }
 
     try {
-      // Full quick-build preset: TTS + video config + background folder.
-      if (presetModal.target === 'build') {
-        await axios.post('/api/v1/build-presets/', {
-          name,
-          tts_config: ttsConfig,
-          video_cfg: buildBackendVideoCfg(),
-          video_folder: videoConfig.folder || null,
-          bgm_path: videoConfig.bgmPath || null,
-          watermark_image: videoConfig.watermarkImage || null,
-          banner_mode: 'by_filename',
-          options: { skip_spellcheck: true, auto_clean: true, auto_subtitle: false },
-        })
-        setPresetModal({ isOpen: false, mode: 'create', name: '', presetId: null })
-        showToast(`Đã lưu Build Preset "${name}"`, 'success')
-        return
-      }
-
       if (presetModal.mode === 'create') {
-        const res = await axios.post<VideoPresetRow>('/api/v1/video-presets/', {
-          name,
-          cfg: extractCfgFromConfig(),
-        })
+        // One unified preset: usable in both the wizard and Quick Build.
+        const res = await axios.post<VideoPresetRow>('/api/v1/build-presets/',
+          buildUnifiedPresetPayload(name))
         setVideoPresets(prev => [res.data, ...prev])
         setSelectedPresetId(res.data.id)
         setPresetModal({ isOpen: false, mode: 'create', name: '', presetId: null })
         showToast(`Đã lưu preset "${name}"`, 'success')
       } else if (presetModal.mode === 'rename' && presetModal.presetId) {
         const res = await axios.put<VideoPresetRow>(
-          `/api/v1/video-presets/${presetModal.presetId}`,
+          `/api/v1/build-presets/${presetModal.presetId}`,
           { name },
         )
         setVideoPresets(prev => prev.map(p => (p.id === res.data.id ? res.data : p)))
@@ -2027,8 +2029,16 @@ export default function ProcessorPage() {
     const preset = videoPresets.find(p => p.id === id)
     if (!preset) return
     // Clone + migrate so old presets (with *_position string) get x/y applied.
-    const cfg = migrateOldCfg(JSON.parse(JSON.stringify(preset.cfg)))
-    setVideoConfig(prev => ({ ...prev, ...cfg }))
+    const patch: any = preset.cfg ? migrateOldCfg(JSON.parse(JSON.stringify(preset.cfg))) : {}
+    // Unified presets also pin the per-project paths — restore each only when the
+    // preset sets it (null = don't pin, so keep the value already in the wizard).
+    if (preset.video_folder) patch.folder = preset.video_folder
+    if (preset.bgm_path) patch.bgmPath = preset.bgm_path
+    if (preset.watermark_image) patch.watermarkImage = preset.watermark_image
+    // Restore the pinned banner image (banner_mode 'fixed'), so re-saving the
+    // preset from the wizard doesn't drop it back to null. Symmetric with save.
+    if (preset.banner_fixed) patch.bannerImage = preset.banner_fixed
+    setVideoConfig(prev => ({ ...prev, ...patch }))
   }
 
   const updateSelectedPresetCfg = () => {
@@ -2043,9 +2053,13 @@ export default function ProcessorPage() {
       variant: 'primary',
       onConfirm: async () => {
         try {
+          // Overwrite the whole unified preset (video + voice + folder), keeping
+          // its name — so an update from the wizard also refreshes what Quick
+          // Build sees. Legacy-migrated presets get filled out on their first update.
+          const { name: _n, ...bundle } = buildUnifiedPresetPayload(cur.name)
           const res = await axios.put<VideoPresetRow>(
-            `/api/v1/video-presets/${selectedPresetId}`,
-            { cfg: extractCfgFromConfig() },
+            `/api/v1/build-presets/${selectedPresetId}`,
+            bundle,
           )
           setVideoPresets(prev => prev.map(p => (p.id === res.data.id ? res.data : p)))
           showToast(`Đã cập nhật preset "${cur.name}"`, 'success')
@@ -2061,7 +2075,7 @@ export default function ProcessorPage() {
     const cur = videoPresets.find(p => p.id === id)
     if (!cur) return
     try {
-      await axios.delete(`/api/v1/video-presets/${id}`)
+      await axios.delete(`/api/v1/build-presets/${id}`)
       setVideoPresets(prev => prev.filter(p => p.id !== id))
       setSelectedPresetId(prev => (prev === id ? '' : prev))
       showToast(`Đã xoá preset "${cur.name}"`, 'success')
@@ -4955,16 +4969,9 @@ export default function ProcessorPage() {
                   onClick={savePreset}
                   disabled={isProcessing}
                   className="text-xs px-3 py-1.5 bg-primary-500 text-white rounded hover:bg-primary-600 disabled:opacity-50"
+                  title="Lưu giọng + toàn bộ config video + folder clip thành 1 preset — dùng chung cho cả wizard và trang Build nhanh"
                 >
-                   Lưu config hiện tại
-                </button>
-                <button
-                  onClick={saveBuildPreset}
-                  disabled={isProcessing}
-                  className="text-xs px-3 py-1.5 bg-amber-500 text-white rounded hover:bg-amber-600 disabled:opacity-50"
-                  title="Lưu giọng + toàn bộ config video + folder clip thành 1 Build Preset để dùng ở trang Build nhanh"
-                >
-                  ⚡ Lưu Build Preset
+                  💾 Lưu preset
                 </button>
                 <button
                   onClick={() => {
@@ -8017,9 +8024,7 @@ export default function ProcessorPage() {
           <div className="bg-surface rounded-lg w-full max-w-md flex flex-col">
             <div className="p-4 border-b flex items-center justify-between">
               <h3 className="text-lg font-semibold">
-                {presetModal.target === 'build'
-                  ? '⚡ Lưu Build Preset'
-                  : presetModal.mode === 'rename' ? ' Đổi tên preset' : ' Lưu config hiện tại'}
+                {presetModal.mode === 'rename' ? ' Đổi tên preset' : '💾 Lưu preset'}
               </h3>
               <button
                 onClick={() => setPresetModal({ isOpen: false, mode: 'create', name: '', presetId: null })}
@@ -8046,14 +8051,9 @@ export default function ProcessorPage() {
                 placeholder="VD: Preset mặc định, Quảng cáo 60s..."
                 className="w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
-              {presetModal.mode === 'create' && presetModal.target !== 'build' && (
+              {presetModal.mode === 'create' && (
                 <p className="text-xs text-dim">
-                  Preset sẽ lưu các setting video (transitions, fade, codec, ...) — không lưu folder, audio path, banner/watermark cụ thể.
-                </p>
-              )}
-              {presetModal.target === 'build' && (
-                <p className="text-xs text-dim">
-                  Build Preset lưu <b>giọng đọc + toàn bộ config video + folder clip nền</b> để dùng ở trang <b>Build nhanh</b>. Ảnh banner sẽ tự nhận theo tên file truyện.
+                  Preset lưu <b>giọng đọc + toàn bộ config video + folder clip nền</b>, dùng chung cho cả wizard này lẫn trang <b>Build nhanh</b>. Ảnh banner ở Build nhanh tự nhận theo tên file truyện.
                 </p>
               )}
             </div>

@@ -12,7 +12,7 @@ router = APIRouter()
 
 # Fields a client may set directly on a preset (name is handled separately).
 _SETTABLE = (
-    "tts_config", "video_cfg", "video_folder", "bgm_path",
+    "tts_config", "cfg", "video_cfg", "video_folder", "bgm_path",
     "watermark_image", "banner_mode", "banner_fixed", "options",
 )
 
@@ -38,6 +38,7 @@ async def create_preset(preset: schemas.BuildPresetCreate, db: Session = Depends
         new_preset = models.BuildPreset(
             name=name,
             tts_config=preset.tts_config,
+            cfg=preset.cfg,
             video_cfg=preset.video_cfg,
             video_folder=preset.video_folder,
             bgm_path=preset.bgm_path,

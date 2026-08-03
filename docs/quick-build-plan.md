@@ -9,7 +9,12 @@
 > - FE: `services/quickBuildApi.ts`, `pages/QuickBuildPage.tsx`, `App.tsx`, `components/layout/Layout.tsx`, `pages/HomePage.tsx`, `pages/ProcessorPage.tsx` (nút Lưu Build Preset)
 >
 > **Đã verify:** BE import + tạo bảng OK · build-preset CRUD 200 · scan-folder 403 khi không phải localhost (guard đúng) · `clean_story_text`/`_resolve_config`/`_build_video_config` chạy đúng · FE `tsc --noEmit` sạch.
-> **Chưa chạy end-to-end thật:** TTS + render (cần GPU/VBEE key + folder clip thật) — nhưng dùng đúng hàm wizard đang chạy production. Phase 3.5 auto-SRT chưa làm.
+> **Chưa chạy end-to-end thật:** TTS + render (cần GPU/VBEE key + folder clip thật) — nhưng dùng đúng hàm wizard đang chạy production.
+>
+> **Bổ sung sau GĐ1–3 (2026-08-02):**
+> - Card 2 thêm ô **Folder clip nền chung** (override cho cả batch; ưu tiên: folder riêng từng dòng > folder chung > preset).
+> - Progress view giống mockup: **% render thật** (đọc `Task.progress` của video task) + thanh bar, size + giờ hoàn tất, số thứ tự, nút **✕ Bỏ** job đang chờ (endpoint `/job/{id}/cancel` → status `skipped`, orchestrator `db.refresh` skip).
+> - **Phase 3.5 Auto-SRT ĐÃ LÀM (ước lượng):** `subtitle_renderer.build_estimated_srt(text, total_duration, out_path)` tách câu→cụm→wrap, phân bổ thời gian theo độ dài ký tự. Dùng cho **cả VBEE lẫn OmniVoice** vì quick-build đi đường `process_merged_content` (1 file, không có timing per-câu). Orchestrator `_make_subtitle` sinh SRT vào `paths.SRT_CACHE_DIR`, đổ vào `subtitle_srt_path` của video config; lỗi phụ đề KHÔNG làm hỏng job. Bật/tắt qua toggle chung + override từng dòng/bulk (`auto_subtitle`). Style phụ đề lấy từ `video_cfg` của preset. **Hạn chế:** canh giờ là ước lượng theo ký tự, không phải timing thật của giọng đọc.
 >
 > **Code review (workflow high, 23 agent) → đã sửa hết 10 finding:**
 > 1. GPU guard viết lại `try_acquire/release/is_busy` atomic — acquire đồng bộ ở endpoint (hết TOCTOU), release trong `_run_batch finally`. Chặn 2 chiều: wizard render (`video.py`) + wizard OmniVoice TTS (`tts.py start-merged`, `segments/run`) đều check `is_busy()`; batch check `_wizard_gpu_busy` (Task video + omni-tts) + `tts_worker.any_story_active()`.

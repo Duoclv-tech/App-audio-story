@@ -16,7 +16,7 @@ paths.hide_subprocess_windows()
 
 from app.config import settings
 from app.database import test_connection, init_db
-from app.api import stories, chapters, download, text, tts, audio, video, settings_api, banned_words, prompts, export, trim, video_presets, build_presets, quick_build, license as license_api
+from app.api import stories, chapters, download, text, tts, audio, video, settings_api, banned_words, prompts, export, trim, video_presets, build_presets, quick_build, history, license as license_api
 from app.license import service as license_service
 
 # Configure loguru — log into the per-user data dir so it works when frozen
@@ -89,6 +89,7 @@ app.include_router(trim.router, prefix="/api/v1/trim", tags=["trim"])
 app.include_router(video_presets.router, prefix="/api/v1/video-presets", tags=["video-presets"])
 app.include_router(build_presets.router, prefix="/api/v1/build-presets", tags=["build-presets"])
 app.include_router(quick_build.router, prefix="/api/v1/quick-build", tags=["quick-build"])
+app.include_router(history.router, prefix="/api/v1/history", tags=["history"])
 app.include_router(license_api.router, prefix="/api/v1/license", tags=["license"])
 
 @app.on_event("startup")
@@ -100,6 +101,16 @@ async def startup_event():
 
     # Create tables (SQLite file is created on first run) then seed defaults.
     init_db()
+
+    # Additive column patches for models that gained columns after first ship
+    # (create_all never ALTERs an existing table). Idempotent — safe every boot.
+    from app.db_migrations import run_light_migrations
+    run_light_migrations()
+
+    # Merge legacy video_presets into the unified build_presets table (adds the
+    # cfg column if missing, copies rows). Idempotent — safe on every boot.
+    from app.preset_migration import migrate_video_presets
+    migrate_video_presets()
 
     # Test database connection
     if test_connection():

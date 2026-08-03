@@ -21,6 +21,9 @@ class Story(Base):
     status = Column(String(50), default='created')
     current_step = Column(Integer, default=1)
     is_favorite = Column(Boolean, default=False)
+    # Set when Quick Build creates this story → groups it under its batch in the
+    # history feed. NULL = a normal, standalone story made through the wizard.
+    batch_id = Column(String(36), nullable=True, index=True)
     merged_content = Column(Text, nullable=True)  # All chapters merged into one text
     tts_config = Column(JSON, nullable=True)  # Saved "Cấu hình TTS" step: engine + voice/settings
     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
@@ -235,18 +238,26 @@ class VideoPreset(Base):
 
 
 class BuildPreset(Base):
-    """A full 'quick build' preset: everything needed to turn a story .txt into a
-    finished video in one shot — TTS voice/engine, the whole video config, the
-    background-clip folder, plus per-run options. Kept separate from VideoPreset
-    because VideoPreset deliberately strips folder/banner/bgm paths, while a build
-    preset must carry them so no manual step is needed.
+    """The single unified preset used by BOTH the wizard's video step and Quick
+    Build. Carries everything to turn a story into a finished video in one shot —
+    TTS voice/engine, the video config in two shapes, the background-clip folder,
+    plus per-run options.
+
+    Two video representations are stored because the two consumers want different
+    shapes: ``cfg`` is the wizard's FE videoConfig (so the wizard can reload the UI
+    exactly), while ``video_cfg`` is the backend-flattened payload the render
+    worker consumes (per-story paths nulled). Both are written at save time from
+    the wizard, which has all the data. (Formerly VideoPreset held only ``cfg``;
+    the two systems were merged — legacy video presets are migrated in with an
+    empty ``video_cfg`` until re-saved.)
     """
     __tablename__ = "build_presets"
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
     name = Column(String(255), nullable=False, unique=True, index=True)
     tts_config = Column(JSON, nullable=False)     # {engine, voice_code, speed, bitrate, preset_id, mode, ...}
-    video_cfg = Column(JSON, nullable=False)      # the whole FE VideoCfgPreset (per-story paths nulled)
+    cfg = Column(JSON, nullable=True)             # FE videoConfig (for the wizard to reload its UI)
+    video_cfg = Column(JSON, nullable=False)      # backend-flattened video config (per-story paths nulled)
     video_folder = Column(Text, nullable=True)    # background-clip folder
     bgm_path = Column(Text, nullable=True)
     watermark_image = Column(Text, nullable=True)

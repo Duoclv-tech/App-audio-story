@@ -140,6 +140,21 @@ async def start_batch(req: schemas.QuickBuildStartRequest, db: Session = Depends
     return {"batch_id": batch.id, "total": len(selected)}
 
 
+def _job_progress(db: Session, job: models.BuildJob) -> int:
+    """Live 0-100 for a job. Done = 100; a running 'video' job mirrors its video
+    Task.progress (updated in real time by the ffmpeg encoder); everything else 0."""
+    if job.status == "done":
+        return 100
+    if job.status == "running" and job.stage == "video" and job.story_id:
+        task = db.query(models.Task).filter(
+            models.Task.story_id == job.story_id,
+            models.Task.type == "video_processing",
+        ).order_by(models.Task.created_at.desc()).first()
+        if task and task.progress:
+            return max(0, min(100, int(task.progress)))
+    return 0
+
+
 @router.get("/{batch_id}/status", response_model=schemas.QuickBuildBatchStatus,
             dependencies=[Depends(require_localhost)])
 async def batch_status(batch_id: str, db: Session = Depends(get_db)):
@@ -149,8 +164,23 @@ async def batch_status(batch_id: str, db: Session = Depends(get_db)):
     jobs = db.query(models.BuildJob).filter(
         models.BuildJob.batch_id == batch_id
     ).order_by(models.BuildJob.order_index).all()
+
+    out = []
+    for j in jobs:
+        size = None
+        if j.output_path and os.path.exists(j.output_path):
+            try:
+                size = os.path.getsize(j.output_path)
+            except OSError:
+                size = None
+        out.append(schemas.QuickBuildJobOut(
+            id=j.id, order_index=j.order_index, source_path=j.source_path,
+            title=j.title, story_id=j.story_id, stage=j.stage, status=j.status,
+            progress=_job_progress(db, j), output_path=j.output_path,
+            output_size=size, error_message=j.error_message, updated_at=j.updated_at,
+        ))
     return schemas.QuickBuildBatchStatus(
-        id=batch.id, status=batch.status, total=batch.total, jobs=jobs
+        id=batch.id, status=batch.status, total=batch.total, jobs=out
     )
 
 
@@ -161,6 +191,21 @@ async def stop_batch(batch_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Batch không tồn tại")
     build_orchestrator.stop_batch(batch_id)
     return {"message": "Đã yêu cầu dừng — job đang render sẽ chạy nốt rồi dừng."}
+
+
+@router.post("/job/{job_id}/cancel", dependencies=[Depends(require_localhost)])
+async def cancel_job(job_id: str, db: Session = Depends(get_db)):
+    """Drop a still-queued job from the batch. Only 'pending' jobs can be cancelled —
+    a running render can't be interrupted; the batch loop re-checks status and skips it."""
+    job = db.query(models.BuildJob).filter(models.BuildJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job không tồn tại")
+    if job.status != "pending":
+        raise HTTPException(status_code=400, detail="Chỉ bỏ được job đang chờ")
+    job.status = "skipped"
+    job.error_message = "Đã bỏ khỏi hàng đợi"
+    db.commit()
+    return {"message": "Đã bỏ job khỏi hàng đợi"}
 
 
 @router.post("/job/{job_id}/retry", dependencies=[Depends(require_localhost)])

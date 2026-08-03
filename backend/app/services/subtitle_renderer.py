@@ -372,6 +372,97 @@ def rebase_srt_to_ass(
     }
 
 
+# --------------------------------------------------------------------------- #
+#  Estimated SRT from TTS (no per-word timing available)
+# --------------------------------------------------------------------------- #
+# Split on sentence enders (Latin + CJK) followed by space, or on newlines.
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…。！？])\s+|\n+")
+# Secondary split for over-long sentences: after a clause separator + space.
+_CLAUSE_SPLIT_RE = re.compile(r"(?<=[,;:，；：])\s+")
+
+
+def _hardwrap_words(s: str, max_chars: int) -> List[str]:
+    out: List[str] = []
+    line = ""
+    for w in s.split(" "):
+        cand = w if not line else f"{line} {w}"
+        if line and len(cand) > max_chars:
+            out.append(line)
+            line = w
+        else:
+            line = cand
+    if line:
+        out.append(line)
+    return out
+
+
+def _split_cues(text: str, max_chars: int = 84) -> List[str]:
+    """Break text into subtitle-sized cues: by sentence first, then split any
+    over-long sentence by clause, then hard-wrap by words. Keeps no cue absurdly
+    long on screen while following the natural punctuation of the source."""
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    cues: List[str] = []
+    for sent in _SENTENCE_SPLIT_RE.split(text):
+        s = " ".join(sent.split())  # collapse internal whitespace/newlines
+        if not s:
+            continue
+        if len(s) <= max_chars:
+            cues.append(s)
+            continue
+        buf = ""
+        for clause in _CLAUSE_SPLIT_RE.split(s):
+            c = clause.strip()
+            if not c:
+                continue
+            cand = c if not buf else f"{buf} {c}"
+            if buf and len(cand) > max_chars:
+                cues.append(buf)
+                buf = c
+            else:
+                buf = cand
+        if buf:
+            cues.extend(_hardwrap_words(buf, max_chars) if len(buf) > max_chars else [buf])
+    return cues
+
+
+def _fmt_srt_time(sec: float) -> str:
+    if sec < 0:
+        sec = 0
+    ms_total = int(round(sec * 1000))
+    h, ms_total = divmod(ms_total, 3_600_000)
+    m, ms_total = divmod(ms_total, 60_000)
+    s, ms = divmod(ms_total, 1000)
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
+def build_estimated_srt(text: str, total_duration: float, out_path: str) -> Dict[str, Any]:
+    """Write an SRT that spreads ``text`` across ``total_duration``, giving each
+    cue a slice proportional to its length. This is an ESTIMATE — the merged-TTS
+    path yields one audio file with no per-sentence timing, so cues are placed by
+    character weight rather than measured speech. Good enough to keep subtitles
+    roughly in sync. Returns metadata; writes nothing and returns count 0 when
+    there is no usable text or duration."""
+    cues = _split_cues(text or "")
+    if not cues or total_duration <= 0:
+        return {"count": 0, "output_path": None}
+
+    weights = [max(1, len(c)) for c in cues]
+    total_w = sum(weights)
+    blocks: List[str] = []
+    t = 0.0
+    for i, (cue, w) in enumerate(zip(cues, weights), start=1):
+        start = t
+        end = min(total_duration, t + total_duration * (w / total_w))
+        if end <= start:  # guard against zero-length on rounding
+            end = min(total_duration, start + 0.2)
+        t = end
+        blocks.append(f"{i}\n{_fmt_srt_time(start)} --> {_fmt_srt_time(end)}\n{cue}\n")
+
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(out_path).write_text("\n".join(blocks), encoding="utf-8")
+    return {"count": len(cues), "output_path": out_path, "total_duration": total_duration}
+
+
 def build_subtitles_vf(ass_path: str, fonts_dir: str) -> str:
     """Build the ffmpeg ``-vf`` ``subtitles=...:fontsdir=...`` string.
 

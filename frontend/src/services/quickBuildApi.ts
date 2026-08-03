@@ -5,6 +5,7 @@ export interface BuildPreset {
   id: string
   name: string
   tts_config: Record<string, any>
+  cfg: Record<string, any> | null   // FE videoConfig (used by the wizard, not here)
   video_cfg: Record<string, any>
   video_folder: string | null
   bgm_path: string | null
@@ -41,6 +42,7 @@ export interface JobOverrides {
   speed?: number
   preset_id?: string
   auto_clean?: boolean
+  auto_subtitle?: boolean
 }
 
 export interface JobIn {
@@ -57,9 +59,12 @@ export interface JobOut {
   title: string | null
   story_id: string | null
   stage: string          // create | tts | video | done
-  status: string         // pending | running | done | error
+  status: string         // pending | running | done | error | skipped
+  progress: number       // 0-100, live render % of the running job
   output_path: string | null
+  output_size: number | null   // bytes
   error_message: string | null
+  updated_at: string | null
 }
 
 export interface BatchStatus {
@@ -84,3 +89,6 @@ export const stopBatch = (batchId: string) =>
 
 export const retryJob = (jobId: string) =>
   axios.post<{ batch_id: string }>(`/api/v1/quick-build/job/${jobId}/retry`).then(r => r.data)
+
+export const cancelJob = (jobId: string) =>
+  axios.post(`/api/v1/quick-build/job/${jobId}/cancel`)

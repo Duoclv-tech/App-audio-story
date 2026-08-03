@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import {
   Zap, FolderOpen, Play, Square, RotateCcw, Loader2, CheckCircle2,
-  AlertCircle, ChevronDown, ChevronRight, FileText, Settings2, Pencil, X, Trash2,
+  AlertCircle, ChevronDown, ChevronRight, Settings2, Pencil, X, Trash2,
 } from 'lucide-react'
 import { hasNativeDialogs, pickFolderNative } from '../services/nativeDialog'
 import {
   listBuildPresets, deleteBuildPreset, renameBuildPreset,
-  scanFolder, startBatch, getBatchStatus, stopBatch, retryJob,
+  scanFolder, startBatch, getBatchStatus, stopBatch, retryJob, cancelJob,
   BuildPreset, ScanItem, JobOverrides, BatchStatus, JobOut,
 } from '../services/quickBuildApi'
 
@@ -40,13 +41,36 @@ export default function QuickBuildPage() {
 
   // Batch-wide options (apply to every story unless a row overrides them).
   const [commonAutoClean, setCommonAutoClean] = useState(true)
+  // Shared clip folder for the whole batch. Empty = use the preset's folder.
+  const [commonFolder, setCommonFolder] = useState('')
+  // Auto-generate burned subtitles from the TTS timing (estimated). Default off.
+  const [commonAutoSubtitle, setCommonAutoSubtitle] = useState(false)
   const [managePresets, setManagePresets] = useState(false)
+  const [filesOpen, setFilesOpen] = useState(false)
   const [bulkOpen, setBulkOpen] = useState(false)
   const [bulkDraft, setBulkDraft] = useState<JobOverrides>({})
 
   const [batchId, setBatchId] = useState<string | null>(null)
   const [batch, setBatch] = useState<BatchStatus | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // Opened from the History tab with ?batch=<id> → jump straight to that batch's
+  // progress view (the polling effect below fetches its status). Consume the
+  // param so a later reset/refresh doesn't re-open it.
+  useEffect(() => {
+    const b = searchParams.get('batch')
+    if (b) {
+      setBatchId(b)
+      setBatch(null)
+      setTab('run')
+      setSearchParams({}, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  // Which tab is showing. Setup ⇄ Run switch freely — the batch keeps polling in
+  // the background regardless, so flipping tabs never interrupts a running build.
+  const [tab, setTab] = useState<'setup' | 'run'>('setup')
 
   // ---- load presets -------------------------------------------------------
   const reloadPresets = () =>
@@ -101,17 +125,31 @@ export default function QuickBuildPage() {
   // ---- start / poll -------------------------------------------------------
   const start = async () => {
     if (!presetId) { setNotice({ kind: 'err', text: 'Chưa chọn preset' }); return }
+    // A batch is already running. Starting another would swap the polling target and
+    // orphan the in-flight one (it keeps rendering on the backend but vanishes from
+    // the UI). Block it and point the user at the running batch instead.
+    if (batch && (batch.status === 'running' || batch.status === 'queued')) {
+      setNotice({ kind: 'err', text: 'Đang chạy một batch — bấm "Dừng" ở tab Chạy build trước khi build mẻ mới.' })
+      setTab('run')
+      return
+    }
     const jobs = rows.filter(r => r.selected).map(r => {
       const ov: JobOverrides = { ...r.overrides }
-      // The common Auto-clean toggle applies unless the row set its own value.
+      // The common Auto-clean / subtitle toggles apply unless the row set its own.
       if (ov.auto_clean === undefined) ov.auto_clean = commonAutoClean
+      if (ov.auto_subtitle === undefined) ov.auto_subtitle = commonAutoSubtitle
+      // The common clip folder applies unless the row overrides it (a per-row
+      // folder wins; empty common folder falls back to the preset on the backend).
+      if (!ov.video_folder && commonFolder.trim()) ov.video_folder = commonFolder.trim()
       return { source_path: r.source_path, title: r.title, selected: true, overrides: ov }
     })
     if (!jobs.length) { setNotice({ kind: 'err', text: 'Chưa chọn truyện nào' }); return }
     setNotice(null)
     try {
       const res = await startBatch(presetId, jobs)
+      setBatch(null)
       setBatchId(res.batch_id)
+      setTab('run')  // jump to the progress tab, but you can flip back to Setup any time
     } catch (e: any) {
       setNotice({ kind: 'err', text: errMsg(e, 'Không bắt đầu được build') })
     }
@@ -119,14 +157,29 @@ export default function QuickBuildPage() {
 
   useEffect(() => {
     if (!batchId) return
+    // `loaded` flips true after the first successful fetch; `fails` counts
+    // consecutive errors. A hiccup mid-run is harmless (keep polling), but if we
+    // never load the batch at all — e.g. a stale ?batch deep-link to a deleted id
+    // that 404s every tick — bail out after a few tries so the Run tab doesn't spin
+    // on "Đang tải tiến độ…" forever.
+    let loaded = false
+    let fails = 0
     const tick = async () => {
       try {
         const s = await getBatchStatus(batchId)
+        loaded = true; fails = 0
         setBatch(s)
         if (s.status === 'done' || s.status === 'stopped') {
           if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
         }
-      } catch { /* keep polling */ }
+      } catch {
+        if (!loaded && ++fails >= 3) {
+          if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+          setBatchId(null)
+          setNotice({ kind: 'err', text: 'Không tìm thấy batch này (có thể đã bị xoá). Hãy build lại từ tab Cấu hình.' })
+        }
+        /* otherwise keep polling */
+      }
     }
     tick()
     pollRef.current = setInterval(tick, 2500)
@@ -138,45 +191,67 @@ export default function QuickBuildPage() {
     try { const res = await retryJob(jobId); setBatchId(res.batch_id); setBatch(null) }
     catch (e: any) { setNotice({ kind: 'err', text: errMsg(e, 'Không thử lại được') }) }
   }
+  const doCancel = async (jobId: string) => {
+    // Optimistic: flip to 'skipped' locally so the row updates before the next poll.
+    setBatch(b => b ? { ...b, jobs: b.jobs.map(j => j.id === jobId ? { ...j, status: 'skipped' } : j) } : b)
+    try { await cancelJob(jobId) } catch (e: any) { setNotice({ kind: 'err', text: errMsg(e, 'Không bỏ được job') }) }
+  }
   const openVideo = async (storyId: string | null) => {
     if (!storyId) return
     try { await axios.post(`/api/v1/video/reveal-video/${storyId}`) } catch { /* noop */ }
   }
   const resetToConfig = () => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
-    setBatchId(null); setBatch(null)
+    setBatchId(null); setBatch(null); setTab('setup')
   }
 
+  // Summary counters for the batch (used by the Run tab badge + its header).
+  const batchDone = batch ? batch.jobs.filter(j => j.status === 'done').length : 0
+  const batchTotal = batch ? batch.jobs.length : 0
+  const batchActive = batch ? (batch.status === 'running' || batch.status === 'queued') : false
+
   // ======================================================================= //
-  //  PROGRESS VIEW
+  //  RUN / PROGRESS tab content
   // ======================================================================= //
-  if (batchId && !batch) {
-    return (
-      <div className="space-y-5 max-w-[1000px]">
-        <Header />
+  const runContent = () => {
+    if (!batchId) {
+      return (
+        <div className="card p-10 text-center">
+          <div className="w-12 h-12 rounded-2xl grid place-items-center mx-auto mb-3" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+            <Play size={22} />
+          </div>
+          <p className="text-sm font-semibold">Chưa có batch nào đang chạy</p>
+          <p className="text-xs text-faint mt-1">Sang tab <b className="text-dim">Cấu hình</b>, chọn truyện rồi bấm <b className="text-dim">Build</b> để bắt đầu.</p>
+          <button onClick={() => setTab('setup')}
+            className="mt-4 text-sm px-3.5 py-2 rounded border border-token-strong text-dim hover:bg-surface-2 inline-flex items-center gap-2">
+            <Settings2 size={14} /> Về cấu hình
+          </button>
+        </div>
+      )
+    }
+    if (!batch) {
+      return (
         <div className="card p-8 text-center text-dim flex items-center justify-center gap-2">
           <Loader2 size={16} className="animate-spin" /> Đang tải tiến độ…
         </div>
-      </div>
-    )
-  }
-  if (batchId && batch) {
-    const done = batch.jobs.filter(j => j.status === 'done').length
+      )
+    }
+    const done = batchDone
     const running = batch.jobs.filter(j => j.status === 'running').length
     const err = batch.jobs.filter(j => j.status === 'error').length
     const pending = batch.jobs.filter(j => j.status === 'pending').length
-    const active = batch.status === 'running' || batch.status === 'queued'
+    const skipped = batch.jobs.filter(j => j.status === 'skipped').length
+    const active = batchActive
     return (
-      <div className="space-y-5 max-w-[1000px]">
-        <Header />
         <div className="card p-0 overflow-hidden">
           <div className="flex items-center justify-between gap-3 flex-wrap p-4 border-b border-token">
             <div className="flex items-baseline gap-3">
               <h2 className="text-base font-semibold">Tiến độ batch</h2>
               <span className="text-sm text-dim font-mono">
                 <span className="text-green-600 dark:text-green-400">{done} xong</span> ·{' '}
-                <span style={{ color: 'var(--accent)' }}>{running} chạy</span> · {pending} chờ ·{' '}
-                <span className="text-red-500">{err} lỗi</span>
+                <span style={{ color: 'var(--accent)' }}>{running} chạy</span> · {pending} chờ
+                {err > 0 && <> · <span className="text-red-500">{err} lỗi</span></>}
+                {skipped > 0 && <> · <span className="text-faint">{skipped} bỏ</span></>}
               </span>
             </div>
             <div className="flex gap-2">
@@ -195,22 +270,28 @@ export default function QuickBuildPage() {
             </div>
           </div>
           <div className="p-4 space-y-2.5">
-            {batch.jobs.map(j => <ProgressRow key={j.id} job={j} onOpen={openVideo} onRetry={doRetry} />)}
+            {batch.jobs.map(j => <ProgressRow key={j.id} job={j} onOpen={openVideo} onRetry={doRetry} onCancel={doCancel} canCancel={active} />)}
           </div>
           <div className="px-4 pb-4 text-xs text-faint flex items-center gap-2">
             💡 Chạy nền ở backend — đóng cửa sổ vẫn render tiếp, mở lại app để xem tiến độ.
           </div>
         </div>
-      </div>
     )
   }
 
   // ======================================================================= //
-  //  CONFIG VIEW
+  //  PAGE — Header + tabs, then Setup or Run content
   // ======================================================================= //
   return (
     <div className="space-y-5 max-w-[1120px]">
       <Header />
+
+      {/* Tabs — flip between Setup and Run freely; the batch keeps running. */}
+      <div className="flex items-center gap-1 border-b border-token">
+        <TabBtn n={1} label="Cấu hình" active={tab === 'setup'} onClick={() => setTab('setup')} />
+        <TabBtn n={2} label="Chạy build" active={tab === 'run'} onClick={() => setTab('run')}
+          badge={batch ? `${batchDone}/${batchTotal}` : batchId ? '…' : undefined} live={batchActive} />
+      </div>
 
       {notice && (
         <div className={`rounded-lg px-4 py-2.5 text-sm border ${notice.kind === 'err'
@@ -220,6 +301,8 @@ export default function QuickBuildPage() {
         </div>
       )}
 
+      {tab === 'run' ? runContent() : (
+      <>
       {/* 1. Folder */}
       <div className="card p-0 overflow-hidden">
         <div className="p-4 border-b border-token flex items-center justify-between">
@@ -227,49 +310,57 @@ export default function QuickBuildPage() {
           <span className="text-xs text-faint">Mỗi file <b className="text-dim">.txt/.docx</b> = 1 truyện = 1 video</span>
         </div>
         <div className="p-4">
-          <div className="rounded-xl border border-dashed border-token-strong bg-surface-2 p-4 flex items-center gap-4">
-            <div className="w-11 h-11 rounded-xl grid place-items-center shrink-0" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
-              <FolderOpen size={22} />
-            </div>
-            <div className="flex-1 min-w-0">
-              {hasNativeDialogs() ? (
-                <div className="font-mono text-sm break-all">{folder || <span className="text-faint">Chưa chọn folder</span>}</div>
-              ) : (
-                <>
-                  <label className="block text-xs font-semibold text-dim mb-1">Đường dẫn folder (dán vào đây)</label>
-                  <input
-                    value={folder}
-                    onChange={e => setFolder(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && folder.trim()) runScan(folder.trim()) }}
-                    placeholder="vd: D:\Truyện\thang-7  — rồi Enter hoặc bấm Quét"
-                    className="w-full px-3 py-2 text-sm font-mono border border-token-strong rounded bg-surface focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  />
-                </>
-              )}
-              <div className="text-xs text-faint mt-1">
-                {rows.length
-                  ? `Tìm thấy ${rows.length} truyện`
-                  : hasNativeDialogs()
-                    ? 'Chọn folder để quét danh sách truyện'
-                    : 'Trình duyệt không mở được hộp thoại — dán đường dẫn folder rồi bấm Quét. (Bản .exe sẽ mở Explorer thật.)'}
+          <div className="rounded-xl border border-dashed border-token-strong bg-surface-2 p-4">
+            <div className="flex items-center gap-4">
+              <div className="w-11 h-11 rounded-xl grid place-items-center shrink-0" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+                <FolderOpen size={22} />
               </div>
-              {rows.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {rows.slice(0, 6).map(r => (
-                    <span key={r.source_path} className="inline-flex items-center gap-1 text-[11px] font-mono text-dim bg-surface border border-token rounded px-2 py-0.5">
-                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
-                      {baseName(r.source_path)}
-                    </span>
-                  ))}
-                  {rows.length > 6 && <span className="text-[11px] text-faint italic self-center">+{rows.length - 6} file khác…</span>}
-                </div>
-              )}
+              <div className="flex-1 min-w-0">
+                {hasNativeDialogs() ? (
+                  <div className="font-mono text-sm break-all">{folder || <span className="text-faint">Chưa chọn folder</span>}</div>
+                ) : (
+                  <>
+                    <label className="block text-xs font-semibold text-dim mb-1">Đường dẫn folder (dán vào đây)</label>
+                    <input
+                      value={folder}
+                      onChange={e => setFolder(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && folder.trim()) runScan(folder.trim()) }}
+                      placeholder="vd: D:\Truyện\thang-7  — rồi Enter hoặc bấm Quét"
+                      className="w-full px-3 py-2 text-sm font-mono border border-token-strong rounded bg-surface focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  </>
+                )}
+                {rows.length ? (
+                  <button onClick={() => setFilesOpen(v => !v)}
+                    className="text-xs text-dim mt-1 inline-flex items-center gap-1 hover:text-[var(--text)]">
+                    {filesOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                    Tìm thấy <b className="text-strong">{rows.length}</b> truyện
+                    <span className="text-faint">— {filesOpen ? 'ẩn danh sách' : 'xem danh sách'}</span>
+                  </button>
+                ) : (
+                  <div className="text-xs text-faint mt-1">
+                    {hasNativeDialogs()
+                      ? 'Chọn folder để quét danh sách truyện'
+                      : 'Trình duyệt không mở được hộp thoại — dán đường dẫn folder rồi bấm Quét. (Bản .exe sẽ mở Explorer thật.)'}
+                  </div>
+                )}
+              </div>
+              <button onClick={pickFolder} disabled={scanning || (!hasNativeDialogs() && !folder.trim())}
+                className="text-sm px-3.5 py-2 rounded border border-token-strong bg-surface hover:bg-surface-2 inline-flex items-center gap-2 disabled:opacity-50 shrink-0">
+                {scanning ? <Loader2 size={15} className="animate-spin" /> : <FolderOpen size={15} />}
+                {hasNativeDialogs() ? 'Chọn folder' : 'Quét'}
+              </button>
             </div>
-            <button onClick={pickFolder} disabled={scanning || (!hasNativeDialogs() && !folder.trim())}
-              className="text-sm px-3.5 py-2 rounded border border-token-strong bg-surface hover:bg-surface-2 inline-flex items-center gap-2 disabled:opacity-50">
-              {scanning ? <Loader2 size={15} className="animate-spin" /> : <FolderOpen size={15} />}
-              {hasNativeDialogs() ? 'Chọn folder' : 'Quét'}
-            </button>
+            {rows.length > 0 && filesOpen && (
+              <div className="flex flex-wrap gap-1.5 mt-3 pl-[60px]">
+                {rows.map(r => (
+                  <span key={r.source_path} className="inline-flex items-center gap-1 text-[11px] font-mono text-dim bg-surface border border-token rounded px-2 py-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
+                    {baseName(r.source_path)}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -302,12 +393,29 @@ export default function QuickBuildPage() {
                       {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                   </label>
-                  {selectedPreset && <PresetChips preset={selectedPreset} />}
+                  <label className="flex flex-col gap-1.5 flex-1 min-w-[240px]">
+                    <span className="text-xs text-dim font-semibold">Folder clip nền chung <span className="text-faint font-normal">(để trống = theo preset)</span></span>
+                    <div className="flex gap-2">
+                      <input value={commonFolder} onChange={e => setCommonFolder(e.target.value)}
+                        placeholder={selectedPreset?.video_folder || 'Theo preset'}
+                        className="flex-1 px-3 py-2 text-sm font-mono border border-token-strong rounded bg-surface focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                      {hasNativeDialogs() && (
+                        <button type="button" onClick={async () => { const p = await pickFolderNative(); if (p) setCommonFolder(p) }}
+                          className="px-3 rounded border border-token-strong text-dim hover:bg-surface-2"><FolderOpen size={15} /></button>
+                      )}
+                      {commonFolder && (
+                        <button type="button" onClick={() => setCommonFolder('')} title="Về theo preset"
+                          className="px-2.5 rounded border border-token-strong text-dim hover:bg-surface-2"><RotateCcw size={14} /></button>
+                      )}
+                    </div>
+                  </label>
                 </div>
+                {selectedPreset && <PresetChips preset={selectedPreset} />}
                 <div className="flex flex-wrap gap-5 pt-1">
                   <Toggle on={commonAutoClean} onChange={setCommonAutoClean} label="Auto-clean text"
                     hint="(bỏ dòng rác: nguồn, web, quảng cáo)" />
-                  <Toggle on={false} disabled onChange={() => {}} label="Tự tạo phụ đề" hint="(sắp có)" />
+                  <Toggle on={commonAutoSubtitle} onChange={setCommonAutoSubtitle} label="Tự tạo phụ đề"
+                    hint="(sinh từ giọng đọc — canh giờ ước lượng)" />
                 </div>
               </div>
             )}
@@ -364,7 +472,8 @@ export default function QuickBuildPage() {
                         <div className="text-[11px] font-mono text-faint truncate">{baseName(r.source_path)}</div>
                       </div>
                       <Cell overridden={!!ov.preset_id} value={ov.preset_id ? (presetName(ov.preset_id) || 'preset') : null} />
-                      <Cell overridden={!!ov.video_folder} value={ov.video_folder ? baseName(ov.video_folder) : null} />
+                      <Cell overridden={!!ov.video_folder} value={ov.video_folder ? baseName(ov.video_folder) : null}
+                        fallback={baseName((commonFolder || selectedPreset?.video_folder || '').trim()) || undefined} />
                       <Cell overridden={!!ov.banner_mode}
                         value={ov.banner_mode ? (ov.banner_mode === 'none' ? 'Không' : 'Theo tên') : null}
                         fallback={r.has_banner ? '🖼️ theo tên' : 'clip nền'} />
@@ -419,6 +528,16 @@ export default function QuickBuildPage() {
                             <option value="off">Tắt</option>
                           </select>
                         </label>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs font-semibold text-dim">Phụ đề</span>
+                          <select value={ov.auto_subtitle === undefined ? '' : ov.auto_subtitle ? 'on' : 'off'}
+                            onChange={e => patchOverride(i, { auto_subtitle: e.target.value === '' ? undefined : e.target.value === 'on' })}
+                            className="px-2.5 py-1.5 text-sm border border-token-strong rounded bg-surface">
+                            <option value="">⟳ Theo chung</option>
+                            <option value="on">Bật</option>
+                            <option value="off">Tắt</option>
+                          </select>
+                        </label>
                         <label className="flex flex-col gap-1 sm:col-span-2 lg:col-span-3">
                           <span className="text-xs font-semibold text-dim">Folder clip nền riêng (tuỳ chọn)</span>
                           <div className="flex gap-2">
@@ -441,14 +560,20 @@ export default function QuickBuildPage() {
           </div>
 
           <div className="px-4 pb-4 flex items-center gap-4 flex-wrap">
-            <button onClick={start} disabled={!selectedCount || !presetId}
+            <button onClick={start} disabled={!selectedCount || !presetId || batchActive}
               className="px-5 py-2.5 rounded-xl text-white font-semibold inline-flex items-center gap-2 disabled:opacity-50"
               style={{ background: 'var(--accent)' }}>
               <Zap size={17} /> Build {selectedCount} truyện đã chọn
             </button>
-            <span className="text-xs text-faint font-mono">tuần tự · ~8–12 phút / video</span>
+            <span className="text-xs text-faint font-mono">
+              {batchActive
+                ? '⏳ đang chạy một batch — dừng ở tab Chạy build trước'
+                : 'tuần tự · ~8–12 phút / video'}
+            </span>
           </div>
         </div>
+      )}
+      </>
       )}
 
       {managePresets && (
@@ -462,6 +587,26 @@ export default function QuickBuildPage() {
 // --------------------------------------------------------------------------- //
 function StepNum({ n }: { n: number }) {
   return <span className="w-5 h-5 rounded-full grid place-items-center text-xs font-bold" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>{n}</span>
+}
+
+// A single tab in the Setup ⇄ Run bar. `badge` shows batch progress (e.g. "2/5"),
+// `live` pulses a dot while a batch is actively running.
+function TabBtn({ n, label, active, onClick, badge, live }:
+  { n: number; label: string; active: boolean; onClick: () => void; badge?: string; live?: boolean }) {
+  return (
+    <button onClick={onClick}
+      className={`relative -mb-px px-4 py-2.5 text-sm font-semibold inline-flex items-center gap-2 border-b-2 transition-colors ${
+        active ? 'text-[var(--text)]' : 'border-transparent text-faint hover:text-dim'}`}
+      style={active ? { borderColor: 'var(--accent)' } : undefined}>
+      <span className="w-5 h-5 rounded-full grid place-items-center text-xs font-bold"
+        style={{ background: active ? 'var(--accent)' : 'var(--accent-soft)', color: active ? '#fff' : 'var(--accent)' }}>{n}</span>
+      {label}
+      {live && <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--accent)' }} />}
+      {badge && (
+        <span className="text-[11px] font-mono px-1.5 py-0.5 rounded-full bg-surface-2 border border-token text-dim">{badge}</span>
+      )}
+    </button>
+  )
 }
 
 function Header() {
@@ -539,6 +684,16 @@ function BulkPanel({ draft, setDraft, presets, count, onApply, onClose }:
           <span className="text-xs font-semibold text-dim">Làm sạch text</span>
           <select value={draft.auto_clean === undefined ? '' : draft.auto_clean ? 'on' : 'off'}
             onChange={e => set({ auto_clean: e.target.value === '' ? undefined : e.target.value === 'on' })}
+            className="px-2.5 py-1.5 text-sm border border-token-strong rounded bg-surface">
+            <option value="">— giữ nguyên —</option>
+            <option value="on">Bật</option>
+            <option value="off">Tắt</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-semibold text-dim">Phụ đề</span>
+          <select value={draft.auto_subtitle === undefined ? '' : draft.auto_subtitle ? 'on' : 'off'}
+            onChange={e => set({ auto_subtitle: e.target.value === '' ? undefined : e.target.value === 'on' })}
             className="px-2.5 py-1.5 text-sm border border-token-strong rounded bg-surface">
             <option value="">— giữ nguyên —</option>
             <option value="on">Bật</option>
@@ -632,27 +787,51 @@ function PresetChips({ preset }: { preset: BuildPreset }) {
   )
 }
 
-function ProgressRow({ job, onOpen, onRetry }: { job: JobOut; onOpen: (id: string | null) => void; onRetry: (id: string) => void }) {
+const fmtSize = (b: number | null) =>
+  b == null ? '' : b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`
+// Backend timestamps are naive UTC (SQLite CURRENT_TIMESTAMP); tag as UTC so the
+// browser renders the local wall-clock the render actually finished at.
+const fmtTime = (s: string | null) => {
+  if (!s) return ''
+  const iso = /[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : s.replace(' ', 'T') + 'Z'
+  const d = new Date(iso)
+  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+function ProgressRow({ job, onOpen, onRetry, onCancel, canCancel }:
+  { job: JobOut; onOpen: (id: string | null) => void; onRetry: (id: string) => void; onCancel: (id: string) => void; canCancel: boolean }) {
   const isRun = job.status === 'running'
   const isErr = job.status === 'error'
   const isDone = job.status === 'done'
+  const isPending = job.status === 'pending'
+  const isSkipped = job.status === 'skipped'
   const stageLabel = STAGES.find(s => s.key === job.stage)?.label || job.stage
-  const stageIdx = STAGES.findIndex(s => s.key === job.stage)
+  const stageNo = Math.max(1, STAGES.findIndex(s => s.key === job.stage) + 1)
+  const showPct = isRun && job.stage === 'video' && job.progress > 0
+
+  const detail = isDone && job.output_path
+    ? `→ ${baseName(job.output_path)}${job.output_size ? ` · ${fmtSize(job.output_size)}` : ''}${fmtTime(job.updated_at) ? ` · ${fmtTime(job.updated_at)}` : ''}`
+    : isErr ? <span className="text-red-500">{job.error_message || 'Lỗi'}</span>
+    : isSkipped ? 'Đã bỏ khỏi hàng đợi'
+    : isRun ? `Đang: ${stageLabel}${showPct ? ` · ${job.progress}%` : ` (${stageNo}/${STAGES.length})`}`
+    : 'Trong hàng đợi…'
+
   return (
-    <div className={`rounded-xl border px-3.5 py-3 ${isRun ? 'border-amber-400' : isErr ? 'border-red-300' : isDone ? 'border-green-300 dark:border-green-500/40' : 'border-token'}`}
+    <div className={`rounded-xl border px-3.5 py-3 ${isRun ? 'border-amber-400' : isErr ? 'border-red-300' : isDone ? 'border-green-300 dark:border-green-500/40' : isSkipped ? 'border-token opacity-55' : 'border-token'}`}
       style={isRun ? { background: 'var(--accent-soft)' } : undefined}>
       <div className="flex items-center gap-3">
+        <span className="font-mono text-xs text-faint w-6 text-center shrink-0">{String(job.order_index + 1).padStart(2, '0')}</span>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold truncate">{job.title || baseName(job.source_path)}</div>
-          <div className="text-[11px] font-mono text-faint truncate">
-            {isDone && job.output_path ? `→ ${baseName(job.output_path)}`
-              : isErr ? <span className="text-red-500">{job.error_message}</span>
-              : isRun ? `Đang: ${stageLabel} (${Math.max(1, stageIdx + 1)}/3)`
-              : 'Trong hàng đợi…'}
-          </div>
+          <div className="text-[11px] font-mono text-faint truncate">{detail}</div>
+          {showPct && (
+            <div className="mt-1.5 h-1 rounded-full overflow-hidden bg-surface-3">
+              <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${job.progress}%`, background: 'var(--accent)' }} />
+            </div>
+          )}
         </div>
-        <StatusPill status={job.status} label={isRun ? stageLabel : undefined} />
-        <div className="flex gap-1.5">
+        <StatusPill status={job.status} label={isRun ? `${stageLabel} (${stageNo}/${STAGES.length})` : undefined} />
+        <div className="flex gap-1.5 shrink-0">
           {isDone && (
             <button onClick={() => onOpen(job.story_id)}
               className="text-xs px-2.5 py-1.5 rounded border inline-flex items-center gap-1"
@@ -666,6 +845,12 @@ function ProgressRow({ job, onOpen, onRetry }: { job: JobOut; onOpen: (id: strin
               <RotateCcw size={12} /> Thử lại
             </button>
           )}
+          {isPending && canCancel && (
+            <button onClick={() => onCancel(job.id)} title="Bỏ khỏi hàng đợi"
+              className="text-xs px-2.5 py-1.5 rounded border border-token-strong text-faint hover:bg-surface-2 hover:text-red-500 inline-flex items-center gap-1">
+              <X size={12} /> Bỏ
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -676,6 +861,7 @@ function StatusPill({ status, label }: { status: string; label?: string }) {
   if (status === 'done') return <Pill cls="text-green-600 bg-green-50 dark:bg-green-500/10 border-green-300"><CheckCircle2 size={12} /> Hoàn tất</Pill>
   if (status === 'error') return <Pill cls="text-red-600 bg-red-50 dark:bg-red-500/10 border-red-300"><AlertCircle size={12} /> Lỗi</Pill>
   if (status === 'running') return <Pill cls="border-amber-400" style={{ color: 'var(--accent)' }}><Loader2 size={12} className="animate-spin" /> {label || 'Đang chạy'}</Pill>
+  if (status === 'skipped') return <Pill cls="text-faint bg-surface-2 border-token">Đã bỏ</Pill>
   return <Pill cls="text-faint bg-surface-2 border-token">Chờ</Pill>
 }
 

@@ -543,6 +543,7 @@ class VideoPresetResponse(BaseModel):
 class BuildPresetCreate(BaseModel):
     name: str
     tts_config: Dict[str, Any]
+    cfg: Optional[Dict[str, Any]] = None          # FE videoConfig (wizard reload)
     video_cfg: Dict[str, Any]
     video_folder: Optional[str] = None
     bgm_path: Optional[str] = None
@@ -555,6 +556,7 @@ class BuildPresetCreate(BaseModel):
 class BuildPresetUpdate(BaseModel):
     name: Optional[str] = None
     tts_config: Optional[Dict[str, Any]] = None
+    cfg: Optional[Dict[str, Any]] = None
     video_cfg: Optional[Dict[str, Any]] = None
     video_folder: Optional[str] = None
     bgm_path: Optional[str] = None
@@ -568,6 +570,7 @@ class BuildPresetResponse(BaseModel):
     id: str
     name: str
     tts_config: Dict[str, Any]
+    cfg: Optional[Dict[str, Any]] = None
     video_cfg: Dict[str, Any]
     video_folder: Optional[str] = None
     bgm_path: Optional[str] = None
@@ -613,8 +616,11 @@ class QuickBuildJobOut(BaseModel):
     story_id: Optional[str] = None
     stage: str
     status: str
+    progress: int = 0                       # 0-100, live render % of the running job
     output_path: Optional[str] = None
+    output_size: Optional[int] = None       # bytes, set once the video exists
     error_message: Optional[str] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

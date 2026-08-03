@@ -13,17 +13,20 @@ The pipeline reuses the exact service functions the wizard endpoints call:
 """
 import os
 import re
+import json
 import asyncio
 import random
+import subprocess
 import threading
 from pathlib import Path
 from typing import Dict, Optional
 from loguru import logger
 
 from app.database import SessionLocal
-from app import models
+from app import models, paths
 from app.services import gpu_guard
 from app.services.chapter_splitter import read_text_from_file, split_chapters
+from app.services.subtitle_renderer import build_estimated_srt
 
 DEFAULT_VBEE_VOICE = "hn_female_ngochuyen_full_48k-fhg"
 _IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
@@ -151,6 +154,8 @@ def _resolve_config(db, job: "models.BuildJob") -> Dict:
         tts["preset_id"] = ov["clone_preset_id"]
     if "auto_clean" in ov:
         options["auto_clean"] = ov["auto_clean"]
+    if "auto_subtitle" in ov:
+        options["auto_subtitle"] = ov["auto_subtitle"]
     return cfg
 
 
@@ -166,7 +171,9 @@ def _create_story_from_file(db, job: "models.BuildJob", cfg: Dict) -> "models.St
         raise RuntimeError("File không có nội dung để đọc")
 
     title = job.title or _nice_title(job.source_path)
-    story = models.Story(title=title, url="", start_chapter=1, end_chapter=1, status="created")
+    # batch_id groups this story under its batch in the history feed.
+    story = models.Story(title=title, url="", start_chapter=1, end_chapter=1,
+                         status="created", batch_id=job.batch_id)
     db.add(story)
     db.commit()
     db.refresh(story)
@@ -228,7 +235,8 @@ def _run_tts_sync(db, story: "models.Story", tts: Dict) -> None:
         raise RuntimeError((result or {}).get("error") or "TTS thất bại")
 
 
-def _build_video_config(cfg: Dict, audio_path: str, banner: Optional[str]) -> Dict:
+def _build_video_config(cfg: Dict, audio_path: str, banner: Optional[str],
+                        subtitle: Optional[str] = None) -> Dict:
     """The preset stores video_cfg in backend format already (snake_case keys,
     stickers pre-converted), so we just overlay the per-story bits."""
     vcfg = dict(cfg.get("video_cfg") or {})
@@ -239,10 +247,50 @@ def _build_video_config(cfg: Dict, audio_path: str, banner: Optional[str]) -> Di
         "banner_image": banner,
         "bgm_path": cfg.get("bgm_path"),
         "watermark_image": cfg.get("watermark_image"),
+        # subtitle_srt_path is stripped from the saved preset (it is per-story);
+        # set it only when auto-subtitle produced an SRT for THIS story.
+        "subtitle_srt_path": subtitle,
         "transitions_pool": pool,
         "transition_effect": random.choice(pool),
     })
     return vcfg
+
+
+def _probe_audio_duration(path: str) -> float:
+    """Seconds of an audio file via ffprobe, or 0 on any failure."""
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", path],
+            capture_output=True, text=True,
+        )
+        if out.returncode == 0:
+            return float(json.loads(out.stdout)["format"]["duration"])
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"[quick-build] ffprobe duration failed for {path}: {e}")
+    return 0.0
+
+
+def _make_subtitle(story: "models.Story", merged_audio: "models.MergedAudio") -> Optional[str]:
+    """Generate an estimated SRT for the story's merged audio, returning its path
+    (or None if it couldn't be built). Subtitle failure must never fail the job —
+    the caller renders without subtitles instead."""
+    try:
+        text = (story.merged_content or "").strip()
+        if not text:
+            return None
+        duration = merged_audio.duration or _probe_audio_duration(merged_audio.file_path)
+        if not duration or duration <= 0:
+            logger.warning(f"[quick-build] no audio duration for story {story.id}; skipping subtitles")
+            return None
+        out_path = str(paths.SRT_CACHE_DIR / f"quickbuild_{story.id}.srt")
+        meta = build_estimated_srt(text, float(duration), out_path)
+        if not meta.get("count"):
+            return None
+        logger.info(f"[quick-build] built {meta['count']} subtitle cues for story {story.id}")
+        return meta["output_path"]
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"[quick-build] subtitle generation failed for story {story.id}: {e}")
+        return None
 
 
 def _run_one_job(db, job: "models.BuildJob") -> None:
@@ -269,9 +317,15 @@ def _run_one_job(db, job: "models.BuildJob") -> None:
     story.current_step = 6  # TTS done — resumable at the Video step if render fails
     db.commit()
 
+    # --- subtitle (optional, best-effort) ---
+    subtitle = None
+    if (cfg.get("options") or {}).get("auto_subtitle"):
+        subtitle = _make_subtitle(story, merged_audio)
+
     # --- video ---
     job.stage = "video"; db.commit()
-    vcfg = _build_video_config(cfg, merged_audio.file_path, _auto_banner(job.source_path, cfg))
+    vcfg = _build_video_config(cfg, merged_audio.file_path,
+                               _auto_banner(job.source_path, cfg), subtitle)
     task = models.Task(story_id=story.id, type="video_processing", status="queued")
     db.add(task); db.commit(); db.refresh(task)
     result = run_video_task(task.id, story.id, vcfg)
@@ -301,6 +355,12 @@ def _run_batch(batch_id: str) -> None:
             if not is_batch_running(batch_id):
                 logger.info(f"[quick-build] batch {batch_id} stopped before job {job.order_index}")
                 break
+            # The user may have cancelled this still-queued job via /job/{id}/cancel
+            # (a separate session marked it 'skipped'); reload and skip if so.
+            db.refresh(job)
+            if job.status != "pending":
+                logger.info(f"[quick-build] skipping job {job.id} (status={job.status})")
+                continue
             try:
                 _run_one_job(db, job)
             except Exception as e:  # noqa: BLE001 — isolate per-file failures

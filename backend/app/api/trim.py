@@ -17,7 +17,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from app import paths
-from app.api.video import _reveal_in_file_manager, require_localhost
+from app.api.video import _reveal_in_file_manager, require_localhost, require_local_origin
 from app.database import SessionLocal
 from app.services.output_delivery import deliver_final, get_output_folder
 from app.services.video_trimmer import (
@@ -182,7 +182,10 @@ class TrimProcessResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.post("/upload", response_model=TrimUploadResponse)
-async def upload_video(file: UploadFile = File(...)):
+async def upload_video(
+    file: UploadFile = File(...),
+    _: None = Depends(require_local_origin),
+):
     """Accept a video upload, persist it to trim_temp, return metadata."""
     _sweep_trim_temp()
     file_id = str(uuid.uuid4())

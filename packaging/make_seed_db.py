@@ -27,6 +27,18 @@ import tempfile
 # In product mode, only these tables survive; every other table is emptied.
 KEEP = {"banned_words", "prompts"}
 
+# Credential rows that must NEVER ship inside default_seed.db — stripped from the
+# `settings` table in BOTH modes. In product mode `settings` is emptied anyway
+# (it's not in KEEP), but --full keeps it, which would otherwise bundle the real
+# VBEE token / API keys into the installer handed to end users.
+CREDENTIAL_KEYS = (
+    "VBEE_BEARER_TOKEN",
+    "VBEE_APP_ID",
+    "GEMINI_API_KEY",
+    "OPENAI_API_KEY",
+    "DEEPSEEK_API_KEY",
+)
+
 
 def default_source() -> str:
     local = os.environ.get("LOCALAPPDATA") or os.path.expanduser(r"~\AppData\Local")
@@ -60,6 +72,18 @@ def main() -> None:
             if t not in KEEP:
                 con.execute(f"DELETE FROM {t}")
         con.commit()
+
+    # ALWAYS strip credentials from `settings`, even in --full mode, so no build
+    # can leak the real VBEE token / API keys to end users.
+    if "settings" in tables:
+        placeholders = ",".join("?" for _ in CREDENTIAL_KEYS)
+        cur = con.execute(
+            f"DELETE FROM settings WHERE setting_key IN ({placeholders})",
+            CREDENTIAL_KEYS,
+        )
+        con.commit()
+        if cur.rowcount:
+            print(f"  scrubbed {cur.rowcount} credential row(s) from settings")
 
     kept_report = sorted(KEEP) if not full else ["banned_words", "prompts", "stories"]
     for t in kept_report:

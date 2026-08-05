@@ -12,6 +12,7 @@ from typing import Callable, Optional
 from loguru import logger
 
 from app import paths
+from app.config import settings
 
 STORAGE_BASE = paths.STORAGE_DIR
 TRIM_TEMP_DIR = paths.TRIM_TEMP_DIR
@@ -530,6 +531,26 @@ def _run_ffmpeg_with_progress(cmd: list, target_duration: float, progress_cb: Op
     t = threading.Thread(target=_drain_stderr, daemon=True)
     t.start()
 
+    # Watchdog: the stdout read loop below blocks, so it can't check the clock
+    # itself. If ffmpeg stalls (bad input, filter deadlock) it would hang the
+    # trim job forever. A separate thread kills the process past a hard ceiling
+    # scaled to the output length (10x, floored at FFMPEG_TRIM_TIMEOUT).
+    deadline_s = max(settings.FFMPEG_TRIM_TIMEOUT, (target_duration or 0) * 10)
+    stop_watchdog = threading.Event()
+    timed_out = {"v": False}
+
+    def _watchdog():
+        if not stop_watchdog.wait(deadline_s):
+            timed_out["v"] = True
+            logger.error(f"FFmpeg exceeded {deadline_s:.0f}s deadline — killing process")
+            try:
+                proc.kill()
+            except OSError:
+                pass
+
+    wd = threading.Thread(target=_watchdog, daemon=True)
+    wd.start()
+
     try:
         assert proc.stdout is not None
         for line in proc.stdout:
@@ -546,9 +567,17 @@ def _run_ffmpeg_with_progress(cmd: list, target_duration: float, progress_cb: Op
                 progress_cb(100.0)
     finally:
         proc.wait()
+        stop_watchdog.set()
+        wd.join(timeout=5)
         t.join(timeout=5)
 
     stderr_tail = "".join(stderr_chunks)
+    if timed_out["v"]:
+        stderr_tail = f"FFmpeg timed out after {deadline_s:.0f}s and was killed"
+        logger.error(stderr_tail)
+        # Ensure a non-zero return code so the caller reports failure even if
+        # kill() happened to race a clean exit.
+        return (proc.returncode or -9), stderr_tail
     if proc.returncode != 0:
         logger.error(f"FFmpeg error (rc={proc.returncode}): {stderr_tail[-2000:]}")
     return proc.returncode, stderr_tail

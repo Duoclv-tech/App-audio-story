@@ -64,6 +64,18 @@ class Settings(BaseSettings):
     # CORS — fixed list of local dev origins (5173/5174 = Vite, 3000 = CRA)
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:5174,http://localhost:3000"
 
+    # --- Network / process timeouts -----------------------------------------
+    # (connect, read) seconds for `requests`. The read timeout is the max gap
+    # *between bytes*, so it also bounds mid-stream stalls (not just connect).
+    # Without these a stalled remote wedges a worker thread and leaves the Task
+    # stuck "running" forever (story lock never released).
+    VBEE_HTTP_TIMEOUT: tuple = (10, 60)         # TTS create/status calls
+    VBEE_DOWNLOAD_TIMEOUT: tuple = (10, 120)    # streaming audio download
+    SCRAPE_HTTP_TIMEOUT: tuple = (10, 30)       # story-site HTML scraping
+    # Hard ceiling (seconds) for a single ffmpeg trim invocation; a watchdog
+    # kills the process past this so a hung ffmpeg can't wedge a trim job.
+    FFMPEG_TRIM_TIMEOUT: int = 3600
+
     @field_validator("DEBUG", mode="before")
     @classmethod
     def parse_debug(cls, value):

@@ -137,7 +137,10 @@ class VbeeTTSProcessor:
 
         try:
             logger.debug(f"TTS Request: voice={voice_code}, chars={len(text)}")
-            response = self.session.post(url, headers=self.headers, json=payload)
+            response = self.session.post(
+                url, headers=self.headers, json=payload,
+                timeout=settings.VBEE_HTTP_TIMEOUT,
+            )
             response.raise_for_status()
             result = response.json()
 
@@ -175,7 +178,10 @@ class VbeeTTSProcessor:
         url = f"{self.base_url}/tts/{request_id}"
 
         try:
-            response = self.session.get(url, headers=self.headers)
+            response = self.session.get(
+                url, headers=self.headers,
+                timeout=settings.VBEE_HTTP_TIMEOUT,
+            )
             response.raise_for_status()
             result = response.json()
 
@@ -246,7 +252,10 @@ class VbeeTTSProcessor:
             True if successful, False otherwise
         """
         try:
-            response = requests.get(audio_url, stream=True)
+            response = requests.get(
+                audio_url, stream=True,
+                timeout=settings.VBEE_DOWNLOAD_TIMEOUT,
+            )
             response.raise_for_status()
 
             # Ensure directory exists
@@ -262,6 +271,13 @@ class VbeeTTSProcessor:
 
         except Exception as e:
             logger.error(f"Error downloading audio: {e}")
+            # Remove any partial/truncated file so a later retry (or size check)
+            # doesn't mistake it for a complete download.
+            try:
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+            except OSError:
+                pass
             return False
 
     async def process_chapter(

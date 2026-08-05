@@ -8,6 +8,7 @@ from typing import List, Optional
 
 from app.database import get_db
 from app import models, schemas
+from app.api.video import require_local_origin
 from app.workers.tts_worker import process_tts_task
 
 router = APIRouter()
@@ -87,6 +88,7 @@ async def omnivoice_create_preset(
     name: str = Form(...),
     ref_text: str = Form(...),
     ref_audio: UploadFile = File(...),
+    _: None = Depends(require_local_origin),
 ):
     """Create a clone-voice preset from a reference sample + transcript."""
     from app.services import clone_preset_store as presets

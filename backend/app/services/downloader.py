@@ -16,6 +16,7 @@ from loguru import logger
 from urllib3.exceptions import InsecureRequestWarning
 
 from app import models
+from app.config import settings
 from app.services.text_checker import TextChecker
 
 
@@ -549,7 +550,7 @@ class StoryDownloader:
             if progress_callback:
                 progress_callback(f"Downloading chapter {chapter_num}...")
 
-            response = requests.get(url, headers=self.headers)
+            response = requests.get(url, headers=self.headers, timeout=settings.SCRAPE_HTTP_TIMEOUT)
             response.raise_for_status()
             response.encoding = 'utf-8'
 
@@ -561,7 +562,7 @@ class StoryDownloader:
                 for fallback_url in fallback_urls:
                     logger.info(f"Trying fallback URL: {fallback_url}")
                     try:
-                        response = requests.get(fallback_url, headers=self.headers)
+                        response = requests.get(fallback_url, headers=self.headers, timeout=settings.SCRAPE_HTTP_TIMEOUT)
                         response.raise_for_status()
                         response.encoding = 'utf-8'
 
@@ -609,7 +610,7 @@ class StoryDownloader:
                 for fallback_url in fallback_urls:
                     logger.info(f"Main URL failed, trying fallback: {fallback_url}")
                     try:
-                        response = requests.get(fallback_url, headers=self.headers)
+                        response = requests.get(fallback_url, headers=self.headers, timeout=settings.SCRAPE_HTTP_TIMEOUT)
                         response.raise_for_status()
                         response.encoding = 'utf-8'
 
@@ -671,7 +672,7 @@ class StoryDownloader:
             if progress_callback:
                 progress_callback(f"Downloading chapter {chapter_num} from custom URL...")
 
-            response = requests.get(url, headers=self.headers)
+            response = requests.get(url, headers=self.headers, timeout=settings.SCRAPE_HTTP_TIMEOUT)
             response.raise_for_status()
             response.encoding = 'utf-8'
 
@@ -751,8 +752,37 @@ class StoryDownloader:
         # Determine if using custom URLs
         use_custom_urls = custom_chapter_urls and len(custom_chapter_urls) > 0
 
+        def _bump_progress():
+            """Count one chapter as done and refresh the task's percent."""
+            if not task_id:
+                return
+            task = db.query(models.Task).filter(models.Task.id == task_id).first()
+            if task:
+                task.completed_items = (task.completed_items or 0) + 1
+                if task.total_items:
+                    task.progress = int((task.completed_items / task.total_items) * 100)
+                try:
+                    db.commit()
+                except Exception as e:
+                    logger.error(f"Error updating progress for chapter: {e}")
+                    db.rollback()
+
         async def download_with_limit(chapter_num, custom_url=None):
             async with semaphore:
+                # Idempotent resume: startup recovery re-runs the whole
+                # start..end range, so if this chapter is already saved for the
+                # story, skip both the re-fetch and the insert — otherwise every
+                # previously-downloaded chapter would be duplicated (and the
+                # content re-scraped). Still counts toward progress so a resumed
+                # task can reach 100%.
+                existing = db.query(models.Chapter).filter(
+                    models.Chapter.story_id == story_id,
+                    models.Chapter.chapter_number == chapter_num,
+                ).first()
+                if existing:
+                    _bump_progress()
+                    return {"success": True, "chapter_num": chapter_num, "skipped": True}
+
                 # Use custom URL if provided, otherwise use pattern-based URL
                 if custom_url:
                     result = await self.download_chapter_from_url(custom_url, chapter_num)
@@ -770,18 +800,14 @@ class StoryDownloader:
                     )
                     db.add(chapter)
 
-                    # Update task progress if task_id provided
-                    if task_id:
-                        task = db.query(models.Task).filter(models.Task.id == task_id).first()
-                        if task:
-                            task.completed_items = (task.completed_items or 0) + 1
-                            task.progress = int((task.completed_items / task.total_items) * 100)
-
                     try:
                         db.commit()
                     except Exception as e:
                         logger.error(f"Error saving chapter {chapter_num}: {e}")
                         db.rollback()
+                    else:
+                        # Only count a successfully-committed chapter.
+                        _bump_progress()
 
                 # Add small delay to avoid overwhelming server
                 await asyncio.sleep(1)
@@ -831,7 +857,7 @@ class StoryDownloader:
             return self._get_story_info_api()
 
         try:
-            response = requests.get(self.base_url, headers=self.headers)
+            response = requests.get(self.base_url, headers=self.headers, timeout=settings.SCRAPE_HTTP_TIMEOUT)
             response.raise_for_status()
             response.encoding = 'utf-8'
 

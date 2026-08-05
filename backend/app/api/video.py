@@ -11,6 +11,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
@@ -41,6 +42,27 @@ def require_localhost(request: Request) -> None:
     host = request.client.host if request.client else None
     if host not in _LOCAL_HOSTS:
         raise HTTPException(status_code=403, detail="Localhost-only endpoint")
+
+
+def require_local_origin(request: Request) -> None:
+    """CSRF guard for state-changing endpoints (esp. multipart uploads).
+
+    `multipart/form-data` POSTs are "simple" requests: a browser sends them
+    cross-origin WITHOUT a CORS preflight, so the CORS allow-list — which only
+    gates reading the *response* — doesn't stop a website the user is visiting
+    from POSTing to our loopback port and writing files to disk. A peer-IP check
+    (`require_localhost`) can't help either: the browser runs on the same
+    machine, so the socket is still 127.0.0.1. We validate the Origin/Referer
+    instead — a genuine same-origin call from the app carries a loopback origin
+    (or none at all), while a CSRF from evil.com carries evil.com.
+    """
+    source = request.headers.get("origin") or request.headers.get("referer")
+    if not source or source == "null":
+        # Same-origin requests routinely omit Origin; file:// yields "null".
+        # Nothing cross-site to reject.
+        return
+    if urlparse(source).hostname not in _LOCAL_HOSTS:
+        raise HTTPException(status_code=403, detail="Cross-origin request rejected")
 
 # Exact-preview jobs. Keyed by config hash; each entry tracks status/progress
 # and the absolute path of the rendered file. The file itself is delivered next
@@ -624,6 +646,7 @@ async def upload_srt(
     story_id: str = Form(...),
     audio_path: Optional[str] = Form(None),
     file: UploadFile = File(...),
+    _: None = Depends(require_local_origin),
 ):
     """Upload an SRT file scoped to a story. Returns its path + a warning if
     the SRT timing extends past the (sped-up) audio duration.
@@ -1292,7 +1315,10 @@ async def stickers_library():
 
 
 @router.post("/stickers/upload")
-async def stickers_upload(file: UploadFile = File(...)):
+async def stickers_upload(
+    file: UploadFile = File(...),
+    _: None = Depends(require_local_origin),
+):
     """Upload a custom sticker (PNG/GIF/WebP/APNG/JPG). Stored in the upload
     cache; returns the absolute path the FE puts into VideoConfig.stickers."""
     fname = file.filename or "sticker.png"

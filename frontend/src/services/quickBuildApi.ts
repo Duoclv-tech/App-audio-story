@@ -26,16 +26,16 @@ export const deleteBuildPreset = (id: string) =>
 export const renameBuildPreset = (id: string, name: string) =>
   axios.put<BuildPreset>(`/api/v1/build-presets/${id}`, { name }).then(r => r.data)
 
-// ---- OmniVoice clone presets (voices) --------------------------------------
+// ---- AI Voice local clone presets (voices) --------------------------------------
 export interface ClonePreset {
   id: string
   name: string
 }
 
-// Saved OmniVoice clone voices — used to label/pick a voice by name instead of
+// Saved AI Voice local clone voices — used to label/pick a voice by name instead of
 // its opaque preset_id. Empty list on any error (VBEE-only setups don't need it).
 export const listClonePresets = () =>
-  axios.get<{ presets: ClonePreset[] }>('/api/v1/tts/omnivoice/presets')
+  axios.get<{ presets: ClonePreset[] }>('/api/v1/tts/ai-voice-local/presets')
     .then(r => r.data.presets || [])
     .catch(() => [] as ClonePreset[])
 
@@ -54,7 +54,7 @@ export interface JobOverrides {
   engine?: string
   speed?: number
   preset_id?: string          // per-job BUILD preset override
-  clone_preset_id?: string    // OmniVoice clone voice override (→ tts.preset_id)
+  clone_preset_id?: string    // AI Voice local clone voice override (→ tts.preset_id)
   auto_clean?: boolean
   auto_subtitle?: boolean
 }

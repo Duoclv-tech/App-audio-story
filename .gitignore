@@ -43,14 +43,14 @@ packaging/Output/
 .DS_Store
 Thumbs.db
 
-# OmniVoice models (downloaded at install, not committed)
+# AI Voice local models (downloaded at install, not committed)
 backend/models/
 backend/clone_presets/
 
 # Source corpus for seed_clone_presets_from_vivos.py (~1.4GB, download locally)
 backend/scripts/vivos_data/
 
-# Standalone OmniVoice reference repo (nested git repo + multi-GB weights) —
+# Standalone local-TTS reference repo (nested git repo + multi-GB weights) —
 # kept locally for reference, never part of this repo.
 omivoice-tts/
 

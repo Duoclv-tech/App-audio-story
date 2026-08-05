@@ -27,7 +27,7 @@ The desktop build runs the FastAPI server on `127.0.0.1:<random port>` and rende
 - **AI grammar check** — Google Gemini reviews and improves merged content.
 - **Text-to-speech, two engines:**
   - **VBEE** (cloud API) — 14 Vietnamese voices, configured via the Settings UI.
-  - **OmniVoice** (local, embedded) — runs on NVIDIA GPU (or CPU, slower); self-disables if torch/CUDA/model is missing so VBEE keeps working.
+  - **AI Voice local** (local, embedded) — runs on NVIDIA GPU (or CPU, slower); self-disables if torch/CUDA/model is missing so VBEE keeps working.
 - **Merge audio** into a single file per story.
 - **Render video** from audio + background clips with subtitles (auto-detects NVENC GPU encoding, falls back to libx264). Includes a standalone **video trimmer**.
 - **Export** to documents (`python-docx`).
@@ -109,7 +109,7 @@ web_app/
 ├── frontend/                  # React + Vite frontend
 │   └── src/{components,pages,services}
 ├── packaging/                 # PyInstaller specs + Inno Setup installer
-│   ├── truyenfull.spec        # PyInstaller spec (full build: VBEE + OmniVoice)
+│   ├── truyenfull.spec        # PyInstaller spec (full build: VBEE + AI Voice local)
 │   ├── installer.iss          # Inno Setup script
 │   └── BUILD.md               # Build instructions
 ├── dist/                      # PyInstaller output (TruyenFullProcessor.exe)
@@ -132,9 +132,9 @@ VBEE_BEARER_TOKEN=
 GEMINI_API_KEY=
 OPENAI_API_KEY=          # only used by the OpenAI spellcheck step
 
-# OmniVoice local TTS
-OMNIVOICE_ENABLED=True
-OMNIVOICE_DEVICE=cuda:0  # set to "cpu" to force CPU
+# AI Voice local TTS
+AIVOICE_LOCAL_ENABLED=True
+AIVOICE_LOCAL_DEVICE=cuda:0  # set to "cpu" to force CPU
 
 # Server (dev) — binds loopback by default; the API has no auth
 API_HOST=127.0.0.1
@@ -162,7 +162,7 @@ State is tracked in `stories.current_step`; you can go back to any completed ste
 2. **Download** — fetch chapters into the DB (auto).
 3. **Edit** — review text, handle censored/merged words.
 4. **Grammar** — AI grammar check (Gemini) on merged content.
-5. **TTS Config** — pick engine (VBEE / OmniVoice), voice, speed, volume.
+5. **TTS Config** — pick engine (VBEE / AI Voice local), voice, speed, volume.
 6. **TTS Process** — synthesize audio, retry per chapter.
 7. **Video** — render video from audio + background clips with subtitles.
 8. **Complete** — download the finished audio / video.
@@ -185,7 +185,7 @@ cd frontend && npm run build
 
 # 2. Package with PyInstaller (from repo root)
 backend/venv/Scripts/pyinstaller.exe packaging/truyenfull.spec --noconfirm
-#   (full build: nhúng cả VBEE + OmniVoice; OmniVoice tự chạy GPU hoặc CPU)
+#   (full build: nhúng cả VBEE + AI Voice local; AI Voice local tự chạy GPU hoặc CPU)
 
 # 3. Smoke-test the frozen build (no window)
 dist/TruyenFullProcessor/TruyenFullProcessor.exe --selftest

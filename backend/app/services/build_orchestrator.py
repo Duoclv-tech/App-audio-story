@@ -8,7 +8,7 @@ throws is marked 'error' and the batch moves on to the next file.
 
 The pipeline reuses the exact service functions the wizard endpoints call:
   - chapter_splitter.read_text_from_file / split_chapters   (import)
-  - VbeeTTSProcessor / OmniVoiceProcessor .process_merged_content  (TTS)
+  - VbeeTTSProcessor / AiVoiceLocalProcessor .process_merged_content  (TTS)
   - video_worker.run_video_task                             (render)
 """
 import os
@@ -150,7 +150,7 @@ def _resolve_config(db, job: "models.BuildJob") -> Dict:
         tts["engine"] = ov["engine"]
     if "speed" in ov and ov["speed"]:
         tts["speed"] = ov["speed"]
-    if "clone_preset_id" in ov and ov["clone_preset_id"]:  # OmniVoice clone voice preset
+    if "clone_preset_id" in ov and ov["clone_preset_id"]:  # AI Voice local clone voice preset
         tts["preset_id"] = ov["clone_preset_id"]
     if "auto_clean" in ov:
         options["auto_clean"] = ov["auto_clean"]
@@ -210,10 +210,10 @@ def _run_tts_sync(db, story: "models.Story", tts: Dict) -> None:
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
-        if engine == "omnivoice":
-            from app.services.omnivoice_processor import OmniVoiceProcessor
+        if engine == "ai_voice_local":
+            from app.services.ai_voice_local_processor import AiVoiceLocalProcessor
             result = loop.run_until_complete(
-                OmniVoiceProcessor(db=db).process_merged_content(
+                AiVoiceLocalProcessor(db=db).process_merged_content(
                     story_id=story.id, db=db, config=tts
                 )
             )

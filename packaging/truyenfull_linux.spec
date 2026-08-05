@@ -3,10 +3,11 @@
 PyInstaller spec for TruyenFull Processor — LINUX (Ubuntu) build.
 
 This is the LIGHTWEIGHT / VBEE-only variant: it ships the cloud VBEE TTS engine
-only. It deliberately does NOT bundle the local OmniVoice engine (torch + CUDA),
-because that stack is huge and needs an NVIDIA GPU — impractical for a general
-Linux desktop build. The OmniVoice code still ships but self-disables at runtime
-when torch/omnivoice/CUDA/model are absent (VBEE keeps working).
+only. It deliberately does NOT bundle the local AI Voice local engine (torch +
+CUDA), because that stack is huge and needs an NVIDIA GPU — impractical for a
+general Linux desktop build. The AI Voice local code still ships but self-disables
+at runtime when torch / the local TTS runtime / CUDA / model are absent (VBEE
+keeps working).
 
 The native window uses pywebview's GTK backend (WebKit2GTK). The target machine
 therefore needs the WebKit2GTK runtime; the .github workflow installs it at
@@ -60,7 +61,7 @@ for _fname in ("ffmpeg", "ffprobe"):
     else:
         print(f"[spec] WARN missing {_fpath} — app will fall back to system ffmpeg on PATH")
 
-# Default OmniVoice clone-voice presets (seeded into user dir on first run).
+# Default AI Voice local clone-voice presets (seeded into user dir on first run).
 _def_presets = os.path.join(BACKEND, "default_clone_presets")
 if os.path.isdir(_def_presets):
     datas.append((_def_presets, "default_clone_presets"))

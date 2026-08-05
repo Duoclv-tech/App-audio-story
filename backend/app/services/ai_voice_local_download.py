@@ -1,5 +1,5 @@
 """
-OmniVoice model download manager.
+AI Voice local model download manager.
 
 Models are large (several GB) so they aren't bundled in the .exe — they're
 pulled from HuggingFace into the writable models dir at install / first run.
@@ -18,7 +18,7 @@ from app.config import settings
 
 # key -> (repo_id, local_dir). Only the base model is used now.
 _TARGETS = {
-    "base": (settings.OMNIVOICE_BASE_REPO, settings.OMNIVOICE_BASE_PATH),
+    "base": (settings.AIVOICE_LOCAL_BASE_REPO, settings.AIVOICE_LOCAL_BASE_PATH),
 }
 
 # The main weights file — its presence means the model is actually usable.
@@ -76,7 +76,7 @@ def _fetch_total_bytes(repo_id: str) -> int:
         info = HfApi().repo_info(repo_id=repo_id, files_metadata=True)
         return sum((s.size or 0) for s in (info.siblings or []))
     except Exception as e:
-        logger.warning(f"[omnivoice] could not fetch total size for {repo_id}: {e}")
+        logger.warning(f"[ai_voice_local] could not fetch total size for {repo_id}: {e}")
         return 0
 
 
@@ -110,7 +110,7 @@ def _ensure_clean_dir(local_dir: str) -> None:
         if p.is_dir() and not p.is_symlink():
             return
 
-    logger.warning(f"[omnivoice] stale entry at {local_dir} blocks mkdir — clearing it")
+    logger.warning(f"[ai_voice_local] stale entry at {local_dir} blocks mkdir — clearing it")
     for _remove in (
         lambda: p.unlink(),
         lambda: os.remove(str(p)),
@@ -138,7 +138,7 @@ def _do_download(key: str) -> None:
         total = _fetch_total_bytes(repo_id)
         with _lock:
             _status[key]["total_bytes"] = total
-        logger.info(f"[omnivoice] downloading {repo_id} -> {local_dir} "
+        logger.info(f"[ai_voice_local] downloading {repo_id} -> {local_dir} "
                     f"(total {total/1024/1024:.0f} MB)")
         _ensure_clean_dir(local_dir)
         poller.start()
@@ -149,9 +149,9 @@ def _do_download(key: str) -> None:
             _status[key]["downloaded_bytes"] = _dir_size(local_dir)
             if not _status[key]["total_bytes"]:
                 _status[key]["total_bytes"] = _status[key]["downloaded_bytes"]
-        logger.info(f"[omnivoice] downloaded {key}")
+        logger.info(f"[ai_voice_local] downloaded {key}")
     except Exception as e:
-        logger.error(f"[omnivoice] download failed for {key}: {e}")
+        logger.error(f"[ai_voice_local] download failed for {key}: {e}")
         with _lock:
             _status[key]["state"] = "error"
             _status[key]["error"] = str(e)

@@ -178,7 +178,7 @@ class TTSRequest(BaseModel):
     speed: float = 1.0
     volume: int = 100
 
-    # Engine selection: "vbee" (cloud, default) or "omnivoice" (local GPU)
+    # Engine selection: "vbee" (cloud, default) or "ai_voice_local" (local GPU)
     engine: str = "vbee"
 
     # VBEE / shared audio config
@@ -186,9 +186,9 @@ class TTSRequest(BaseModel):
     audio_type: str = "mp3"
     bitrate: int = 128
 
-    # OmniVoice-only config
+    # AI Voice local-only config
     mode: str = "auto"                 # auto | clone | design
-    model_key: Optional[str] = None    # khanhtts | base
+    model_key: Optional[str] = None    # base
     preset_id: Optional[str] = None    # clone voice preset
     ref_text: Optional[str] = None     # inline reference transcript (clone)
     instruct: Optional[str] = None     # voice description (design)
@@ -206,7 +206,7 @@ class TTSResponse(BaseModel):
     message: str
 
 
-# ---- Per-segment TTS (OmniVoice) ----
+# ---- Per-segment TTS (AI Voice local) ----
 # Split / run / retry all carry the full TTSRequest config (engine/preset/lang/
 # speed/bitrate) so the *current* config is applied when generating — not a
 # stale snapshot. Run & retry reuse TTSRequest directly.

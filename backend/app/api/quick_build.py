@@ -16,7 +16,7 @@ _STORY_EXTS = (".txt", ".docx")
 
 
 def _wizard_gpu_busy(db: Session) -> bool:
-    """True if a wizard GPU task (video render or OmniVoice TTS) is in flight —
+    """True if a wizard GPU task (video render or AI Voice local TTS) is in flight —
     a batch must not start on top of it. The reverse (wizard-vs-batch) is guarded
     by gpu_guard.is_busy() in the wizard endpoints."""
     video = db.query(models.Task).filter(
@@ -25,14 +25,14 @@ def _wizard_gpu_busy(db: Session) -> bool:
     ).first()
     if video:
         return True
-    omni_tts = db.query(models.Task).filter(
+    local_tts = db.query(models.Task).filter(
         models.Task.type.in_(["tts", "tts_merged"]),
-        models.Task.engine == "omnivoice",
+        models.Task.engine == "ai_voice_local",
         models.Task.status.in_(["queued", "running"]),
     ).first()
-    if omni_tts:
+    if local_tts:
         return True
-    # OmniVoice per-segment generation tracks itself in-memory, not via Task rows.
+    # AI Voice local per-segment generation tracks itself in-memory, not via Task rows.
     return tts_worker.any_story_active()
 
 
@@ -52,13 +52,13 @@ def _build_config_snapshot(preset: models.BuildPreset, common_overrides: dict | 
     opts = preset.options or {}
     ov = common_overrides or {}
     engine = tts.get("engine") or "vbee"
-    # OmniVoice identifies its voice by mode (auto/design/clone), not voice_code.
+    # AI Voice local identifies its voice by mode (auto/design/clone), not voice_code.
     # For clone mode, freeze the human-readable preset name (a per-job override
     # wins, mirroring the other snapshot fields) so history shows the actual voice.
-    mode = (tts.get("mode") or "auto") if engine == "omnivoice" else None
+    mode = (tts.get("mode") or "auto") if engine == "ai_voice_local" else None
     clone_id = ov.get("clone_preset_id") or tts.get("preset_id")
     clone_preset_name = (clone_preset_store.get_preset_name(clone_id)
-                         if engine == "omnivoice" and mode == "clone" else None)
+                         if engine == "ai_voice_local" and mode == "clone" else None)
     return {
         "preset_name": preset.name,
         "engine": engine,

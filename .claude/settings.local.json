@@ -123,7 +123,8 @@
       "PowerShell($iscc = Get-Command iscc -ErrorAction SilentlyContinue; if \\($iscc\\) { \"iscc: $\\($iscc.Source\\)\" } else { \"iscc NOT on PATH\" }; $p = \"${env:ProgramFiles\\(x86\\)}\\\\Inno Setup 6\\\\ISCC.exe\"; if \\(Test-Path $p\\) { \"Found: $p\" } else { \"Not in Program Files \\(x86\\)\" })",
       "PowerShell($exe = \"D:\\\\Project\\\\web_app\\\\dist\\\\TruyenFullProcessor\\\\TruyenFullProcessor.exe\"; if \\(Test-Path $exe\\) { $f = Get-Item $exe; \"EXE: {0}  |  {1:N1} MB  |  {2}\" -f $f.Name, \\($f.Length/1MB\\), $f.LastWriteTime } else { \"EXE NOT FOUND\" })",
       "PowerShell(Get-ChildItem *)",
-      "PowerShell(& \".\\\\packaging\\\\build.ps1\" -SkipFrontend)"
+      "PowerShell(& \".\\\\packaging\\\\build.ps1\" -SkipFrontend)",
+      "WebFetch(domain:huggingface.co)"
     ],
     "deny": [
       "Bash(sudo:*)"

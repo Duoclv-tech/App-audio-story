@@ -2,10 +2,11 @@
 """
 PyInstaller spec for TruyenFull Processor (Windows desktop app) — FULL build.
 
-Bundles the local OmniVoice TTS engine (torch + CUDA + transformers) alongside
-the cloud VBEE engine, so the shipped app supports BOTH. Large (~6-10 GB onedir).
-OmniVoice runs on GPU when an NVIDIA card is present, and automatically falls
-back to CPU (slower) on GPU-less machines — see app/services/omnivoice_processor.
+Bundles the local AI Voice local TTS engine (torch + CUDA + transformers)
+alongside the cloud VBEE engine, so the shipped app supports BOTH. Large
+(~6-10 GB onedir). AI Voice local runs on GPU when an NVIDIA card is present,
+and automatically falls back to CPU (slower) on GPU-less machines — see
+app/services/ai_voice_local_processor.
 
 Build from the repo root (venv must have requirements.lock.txt installed):
     backend/venv/Scripts/pyinstaller.exe packaging/truyenfull.spec --noconfirm
@@ -33,8 +34,9 @@ for pkg in ("webview", "clr_loader", "pythonnet", "bottle"):
 # uvicorn loads loops/protocols/lifespan lazily.
 hiddenimports += collect_submodules("uvicorn")
 
-# --- ML stack for OmniVoice ------------------------------------------------
-# torch/omnivoice are imported lazily in app.services.omnivoice_processor, so
+# --- ML stack for AI Voice local -------------------------------------------
+# torch / the omnivoice pip package are imported lazily in
+# app.services.ai_voice_local_processor, so
 # PyInstaller's static analysis won't discover them — collect them explicitly.
 # collect_all pulls each package's data files + binaries (incl. torch's bundled
 # CUDA DLLs from the cu124 wheel) + submodules.
@@ -62,7 +64,7 @@ datas += [
     (os.path.join(BACKEND, "bin", "ffmpeg.exe"), "bin"),
     (os.path.join(BACKEND, "bin", "ffprobe.exe"), "bin"),
 ]
-# Default OmniVoice clone-voice presets (seeded into user dir on first run).
+# Default AI Voice local clone-voice presets (seeded into user dir on first run).
 _def_presets = os.path.join(BACKEND, "default_clone_presets")
 if os.path.isdir(_def_presets):
     datas.append((_def_presets, "default_clone_presets"))

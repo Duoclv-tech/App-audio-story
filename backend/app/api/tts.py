@@ -31,7 +31,7 @@ def _delete_audio_file(file_path) -> None:
 def _build_tts_config(request: schemas.TTSRequest) -> dict:
     """Flatten a TTSRequest into the config dict the workers consume.
 
-    Carries the engine selector plus both VBEE and OmniVoice fields so the
+    Carries the engine selector plus both VBEE and AI Voice local fields so the
     worker can route without caring which UI tab produced the request.
     """
     return {
@@ -41,7 +41,7 @@ def _build_tts_config(request: schemas.TTSRequest) -> dict:
         "audio_type": request.audio_type or "mp3",
         "bitrate": request.bitrate or 128,
         "speed": request.speed if request.speed else 1.0,
-        # OmniVoice
+        # AI Voice local
         "mode": request.mode or "auto",
         "model_key": request.model_key or "base",
         "preset_id": request.preset_id,
@@ -51,40 +51,40 @@ def _build_tts_config(request: schemas.TTSRequest) -> dict:
     }
 
 
-# ==================== OmniVoice (local TTS) ====================
-# Declared BEFORE the parametrized /{task_id}/status route so /omnivoice/status
+# ==================== AI Voice local (local TTS) ====================
+# Declared BEFORE the parametrized /{task_id}/status route so /ai-voice-local/status
 # isn't shadowed by it (FastAPI matches routes in definition order).
 
-@router.get("/omnivoice/status")
-async def omnivoice_status(db: Session = Depends(get_db)):
-    """Whether the local OmniVoice engine can run (deps/GPU/model/CPU-mode) + download state."""
-    from app.services import omnivoice_processor as ov
-    from app.services import omnivoice_download as dl
+@router.get("/ai-voice-local/status")
+async def ai_voice_local_status(db: Session = Depends(get_db)):
+    """Whether the local AI Voice local engine can run (deps/GPU/model/CPU-mode) + download state."""
+    from app.services import ai_voice_local_processor as ov
+    from app.services import ai_voice_local_download as dl
     return {
         "availability": ov.availability(db),
         "downloads": dl.get_all_status(),
     }
 
 
-@router.post("/omnivoice/download")
-async def omnivoice_download(model_key: str = "base"):
+@router.post("/ai-voice-local/download")
+async def ai_voice_local_download(model_key: str = "base"):
     """Kick off (or report) a background model download from HuggingFace."""
-    from app.services import omnivoice_download as dl
+    from app.services import ai_voice_local_download as dl
     try:
         return dl.start_download(model_key)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/omnivoice/presets")
-async def omnivoice_list_presets():
+@router.get("/ai-voice-local/presets")
+async def ai_voice_local_list_presets():
     """List saved clone-voice presets."""
     from app.services import clone_preset_store as presets
     return {"presets": presets.list_presets()}
 
 
-@router.post("/omnivoice/presets")
-async def omnivoice_create_preset(
+@router.post("/ai-voice-local/presets")
+async def ai_voice_local_create_preset(
     name: str = Form(...),
     ref_text: str = Form(...),
     ref_audio: UploadFile = File(...),
@@ -96,15 +96,15 @@ async def omnivoice_create_preset(
     return {"ok": True, "preset": meta}
 
 
-@router.delete("/omnivoice/presets/{preset_id}")
-async def omnivoice_delete_preset(preset_id: str):
+@router.delete("/ai-voice-local/presets/{preset_id}")
+async def ai_voice_local_delete_preset(preset_id: str):
     from app.services import clone_preset_store as presets
     presets.delete_preset(preset_id)
     return {"ok": True, "deleted": preset_id}
 
 
-@router.get("/omnivoice/presets/{preset_id}/audio")
-async def omnivoice_preset_audio(preset_id: str):
+@router.get("/ai-voice-local/presets/{preset_id}/audio")
+async def ai_voice_local_preset_audio(preset_id: str):
     from app.services import clone_preset_store as presets
     return FileResponse(presets.get_audio_path(preset_id))
 
@@ -434,8 +434,8 @@ async def start_tts_merged(
     if not story.merged_content or story.merged_content.strip() == "":
         raise HTTPException(status_code=400, detail="No merged content found. Please edit content in Grammar step first.")
 
-    # OmniVoice runs on the GPU — don't start it on top of a quick-build batch.
-    if (request.engine or "vbee").lower() == "omnivoice":
+    # AI Voice local runs on the GPU — don't start it on top of a quick-build batch.
+    if (request.engine or "vbee").lower() == "ai_voice_local":
         from app.services import gpu_guard
         if gpu_guard.is_busy():
             raise HTTPException(status_code=409, detail="Đang chạy build hàng loạt — vui lòng đợi xong.")
@@ -472,10 +472,10 @@ async def get_merged_tts_status(story_id: str, engine: Optional[str] = None, db:
     """Get TTS status for merged content.
 
     ``engine`` (optional) scopes the result to the caller's currently selected
-    TTS engine ('vbee' | 'omnivoice') — a story can carry a leftover
+    TTS engine ('vbee' | 'ai_voice_local') — a story can carry a leftover
     merged_audio row from whichever engine ran last, and without this filter
     the UI would show a VBEE-produced file while the user is mid-run on
-    OmniVoice (or vice versa).
+    AI Voice local (or vice versa).
     """
     # Get story
     story = db.query(models.Story).filter(models.Story.id == story_id).first()
@@ -509,7 +509,7 @@ async def get_merged_tts_status(story_id: str, engine: Optional[str] = None, db:
     }
 
 
-# ==================== OmniVoice per-segment TTS ====================
+# ==================== AI Voice local per-segment TTS ====================
 
 def _seg_out(seg: models.TtsSegment) -> dict:
     return {
@@ -600,7 +600,7 @@ async def run_segments(
     from app.workers.tts_worker import process_segments_task, try_acquire_story, release_story
     from app.services import gpu_guard
 
-    # OmniVoice segment generation is GPU-heavy — don't run it on top of a batch.
+    # AI Voice local segment generation is GPU-heavy — don't run it on top of a batch.
     if gpu_guard.is_busy():
         raise HTTPException(status_code=409, detail="Đang chạy build hàng loạt — vui lòng đợi xong.")
 
@@ -774,7 +774,7 @@ async def merge_segments_endpoint(
         raise HTTPException(status_code=409, detail="Đang chạy TTS cho truyện này — hãy chờ xong rồi ghép.")
 
     try:
-        task = models.Task(story_id=story.id, type="tts_merged", engine="omnivoice", status="running", total_items=1)
+        task = models.Task(story_id=story.id, type="tts_merged", engine="ai_voice_local", status="running", total_items=1)
         db.add(task)
         db.commit()
         db.refresh(task)

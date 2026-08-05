@@ -1,6 +1,6 @@
 name: Build Ubuntu (VBEE-only)
 
-# Builds the lightweight Linux desktop app (cloud VBEE TTS only — no OmniVoice/
+# Builds the lightweight Linux desktop app (cloud VBEE TTS only — no AI Voice local/
 # CUDA). Runs on manual dispatch or when a v* tag is pushed. Produces a
 # self-contained onedir tarball uploaded as a workflow artifact (and attached to
 # the GitHub Release when triggered by a tag).

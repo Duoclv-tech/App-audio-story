@@ -31,8 +31,8 @@ function errMsg(e: any, fallback: string): string {
 
 const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() || p
 
-// OmniVoice picks its voice by mode (not a voice_code); label it for humans.
-const omniModeLabel = (mode: string | undefined) =>
+// AI Voice local picks its voice by mode (not a voice_code); label it for humans.
+const localModeLabel = (mode: string | undefined) =>
   mode === 'design' ? 'thiết kế' : mode === 'clone' ? 'clone' : 'mặc định'
 
 export default function QuickBuildPage() {
@@ -86,7 +86,7 @@ export default function QuickBuildPage() {
       .then(p => { setPresets(p); setPresetId(cur => (p.some(x => x.id === cur) ? cur : (p[0]?.id ?? ''))) })
       .catch(e => setNotice({ kind: 'err', text: errMsg(e, 'Không tải được danh sách preset') }))
   useEffect(() => { reloadPresets() }, [])
-  // OmniVoice clone voices — used to show/pick a voice by name (VBEE presets
+  // AI Voice local clone voices — used to show/pick a voice by name (VBEE presets
   // ignore this; the fetch swallows errors and yields []).
   useEffect(() => { listClonePresets().then(setClonePresets) }, [])
 
@@ -478,7 +478,7 @@ export default function QuickBuildPage() {
                 const eff = {
                   preset_id: ov.preset_id || presetId,
                   voice_code: ov.voice_code ?? (pt.voice_code || ''),
-                  // OmniVoice clone voice: override → preset's clone (tts.preset_id).
+                  // AI Voice local clone voice: override → preset's clone (tts.preset_id).
                   clone_preset_id: ov.clone_preset_id ?? (pt.preset_id || ''),
                   speed: ov.speed ?? (pt.speed ?? ''),
                   banner_mode: ov.banner_mode ?? bannerDef,
@@ -526,9 +526,9 @@ export default function QuickBuildPage() {
                             {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                           </select>
                         </label>
-                        {engine === 'omnivoice' ? (
+                        {engine === 'ai_voice_local' ? (
                           <label className="flex flex-col gap-1">
-                            <span className="text-xs font-semibold text-dim">Giọng OmniVoice <span className="text-faint font-normal">({omniModeLabel(pt.mode)})</span></span>
+                            <span className="text-xs font-semibold text-dim">Giọng AI Voice local <span className="text-faint font-normal">({localModeLabel(pt.mode)})</span></span>
                             {(pt.mode || 'auto') === 'clone' ? (
                               <select value={eff.clone_preset_id}
                                 onChange={e => { const v = e.target.value; patchOverride(i, { clone_preset_id: (!v || v === (pt.preset_id || '')) ? undefined : v }) }}
@@ -537,7 +537,7 @@ export default function QuickBuildPage() {
                                 {clonePresets.map(cp => <option key={cp.id} value={cp.id}>{cp.name}</option>)}
                               </select>
                             ) : (
-                              <input value={omniModeLabel(pt.mode)} disabled
+                              <input value={localModeLabel(pt.mode)} disabled
                                 title="Chế độ auto/design lấy giọng từ preset — đổi ở màn Xử lý"
                                 className="px-2.5 py-1.5 text-sm border border-token rounded bg-surface-2 text-faint" />
                             )}
@@ -828,16 +828,16 @@ function PresetChips({ preset, clonePresets }: { preset: BuildPreset; clonePrese
       <span className="text-faint">{label}</span> <b className="text-strong">{String(val)}</b>
     </span>
   )
-  // OmniVoice shows its voice by mode; clone mode resolves the preset_id to a name.
-  const omniVoice = engine === 'omnivoice'
+  // AI Voice local shows its voice by mode; clone mode resolves the preset_id to a name.
+  const localVoiceLabel = engine === 'ai_voice_local'
     ? ((t.mode || 'auto') === 'clone'
         ? (clonePresets.find(c => c.id === t.preset_id)?.name || t.preset_id || 'clone')
-        : omniModeLabel(t.mode))
+        : localModeLabel(t.mode))
     : null
   return (
     <div className="flex flex-wrap gap-2">
       {chip('Engine', engine.toUpperCase())}
-      {engine === 'omnivoice' ? chip('Giọng', omniVoice) : t.voice_code && chip('Giọng', t.voice_code)}
+      {engine === 'ai_voice_local' ? chip('Giọng', localVoiceLabel) : t.voice_code && chip('Giọng', t.voice_code)}
       {t.speed && chip('Tốc độ', `${t.speed}×`)}
       {preset.video_cfg?.resolution && chip('Video', preset.video_cfg.resolution)}
       {preset.video_folder && chip('Clip nền', baseName(preset.video_folder))}

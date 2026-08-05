@@ -2,10 +2,10 @@
 Seed default clone presets from the VBEE catalog.
 
 For each VBEE voice we ask the VBEE cloud engine to read ONE fixed reference
-paragraph, download the resulting mp3, and write it as an OmniVoice clone preset
-under ``paths.DEFAULT_CLONE_PRESETS_DIR``. Because we control the text we send,
-the transcript (``ref_text`` in meta.json) is guaranteed to match the audio —
-which is exactly what OmniVoice clone mode needs.
+paragraph, download the resulting mp3, and write it as an AI Voice local clone
+preset under ``paths.DEFAULT_CLONE_PRESETS_DIR``. Because we control the text we
+send, the transcript (``ref_text`` in meta.json) is guaranteed to match the
+audio — which is exactly what AI Voice local clone mode needs.
 
 These bundled presets get copied into the writable ``clone_presets`` dir on the
 user's first run (see ``clone_preset_store.seed_default_presets``), so every user

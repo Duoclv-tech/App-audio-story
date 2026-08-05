@@ -1,16 +1,16 @@
 """
-OmniVoice local TTS engine (embedded).
+AI Voice local TTS engine (embedded).
 
-This is the second TTS engine alongside VbeeTTSProcessor. It loads the
-OmniVoice / KhanhTTS model into the backend process (on GPU) and generates
-audio locally — supporting voice *clone* (from a reference sample) and voice
-*design* (natural-language voice description), which the VBEE cloud API cannot.
+This is the second TTS engine alongside VbeeTTSProcessor. It loads the local
+neural TTS model into the backend process (on GPU) and generates audio locally
+— supporting voice *clone* (from a reference sample) and voice *design*
+(natural-language voice description), which the VBEE cloud API cannot.
 
-Heavy deps (torch / omnivoice / soundfile) are imported lazily so the backend
-boots fine on machines without a GPU or without these packages installed — in
-that case ``OmniVoiceProcessor.availability()`` reports why and VBEE keeps
-working. Output WAV @ 24 kHz is transcoded to mp3 via ffmpeg so the rest of the
-pipeline (merge / video) is unchanged.
+Heavy deps (torch / the ``omnivoice`` pip package / soundfile) are imported
+lazily so the backend boots fine on machines without a GPU or without these
+packages installed — in that case ``AiVoiceLocalProcessor.availability()``
+reports why and VBEE keeps working. Output WAV @ 24 kHz is transcoded to mp3
+via ffmpeg so the rest of the pipeline (merge / video) is unchanged.
 """
 import os
 import shutil
@@ -27,12 +27,12 @@ from app import models, paths
 from app.config import settings
 from app.services.output_delivery import deliver_final, safe_file_stem
 
-SR = 24000  # OmniVoice native sample rate
+SR = 24000  # AI Voice local native sample rate
 
-# Only the OmniVoice base (omnilingual) model is used. The KhanhTTS fine-tune
-# was dropped, so "base" is the sole option and the default.
+# Only the local base (omnilingual) model is used. The fine-tune variant was
+# dropped, so "base" is the sole option and the default.
 MODEL_PATHS = {
-    "base": settings.OMNIVOICE_BASE_PATH,
+    "base": settings.AIVOICE_LOCAL_BASE_PATH,
 }
 DEFAULT_MODEL_KEY = "base"
 
@@ -79,7 +79,7 @@ def _explicit_cpu_setting(db) -> Optional[bool]:
         return None
     try:
         s = db.query(models.Setting).filter(
-            models.Setting.setting_key == "OMNIVOICE_USE_CPU"
+            models.Setting.setting_key == "AIVOICE_LOCAL_USE_CPU"
         ).first()
         if s is None or s.setting_value is None:
             return None
@@ -98,7 +98,7 @@ def _read_cpu_setting(db) -> bool:
 
     - If the user made an explicit choice, honour it.
     - Otherwise auto-detect: run on CPU when no NVIDIA GPU is available, so
-      OmniVoice works out of the box on GPU-less machines without the user
+      AI Voice local works out of the box on GPU-less machines without the user
       having to tick anything.
     """
     explicit = _explicit_cpu_setting(db)
@@ -113,18 +113,18 @@ def effective_device(db=None) -> str:
     ~15-20x slower than realtime."""
     if _read_cpu_setting(db):
         return "cpu"
-    return settings.OMNIVOICE_DEVICE
+    return settings.AIVOICE_LOCAL_DEVICE
 
 
 def availability(db=None) -> Dict:
-    """Report whether the OmniVoice engine can run, and why not if it can't.
+    """Report whether the AI Voice local engine can run, and why not if it can't.
 
-    Returns a dict the UI uses to enable/disable the OmniVoice tab, show a
+    Returns a dict the UI uses to enable/disable the AI Voice local tab, show a
     "download model" prompt, and offer/announce CPU mode.
     """
     device = effective_device(db)
     info = {
-        "enabled": settings.OMNIVOICE_ENABLED,
+        "enabled": settings.AIVOICE_LOCAL_ENABLED,
         "deps_installed": False,
         "gpu_available": False,
         "device": device,
@@ -138,14 +138,14 @@ def availability(db=None) -> Dict:
         "loaded_model": _loaded["key"],
         "reason": "",
     }
-    if not settings.OMNIVOICE_ENABLED:
-        info["reason"] = "OmniVoice disabled in settings"
+    if not settings.AIVOICE_LOCAL_ENABLED:
+        info["reason"] = "AI Voice local disabled in settings"
         return info
     try:
         import torch  # noqa
         info["deps_installed"] = True
     except Exception as e:
-        info["reason"] = f"missing python deps (torch/omnivoice): {e}"
+        info["reason"] = f"missing python deps (torch/model runtime): {e}"
         return info
     info["gpu_available"] = _gpu_available()
     # Only block on the GPU when actually targeting CUDA. In CPU mode we skip
@@ -168,13 +168,13 @@ def _get_model_sync(key: str, device: Optional[str] = None):
     """Lazy-load the model on first use; reload if the model key OR device
     (cuda:0 <-> cpu) changes."""
     if key not in MODEL_PATHS:
-        raise ValueError(f"unknown OmniVoice model: {key}")
+        raise ValueError(f"unknown AI Voice local model: {key}")
     if not _model_available(key):
         raise RuntimeError(
-            f"OmniVoice model '{key}' not found at {MODEL_PATHS[key]} "
+            f"AI Voice local model '{key}' not found at {MODEL_PATHS[key]} "
             f"(download it first)"
         )
-    device = device or settings.OMNIVOICE_DEVICE
+    device = device or settings.AIVOICE_LOCAL_DEVICE
     if (_loaded["key"] == key and _loaded.get("device") == device
             and _loaded["model"] is not None):
         return _loaded["model"]
@@ -182,7 +182,7 @@ def _get_model_sync(key: str, device: Optional[str] = None):
     torch, _sf, OmniVoice = _import_stack()
 
     if _loaded["model"] is not None:
-        logger.info(f"[omnivoice] Unloading previous model: {_loaded['key']} "
+        logger.info(f"[ai_voice_local] Unloading previous model: {_loaded['key']} "
                     f"({_loaded.get('device')})")
         del _loaded["model"]
         try:
@@ -194,10 +194,10 @@ def _get_model_sync(key: str, device: Optional[str] = None):
         _loaded["device"] = None
 
     dtype = torch.float16 if device.startswith("cuda") else torch.float32
-    logger.info(f"[omnivoice] Loading model '{key}' from {MODEL_PATHS[key]} on {device}")
+    logger.info(f"[ai_voice_local] Loading model '{key}' from {MODEL_PATHS[key]} on {device}")
     t0 = time.time()
     model = OmniVoice.from_pretrained(MODEL_PATHS[key], device_map=device, dtype=dtype)
-    logger.info(f"[omnivoice] Loaded '{key}' in {time.time() - t0:.1f}s")
+    logger.info(f"[ai_voice_local] Loaded '{key}' in {time.time() - t0:.1f}s")
     _loaded["key"] = key
     _loaded["model"] = model
     _loaded["device"] = device
@@ -249,7 +249,7 @@ def _wav_to_mp3(wav_path: Path, mp3_path: Path, bitrate: int = 128,
     subprocess.run(cmd, check=True, capture_output=True)
 
 
-class OmniVoiceProcessor:
+class AiVoiceLocalProcessor:
     """Local TTS engine mirroring VbeeTTSProcessor's chapter/story/merged API."""
 
     def __init__(self, db: Optional[Session] = None):
@@ -277,7 +277,7 @@ class OmniVoiceProcessor:
             kwargs["ref_audio"] = audio_path
             kwargs["ref_text"] = ref_text
         else:
-            raise ValueError(f"unknown OmniVoice mode: {mode}")
+            raise ValueError(f"unknown AI Voice local mode: {mode}")
         return kwargs
 
     def generate_wav(self, text, config: Dict):
@@ -291,7 +291,7 @@ class OmniVoiceProcessor:
             model = _get_model_sync(model_key, device)
             t0 = time.time()
             audios = model.generate(**kwargs)
-            logger.info(f"[omnivoice] generated in {time.time() - t0:.2f}s "
+            logger.info(f"[ai_voice_local] generated in {time.time() - t0:.2f}s "
                         f"(model={model_key}, mode={config.get('mode')}, device={device})")
         return audios
 
@@ -303,7 +303,7 @@ class OmniVoiceProcessor:
         if audio is None or getattr(audio, "size", 0) == 0:
             raise RuntimeError("model returned empty audio")
         speed = float(config.get("speed", 1.0))
-        tmp_wav = paths.TRIM_TEMP_DIR / f"omnivoice_{int(time.time()*1000)}.wav"
+        tmp_wav = paths.TRIM_TEMP_DIR / f"ai_voice_local_{int(time.time()*1000)}.wav"
         tmp_wav.parent.mkdir(parents=True, exist_ok=True)
         try:
             sf.write(str(tmp_wav), audio, SR, subtype="PCM_16")
@@ -337,9 +337,9 @@ class OmniVoiceProcessor:
                         "error": "No merged content found. Please edit content in Grammar step first."}
 
             merged_content = story.merged_content.strip()
-            logger.info(f"[omnivoice] merged story {story_id}, {len(merged_content)} chars")
+            logger.info(f"[ai_voice_local] merged story {story_id}, {len(merged_content)} chars")
             if progress_callback:
-                progress_callback(f"OmniVoice generating {len(merged_content)} chars...")
+                progress_callback(f"AI Voice local generating {len(merged_content)} chars...")
 
             story_folder = (story.title or f"story_{story_id}").replace(' ', '_').replace('/', '_')
             output_dir = Path(settings.STORAGE_PATH) / "audio" / story_folder
@@ -362,24 +362,24 @@ class OmniVoiceProcessor:
                 merged_audio.file_size = file_size
                 merged_audio.duration = duration
                 merged_audio.format = "mp3"
-                merged_audio.engine = "omnivoice"
+                merged_audio.engine = "ai_voice_local"
             else:
                 merged_audio = models.MergedAudio(
                     story_id=story_id, file_path=final_path,
                     file_size=file_size, duration=duration, format="mp3",
-                    engine="omnivoice",
+                    engine="ai_voice_local",
                 )
                 db.add(merged_audio)
             db.commit()
 
-            logger.info(f"[omnivoice] merged done: {final_path} ({duration:.1f}s)")
+            logger.info(f"[ai_voice_local] merged done: {final_path} ({duration:.1f}s)")
             return {
                 "success": True, "story_id": story_id, "file_path": final_path,
                 "file_size": file_size, "duration": duration,
                 "char_count": len(merged_content),
             }
         except Exception as e:
-            logger.error(f"[omnivoice] merged failed for {story_id}: {e}")
+            logger.error(f"[ai_voice_local] merged failed for {story_id}: {e}")
             return {"success": False, "error": str(e)}
 
     async def process_chapter(
@@ -435,7 +435,7 @@ class OmniVoiceProcessor:
             return {"success": True, "chapter_number": chapter.chapter_number,
                     "audio_file": str(output_path)}
         except Exception as e:
-            logger.error(f"[omnivoice] chapter {chapter_id} failed: {e}")
+            logger.error(f"[ai_voice_local] chapter {chapter_id} failed: {e}")
             if audio_record:
                 audio_record.status = "failed"
                 audio_record.error_message = str(e)
@@ -483,7 +483,7 @@ class OmniVoiceProcessor:
             return {"success": True, "total_chapters": len(chapters),
                     "successful": successful, "failed": failed, "results": results}
         except Exception as e:
-            logger.error(f"[omnivoice] story {story_id} failed: {e}")
+            logger.error(f"[ai_voice_local] story {story_id} failed: {e}")
             task = db.query(models.Task).filter(models.Task.id == task_id).first()
             if task:
                 task.status = "failed"

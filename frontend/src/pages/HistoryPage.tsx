@@ -12,8 +12,8 @@ import {
 
 const baseName = (p: string) => p.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p
 
-// OmniVoice picks its voice by mode, not a voice_code; label it for humans.
-const omniModeLabel = (mode: string | null | undefined) =>
+// AI Voice local picks its voice by mode, not a voice_code; label it for humans.
+const localModeLabel = (mode: string | null | undefined) =>
   mode === 'design' ? 'thiết kế' : mode === 'clone' ? 'clone' : 'mặc định'
 
 export default function HistoryPage() {
@@ -426,8 +426,8 @@ function ConfigChips({ config: c }: { config: HistBatchConfig }) {
   return (
     <div className="flex flex-wrap gap-2 px-4 py-3 pl-14 bg-surface-2/30 border-b">
       {chip('Engine', (c.engine || 'vbee').toUpperCase())}
-      {c.engine === 'omnivoice'
-        ? chip('Giọng', c.clone_preset_name || omniModeLabel(c.mode))
+      {c.engine === 'ai_voice_local'
+        ? chip('Giọng', c.clone_preset_name || localModeLabel(c.mode))
         : c.voice_code && chip('Giọng', c.voice_code)}
       {c.speed != null && chip('Tốc độ', `${c.speed}×`)}
       {c.resolution && chip('Video', c.resolution)}

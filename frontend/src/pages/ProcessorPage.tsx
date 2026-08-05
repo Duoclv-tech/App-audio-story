@@ -161,12 +161,12 @@ interface AudioRecord {
 // and then persist — the previously-open story's config.
 const DEFAULT_DB_VOICE = 'hn_female_ngochuyen_full_48k-fhg'
 const DEFAULT_TTS_CONFIG = {
-  engine: 'vbee' as 'vbee' | 'omnivoice',
+  engine: 'vbee' as 'vbee' | 'ai_voice_local',
   voice_code: DEFAULT_DB_VOICE,
   speed: 1.0,
   bitrate: 128,
   audio_type: 'mp3',
-  // OmniVoice-only
+  // AI Voice local-only
   mode: 'clone' as 'auto' | 'clone',
   model_key: 'base' as 'base',
   preset_id: '',
@@ -214,11 +214,11 @@ export default function ProcessorPage() {
     chapter: null
   })
   const [ttsConfig, setTtsConfig] = useState({ ...DEFAULT_TTS_CONFIG })
-  // OmniVoice engine state (availability + clone presets)
-  const [omniStatus, setOmniStatus] = useState<any>(null)
-  const [omniPresets, setOmniPresets] = useState<any[]>([])
-  const [omniDownloading, setOmniDownloading] = useState(false)
-  const [showOmniAdvanced, setShowOmniAdvanced] = useState(false)
+  // AI Voice local engine state (availability + clone presets)
+  const [localVoiceStatus, setLocalVoiceStatus] = useState<any>(null)
+  const [localVoicePresets, setLocalVoicePresets] = useState<any[]>([])
+  const [localVoiceDownloading, setLocalVoiceDownloading] = useState(false)
+  const [showLocalVoiceAdvanced, setShowLocalVoiceAdvanced] = useState(false)
   const [newPreset, setNewPreset] = useState<{ name: string; ref_text: string; file: File | null }>({
     name: '', ref_text: '', file: null,
   })
@@ -276,7 +276,7 @@ export default function ProcessorPage() {
     error: null as string | null
   })
 
-  // Per-segment TTS for Step 6 (OmniVoice only)
+  // Per-segment TTS for Step 6 (AI Voice local only)
   type TtsSegment = {
     id: string
     seg_index: number
@@ -1229,18 +1229,18 @@ export default function ProcessorPage() {
   // Fetch available voices on mount
   useEffect(() => {
     fetchVoices()
-    fetchOmniStatus()
-    fetchOmniPresets()
+    fetchLocalVoiceStatus()
+    fetchLocalVoicePresets()
   }, [])
 
-  // While an OmniVoice model download is in progress, poll status every 2s so
+  // While an AI Voice local model download is in progress, poll status every 2s so
   // the progress bar updates; auto-stops when state leaves "downloading".
   useEffect(() => {
-    const state = omniStatus?.downloads?.base?.state
+    const state = localVoiceStatus?.downloads?.base?.state
     if (state !== 'downloading') return
-    const id = setInterval(fetchOmniStatus, 2000)
+    const id = setInterval(fetchLocalVoiceStatus, 2000)
     return () => clearInterval(id)
-  }, [omniStatus?.downloads?.base?.state])
+  }, [localVoiceStatus?.downloads?.base?.state])
 
   const loadStory = async (id: string) => {
     try {
@@ -1278,7 +1278,7 @@ export default function ProcessorPage() {
 
       // Fallback for stories saved before per-story config existed: infer the
       // engine/settings from the config stored on any segment already generated,
-      // so an OmniVoice project doesn't wrongly show the VBEE one-shot UI.
+      // so an AI Voice local project doesn't wrongly show the VBEE one-shot UI.
       if (!ttsRestored) {
         try {
           const segResp = await axios.get(`/api/v1/tts/segments/${story.id}`)
@@ -1303,7 +1303,7 @@ export default function ProcessorPage() {
               language: segCfg.language ?? prev.language,
             }))
           } else if (segs.length > 0) {
-            setTtsConfig(prev => ({ ...prev, engine: 'omnivoice' }))
+            setTtsConfig(prev => ({ ...prev, engine: 'ai_voice_local' }))
           }
         } catch {}
       }
@@ -1403,45 +1403,45 @@ export default function ProcessorPage() {
     setTtsConfig((c) => ({ ...c, voice_code: dbVoiceCode }))
   }
 
-  // ---- OmniVoice (local TTS) ----
-  const fetchOmniStatus = async () => {
+  // ---- AI Voice local (local TTS) ----
+  const fetchLocalVoiceStatus = async () => {
     try {
-      const res = await axios.get('/api/v1/tts/omnivoice/status')
-      setOmniStatus(res.data)
+      const res = await axios.get('/api/v1/tts/ai-voice-local/status')
+      setLocalVoiceStatus(res.data)
     } catch (error) {
-      console.error('Error fetching OmniVoice status:', error)
-      setOmniStatus(null)
+      console.error('Error fetching AI Voice local status:', error)
+      setLocalVoiceStatus(null)
     }
   }
 
-  const fetchOmniPresets = async () => {
+  const fetchLocalVoicePresets = async () => {
     try {
-      const res = await axios.get('/api/v1/tts/omnivoice/presets')
-      setOmniPresets(res.data.presets || [])
+      const res = await axios.get('/api/v1/tts/ai-voice-local/presets')
+      setLocalVoicePresets(res.data.presets || [])
     } catch (error) {
-      console.error('Error fetching OmniVoice presets:', error)
+      console.error('Error fetching AI Voice local presets:', error)
     }
   }
 
-  const handleDownloadOmniModel = async (modelKey: string) => {
-    setOmniDownloading(true)
+  const handleDownloadLocalVoiceModel = async (modelKey: string) => {
+    setLocalVoiceDownloading(true)
     try {
-      await axios.post(`/api/v1/tts/omnivoice/download?model_key=${modelKey}`)
-      showToast('Bắt đầu tải model OmniVoice…', 'info')
-      await fetchOmniStatus()  // the polling effect below tracks progress from here
+      await axios.post(`/api/v1/tts/ai-voice-local/download?model_key=${modelKey}`)
+      showToast('Bắt đầu tải model AI Voice local…', 'info')
+      await fetchLocalVoiceStatus()  // the polling effect below tracks progress from here
     } catch (error: any) {
       showToast(errMessage(error, 'Lỗi khi tải model'), 'error')
     } finally {
-      setOmniDownloading(false)
+      setLocalVoiceDownloading(false)
     }
   }
 
-  // Persist the OmniVoice device choice (CPU vs GPU) and refresh status so the
+  // Persist the AI Voice local device choice (CPU vs GPU) and refresh status so the
   // availability/reason banners reflect it immediately.
-  const handleSetOmniCpu = async (useCpu: boolean) => {
+  const handleSetLocalVoiceCpu = async (useCpu: boolean) => {
     try {
-      await axios.put('/api/v1/settings/', { OMNIVOICE_USE_CPU: useCpu })
-      await fetchOmniStatus()
+      await axios.put('/api/v1/settings/', { AIVOICE_LOCAL_USE_CPU: useCpu })
+      await fetchLocalVoiceStatus()
     } catch (error: any) {
       showToast(errMessage(error, 'Lỗi khi đổi thiết bị chạy'), 'error')
     }
@@ -1457,10 +1457,10 @@ export default function ProcessorPage() {
       fd.append('name', newPreset.name)
       fd.append('ref_text', newPreset.ref_text)
       fd.append('ref_audio', newPreset.file)
-      const res = await axios.post('/api/v1/tts/omnivoice/presets', fd)
+      const res = await axios.post('/api/v1/tts/ai-voice-local/presets', fd)
       showToast('Đã tạo giọng clone', 'success')
       setNewPreset({ name: '', ref_text: '', file: null })
-      await fetchOmniPresets()
+      await fetchLocalVoicePresets()
       setTtsConfig((c) => ({ ...c, preset_id: res.data.preset?.id || c.preset_id }))
     } catch (error: any) {
       showToast(errMessage(error, 'Lỗi khi tạo giọng clone'), 'error')
@@ -1469,8 +1469,8 @@ export default function ProcessorPage() {
 
   const handleDeletePreset = async (presetId: string) => {
     try {
-      await axios.delete(`/api/v1/tts/omnivoice/presets/${presetId}`)
-      await fetchOmniPresets()
+      await axios.delete(`/api/v1/tts/ai-voice-local/presets/${presetId}`)
+      await fetchLocalVoicePresets()
       setTtsConfig((c) => (c.preset_id === presetId ? { ...c, preset_id: '' } : c))
     } catch (error: any) {
       showToast(errMessage(error, 'Lỗi khi xóa giọng'), 'error')
@@ -1850,7 +1850,7 @@ export default function ProcessorPage() {
   // project restores the exact engine + voice/settings, independent of the
   // browser cache or machine. Without this, ttsConfig resets to the vbee
   // default on reload and step 5 (Đọc TTS) shows the wrong engine's UI even
-  // when the story was processed with OmniVoice. Debounced so the instruct
+  // when the story was processed with AI Voice local. Debounced so the instruct
   // textarea doesn't fire a PUT on every keystroke; only writes once a story
   // exists so switching projects never clobbers another story's config.
   useEffect(() => {
@@ -2288,10 +2288,10 @@ export default function ProcessorPage() {
       // Move to Step 6 first
       await moveToStep(6)
 
-      // OmniVoice → per-segment workspace (split, run per line, merge). Don't
+      // AI Voice local → per-segment workspace (split, run per line, merge). Don't
       // auto-generate; just land on the step. Segments are (re)loaded/split by
       // the step's own effect. VBEE keeps the classic one-shot merged flow.
-      if (ttsConfig.engine === 'omnivoice') {
+      if (ttsConfig.engine === 'ai_voice_local') {
         return
       }
 
@@ -2407,7 +2407,7 @@ export default function ProcessorPage() {
     }, 10000)
   }
 
-  // ===== Per-segment TTS (OmniVoice, Step 6) =====
+  // ===== Per-segment TTS (AI Voice local, Step 6) =====
   const segStats = useMemo(() => {
     const total = segments.length
     const by = { pending: 0, processing: 0, done: 0, error: 0 }
@@ -2674,7 +2674,7 @@ export default function ProcessorPage() {
         loadMergedContent()
       }
 
-      if (ttsConfig.engine === 'omnivoice') {
+      if (ttsConfig.engine === 'ai_voice_local') {
         // Per-segment flow: load existing segments; auto-split on first arrival.
         fetchSegments({ silent: true }).then((data) => {
           if (!data) return
@@ -3965,11 +3965,11 @@ export default function ProcessorPage() {
               <span className="step-badge">BƯỚC 4/7</span>
             </div>
             <div className="space-y-4">
-              {/* Engine tabs: VBEE (cloud) vs OmniVoice (local) */}
+              {/* Engine tabs: VBEE (cloud) vs AI Voice local (local) */}
               <div className="flex gap-1 p-1 rounded-lg bg-surface-2 border border-token w-fit">
                 {([
                   { key: 'vbee', label: 'VBEE (cloud)' },
-                  { key: 'omnivoice', label: 'OmniVoice (local, clone giọng)' },
+                  { key: 'ai_voice_local', label: 'AI Voice local (clone giọng)' },
                 ] as const).map((t) => (
                   <button
                     key={t.key}
@@ -4081,13 +4081,13 @@ export default function ProcessorPage() {
                 </div>
               )}
 
-              {/* ---------- OmniVoice tab ---------- */}
-              {ttsConfig.engine === 'omnivoice' && (
+              {/* ---------- AI Voice local tab ---------- */}
+              {ttsConfig.engine === 'ai_voice_local' && (
                 <div className="space-y-4">
                   {/* Device (GPU/CPU) selector — hidden in happy path (folded into the compact chip below) */}
-                  {omniStatus?.availability && (() => {
-                    const av = omniStatus.availability
-                    const dl = omniStatus.downloads?.base
+                  {localVoiceStatus?.availability && (() => {
+                    const av = localVoiceStatus.availability
+                    const dl = localVoiceStatus.downloads?.base
                     // Happy path (model ready & not downloading) → collapse into the compact chip below
                     if (av?.ready && dl?.state !== 'downloading') return null
                     const noGpu = av.deps_installed && !av.gpu_available
@@ -4104,7 +4104,7 @@ export default function ProcessorPage() {
                             className="mt-0.5 h-4 w-4"
                             checked={!!av.cpu_mode}
                             disabled={noGpu}
-                            onChange={(e) => handleSetOmniCpu(e.target.checked)}
+                            onChange={(e) => handleSetLocalVoiceCpu(e.target.checked)}
                           />
                           <span>
                             <span className="font-medium">Chạy trên CPU thay vì GPU</span>
@@ -4118,9 +4118,9 @@ export default function ProcessorPage() {
                   })()}
 
                   {/* Model download status + progress */}
-                  {omniStatus && (() => {
-                    const dl = omniStatus.downloads?.base
-                    const av = omniStatus.availability
+                  {localVoiceStatus && (() => {
+                    const dl = localVoiceStatus.downloads?.base
+                    const av = localVoiceStatus.availability
                     const ready = av?.ready
                     const state = dl?.state
                     const mb = (b?: number) => ((b || 0) / 1048576).toFixed(0)
@@ -4139,21 +4139,21 @@ export default function ProcessorPage() {
                             </span>
                             <button
                               type="button"
-                              onClick={() => setShowOmniAdvanced((v) => !v)}
+                              onClick={() => setShowLocalVoiceAdvanced((v) => !v)}
                               className="shrink-0 flex items-center gap-1 text-xs text-dim hover:text-primary-600"
                             >
                               ⚙ Tuỳ chọn
-                              <span className={`transition-transform ${showOmniAdvanced ? 'rotate-180' : ''}`}>▾</span>
+                              <span className={`transition-transform ${showLocalVoiceAdvanced ? 'rotate-180' : ''}`}>▾</span>
                             </button>
                           </div>
-                          {showOmniAdvanced && av && (
+                          {showLocalVoiceAdvanced && av && (
                             <label className={`flex items-start gap-2 text-sm px-3 pb-3 pt-1 border-t border-token ${noGpu ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}>
                               <input
                                 type="checkbox"
                                 className="mt-0.5 h-4 w-4"
                                 checked={!!av.cpu_mode}
                                 disabled={noGpu}
-                                onChange={(e) => handleSetOmniCpu(e.target.checked)}
+                                onChange={(e) => handleSetLocalVoiceCpu(e.target.checked)}
                               />
                               <span>
                                 <span className="font-medium">Chạy trên CPU thay vì GPU</span>
@@ -4173,7 +4173,7 @@ export default function ProcessorPage() {
                           <div className="flex items-center justify-between mb-2">
                             <span className="font-medium flex items-center gap-2">
                               <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-600"></span>
-                              Đang tải model OmniVoice…
+                              Đang tải model AI Voice local…
                             </span>
                             <span className="text-dim tabular-nums">
                               {pct != null ? `${pct}% · ` : ''}{mb(dl?.downloaded_bytes)}
@@ -4198,7 +4198,7 @@ export default function ProcessorPage() {
                           <div className="font-medium mb-1 text-red-600 dark:text-red-400">Tải model thất bại</div>
                           <div className="text-dim mb-2 break-words">{dl?.error}</div>
                           <button
-                            onClick={() => handleDownloadOmniModel('base')}
+                            onClick={() => handleDownloadLocalVoiceModel('base')}
                             className="px-3 py-1.5 rounded-md bg-primary-500 text-white text-sm hover:bg-primary-600"
                           >Thử lại</button>
                         </div>
@@ -4207,14 +4207,14 @@ export default function ProcessorPage() {
                     // Not downloaded yet
                     return (
                       <div className="rounded-lg p-3 text-sm bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30">
-                        <div className="font-medium mb-1">Chưa có model OmniVoice</div>
-                        <div className="text-dim mb-2">Cần tải model về máy (~1–2GB) để dùng OmniVoice.</div>
+                        <div className="font-medium mb-1">Chưa có model AI Voice local</div>
+                        <div className="text-dim mb-2">Cần tải model về máy (~1–2GB) để dùng AI Voice local.</div>
                         <button
-                          onClick={() => handleDownloadOmniModel('base')}
-                          disabled={omniDownloading}
+                          onClick={() => handleDownloadLocalVoiceModel('base')}
+                          disabled={localVoiceDownloading}
                           className="px-3 py-1.5 rounded-md bg-primary-500 text-white text-sm hover:bg-primary-600 disabled:bg-gray-400"
                         >
-                          {omniDownloading ? 'Đang bắt đầu…' : 'Tải model về'}
+                          {localVoiceDownloading ? 'Đang bắt đầu…' : 'Tải model về'}
                         </button>
                       </div>
                     )
@@ -4255,7 +4255,7 @@ export default function ProcessorPage() {
                           {ttsConfig.preset_id && (
                             <button
                               onClick={() => {
-                                const preset = omniPresets.find((p) => p.id === ttsConfig.preset_id)
+                                const preset = localVoicePresets.find((p) => p.id === ttsConfig.preset_id)
                                 setConfirmDialog({
                                   isOpen: true,
                                   title: '🗑️ Xóa giọng clone',
@@ -4278,9 +4278,9 @@ export default function ProcessorPage() {
                           disabled={loading}
                         >
                           <option value="">
-                            {omniPresets.length ? '— Chọn giọng —' : '— Chưa có giọng nào, tạo bên dưới —'}
+                            {localVoicePresets.length ? '— Chọn giọng —' : '— Chưa có giọng nào, tạo bên dưới —'}
                           </option>
-                          {omniPresets.map((p) => (
+                          {localVoicePresets.map((p) => (
                             <option key={p.id} value={p.id}>{p.name}</option>
                           ))}
                         </select>
@@ -4396,9 +4396,9 @@ export default function ProcessorPage() {
               {error && (
                 <div className="text-red-600 dark:text-red-400 text-sm">{error}</div>
               )}
-              {/* Hint why the Start button is locked (OmniVoice needs a valid voice/config) */}
+              {/* Hint why the Start button is locked (AI Voice local needs a valid voice/config) */}
               {(() => {
-                if (ttsConfig.engine !== 'omnivoice' || !omniStatus?.availability?.ready) return null
+                if (ttsConfig.engine !== 'ai_voice_local' || !localVoiceStatus?.availability?.ready) return null
                 if (ttsConfig.mode === 'clone' && !ttsConfig.preset_id)
                   return <div className="text-amber-600 dark:text-amber-400 text-sm">Hãy chọn một giọng đã clone (hoặc tạo giọng mới) trước khi bắt đầu.</div>
                 return null
@@ -4407,8 +4407,8 @@ export default function ProcessorPage() {
                 onClick={handleStartTTS}
                 disabled={
                   loading ||
-                  (ttsConfig.engine === 'omnivoice' && (
-                    !omniStatus?.availability?.ready ||
+                  (ttsConfig.engine === 'ai_voice_local' && (
+                    !localVoiceStatus?.availability?.ready ||
                     (ttsConfig.mode === 'clone' && !ttsConfig.preset_id)
                   ))
                 }
@@ -4416,7 +4416,7 @@ export default function ProcessorPage() {
               >
                 {loading
                   ? 'Đang chuyển...'
-                  : ttsConfig.engine === 'omnivoice'
+                  : ttsConfig.engine === 'ai_voice_local'
                     ? 'Tiếp tục → Đọc TTS'
                     : 'Start TTS Processing'}
               </button>
@@ -4426,7 +4426,7 @@ export default function ProcessorPage() {
         )
 
       case 6:
-        if (ttsConfig.engine === 'omnivoice') {
+        if (ttsConfig.engine === 'ai_voice_local') {
           const total = segStats.total
           const progressed = segStats.done + segStats.error
           const pct = total ? Math.round((progressed / total) * 100) : 0
@@ -4462,9 +4462,9 @@ export default function ProcessorPage() {
 
               {/* Config summary */}
               <div className="flex flex-wrap gap-2 text-xs">
-                <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400 border border-primary-200 dark:border-primary-500/30">⚙️ OmniVoice <span className="opacity-60">local</span></span>
+                <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-primary-50 dark:bg-primary-500/10 text-primary-700 dark:text-primary-400 border border-primary-200 dark:border-primary-500/30">⚙️ AI Voice <span className="opacity-60">local</span></span>
                 {ttsConfig.mode === 'clone' && (
-                  <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-surface-2 border border-token text-dim">🎭 Giọng clone: <b className="text-token">{omniPresets.find(p => p.id === ttsConfig.preset_id)?.name || '—'}</b></span>
+                  <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-surface-2 border border-token text-dim">🎭 Giọng clone: <b className="text-token">{localVoicePresets.find(p => p.id === ttsConfig.preset_id)?.name || '—'}</b></span>
                 )}
                 <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-surface-2 border border-token text-dim">🌐 <b className="text-token">{ttsConfig.language === 'Vietnamese' ? 'Tiếng Việt' : ttsConfig.language}</b></span>
                 <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 bg-surface-2 border border-token text-dim">⏩ Speed <b className="text-token">{ttsConfig.speed}×</b></span>

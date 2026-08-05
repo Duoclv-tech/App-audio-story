@@ -114,7 +114,7 @@ async def start_video_processing(
     db: Session = Depends(get_db)
 ):
     """Start video processing as a background task"""
-    # GPU guard: a quick-build batch monopolises the GPU (OmniVoice/NVENC) — don't
+    # GPU guard: a quick-build batch monopolises the GPU (AI Voice local/NVENC) — don't
     # let a wizard render start alongside it and risk an OOM.
     from app.services import gpu_guard
     if gpu_guard.is_busy():

@@ -1,12 +1,12 @@
 """
-Per-segment TTS for OmniVoice.
+Per-segment TTS for AI Voice local.
 
 Splits a story's merged content into short segments (by newline or by
 sentence-ending punctuation), then generates / retries / merges them one at a
 time. State lives in the ``tts_segments`` table so progress survives app
 restarts.
 
-Generation reuses ``OmniVoiceProcessor._generate_to_mp3`` (same clone/design
+Generation reuses ``AiVoiceLocalProcessor._generate_to_mp3`` (same clone/design
 logic, same GPU model lock), so this module only owns splitting, file layout
 and DB bookkeeping.
 """
@@ -74,7 +74,7 @@ def split_text(text: str, mode: str = "newline") -> List[str]:
 
 
 def story_folder_name(story: models.Story) -> str:
-    """Filesystem-safe folder name for a story (mirrors omnivoice_processor)."""
+    """Filesystem-safe folder name for a story (mirrors ai_voice_local_processor)."""
     return (story.title or f"story_{story.id}").replace(' ', '_').replace('/', '_')
 
 
@@ -85,16 +85,16 @@ def story_output_name(story: models.Story) -> str:
     return safe_file_stem(story.title if story.title else story.id, story.id)
 
 
-def _next_omnivoice_seq(folder: Path, stem: str) -> int:
-    """Next sequence number for an OmniVoice product in ``folder``.
+def _next_ai_voice_local_seq(folder: Path, stem: str) -> int:
+    """Next sequence number for an AI Voice local product in ``folder``.
 
-    Scans for existing ``omnivoice_<n>_<stem>.mp3`` files and returns max+1 (1 if
-    none). This gives each merge a distinct, ordered name so re-merges don't
-    overwrite each other and OmniVoice output is told apart from VBEE's.
+    Scans for existing ``ai_voice_local_<n>_<stem>.mp3`` files and returns max+1
+    (1 if none). This gives each merge a distinct, ordered name so re-merges
+    don't overwrite each other and AI Voice local output is told apart from VBEE's.
     """
     if not folder.exists():
         return 1
-    pat = re.compile(rf"^omnivoice_(\d+)_{re.escape(stem)}\.mp3$", re.IGNORECASE)
+    pat = re.compile(rf"^ai_voice_local_(\d+)_{re.escape(stem)}\.mp3$", re.IGNORECASE)
     mx = 0
     for p in folder.iterdir():
         m = pat.match(p.name)
@@ -181,7 +181,7 @@ def source_changed(db: Session, story: models.Story) -> bool:
 
 def synthesize_segment(db: Session, seg: models.TtsSegment) -> Dict:
     """Generate mp3 for one segment. Updates the row in place. Returns result dict."""
-    from app.services.omnivoice_processor import OmniVoiceProcessor
+    from app.services.ai_voice_local_processor import AiVoiceLocalProcessor
 
     story = db.query(models.Story).filter(models.Story.id == seg.story_id).first()
     if not story:
@@ -199,8 +199,8 @@ def synthesize_segment(db: Session, seg: models.TtsSegment) -> Dict:
     try:
         import time as _time
         t0 = _time.time()
-        # Reuse OmniVoice's single-text mp3 generator (handles clone/design + GPU lock).
-        duration = OmniVoiceProcessor(db=db)._generate_to_mp3(
+        # Reuse AI Voice local's single-text mp3 generator (handles clone/design + GPU lock).
+        duration = AiVoiceLocalProcessor(db=db)._generate_to_mp3(
             seg.text, seg.config or {}, out_path
         )
         seg.file_path = str(out_path)
@@ -276,8 +276,8 @@ def merge_segments(db: Session, story: models.Story) -> Dict:
     # Prefix the product with the engine + a running number so it's told apart
     # from any VBEE file and successive re-merges don't clobber each other.
     name = story_output_name(story)
-    seq = _next_omnivoice_seq(get_output_folder(db) / name, name)
-    final_path = deliver_final(str(out_path), db, filename=f"omnivoice_{seq}_{name}.mp3", subfolder=name)
+    seq = _next_ai_voice_local_seq(get_output_folder(db) / name, name)
+    final_path = deliver_final(str(out_path), db, filename=f"ai_voice_local_{seq}_{name}.mp3", subfolder=name)
 
     merged = db.query(models.MergedAudio).filter(
         models.MergedAudio.story_id == story.id
@@ -288,12 +288,12 @@ def merge_segments(db: Session, story: models.Story) -> Dict:
         merged.duration = total_duration
         merged.format = "mp3"
         merged.total_chapters = len(segs)
-        merged.engine = "omnivoice"
+        merged.engine = "ai_voice_local"
     else:
         merged = models.MergedAudio(
             story_id=story.id, file_path=final_path, file_size=file_size,
             duration=total_duration, format="mp3", total_chapters=len(segs),
-            engine="omnivoice",
+            engine="ai_voice_local",
         )
         db.add(merged)
     db.commit()

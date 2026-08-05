@@ -59,9 +59,9 @@ def _config_from_preset(db: Session, preset_id) -> dict | None:
     tts = p.tts_config or {}
     opts = p.options or {}
     engine = tts.get("engine") or "vbee"
-    mode = (tts.get("mode") or "auto") if engine == "omnivoice" else None
+    mode = (tts.get("mode") or "auto") if engine == "ai_voice_local" else None
     clone_preset_name = (clone_preset_store.get_preset_name(tts.get("preset_id"))
-                         if engine == "omnivoice" and mode == "clone" else None)
+                         if engine == "ai_voice_local" and mode == "clone" else None)
     return {
         "preset_name": p.name,
         "engine": engine,

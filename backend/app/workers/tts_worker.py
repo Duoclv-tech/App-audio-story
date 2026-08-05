@@ -14,7 +14,7 @@ from app.config import settings
 
 
 def _engine(config: Optional[Dict]) -> str:
-    """Which TTS engine to use: 'vbee' (default, cloud) or 'omnivoice' (local)."""
+    """Which TTS engine to use: 'vbee' (default, cloud) or 'ai_voice_local' (local)."""
     return ((config or {}).get("engine") or "vbee").lower()
 
 
@@ -55,7 +55,7 @@ def is_story_active(story_id: str) -> bool:
 
 
 def any_story_active() -> bool:
-    """True if any OmniVoice segment generation is running (GPU busy) — used by
+    """True if any AI Voice local segment generation is running (GPU busy) — used by
     the quick-build guard to avoid starting a batch on top of a wizard TTS run."""
     with _active_lock:
         return len(_active_stories) > 0
@@ -83,7 +83,7 @@ def process_segments_task(story_id: str) -> Dict:
 
     Runs in a FastAPI BackgroundTask (own DB session). Each segment's status is
     committed as it finishes so the frontend sees live progress by polling. The
-    OmniVoice GPU model lock already serialises generation, so we process
+    AI Voice local GPU model lock already serialises generation, so we process
     sequentially rather than fanning out.
     """
     from app.services import segment_tts
@@ -240,9 +240,9 @@ async def process_tts_task(
             db.commit()
 
         # Process all chapters via the selected engine
-        if _engine(config) == "omnivoice":
-            from app.services.omnivoice_processor import OmniVoiceProcessor
-            result = await OmniVoiceProcessor(db=db).process_story(
+        if _engine(config) == "ai_voice_local":
+            from app.services.ai_voice_local_processor import AiVoiceLocalProcessor
+            result = await AiVoiceLocalProcessor(db=db).process_story(
                 story_id=story_id, task_id=task_id, db=db, config=config
             )
         else:
@@ -308,9 +308,9 @@ async def process_single_chapter_tts(
         speed = config.get("speed", 1.0)
 
         # Process chapter via the selected engine
-        if _engine(config) == "omnivoice":
-            from app.services.omnivoice_processor import OmniVoiceProcessor
-            result = await OmniVoiceProcessor(db=db).process_chapter(
+        if _engine(config) == "ai_voice_local":
+            from app.services.ai_voice_local_processor import AiVoiceLocalProcessor
+            result = await AiVoiceLocalProcessor(db=db).process_chapter(
                 chapter_id=chapter_id, db=db, config=config
             )
         else:
@@ -376,9 +376,9 @@ async def process_merged_tts_task(
             db.commit()
 
         # Route to the selected engine
-        if _engine(config) == "omnivoice":
-            from app.services.omnivoice_processor import OmniVoiceProcessor
-            result = await OmniVoiceProcessor(db=db).process_merged_content(
+        if _engine(config) == "ai_voice_local":
+            from app.services.ai_voice_local_processor import AiVoiceLocalProcessor
+            result = await AiVoiceLocalProcessor(db=db).process_merged_content(
                 story_id=story_id, db=db, config=config
             )
         else:

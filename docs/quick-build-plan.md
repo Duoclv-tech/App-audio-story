@@ -14,10 +14,10 @@
 > **Bổ sung sau GĐ1–3 (2026-08-02):**
 > - Card 2 thêm ô **Folder clip nền chung** (override cho cả batch; ưu tiên: folder riêng từng dòng > folder chung > preset).
 > - Progress view giống mockup: **% render thật** (đọc `Task.progress` của video task) + thanh bar, size + giờ hoàn tất, số thứ tự, nút **✕ Bỏ** job đang chờ (endpoint `/job/{id}/cancel` → status `skipped`, orchestrator `db.refresh` skip).
-> - **Phase 3.5 Auto-SRT ĐÃ LÀM (ước lượng):** `subtitle_renderer.build_estimated_srt(text, total_duration, out_path)` tách câu→cụm→wrap, phân bổ thời gian theo độ dài ký tự. Dùng cho **cả VBEE lẫn OmniVoice** vì quick-build đi đường `process_merged_content` (1 file, không có timing per-câu). Orchestrator `_make_subtitle` sinh SRT vào `paths.SRT_CACHE_DIR`, đổ vào `subtitle_srt_path` của video config; lỗi phụ đề KHÔNG làm hỏng job. Bật/tắt qua toggle chung + override từng dòng/bulk (`auto_subtitle`). Style phụ đề lấy từ `video_cfg` của preset. **Hạn chế:** canh giờ là ước lượng theo ký tự, không phải timing thật của giọng đọc.
+> - **Phase 3.5 Auto-SRT ĐÃ LÀM (ước lượng):** `subtitle_renderer.build_estimated_srt(text, total_duration, out_path)` tách câu→cụm→wrap, phân bổ thời gian theo độ dài ký tự. Dùng cho **cả VBEE lẫn AI Voice local** vì quick-build đi đường `process_merged_content` (1 file, không có timing per-câu). Orchestrator `_make_subtitle` sinh SRT vào `paths.SRT_CACHE_DIR`, đổ vào `subtitle_srt_path` của video config; lỗi phụ đề KHÔNG làm hỏng job. Bật/tắt qua toggle chung + override từng dòng/bulk (`auto_subtitle`). Style phụ đề lấy từ `video_cfg` của preset. **Hạn chế:** canh giờ là ước lượng theo ký tự, không phải timing thật của giọng đọc.
 >
 > **Code review (workflow high, 23 agent) → đã sửa hết 10 finding:**
-> 1. GPU guard viết lại `try_acquire/release/is_busy` atomic — acquire đồng bộ ở endpoint (hết TOCTOU), release trong `_run_batch finally`. Chặn 2 chiều: wizard render (`video.py`) + wizard OmniVoice TTS (`tts.py start-merged`, `segments/run`) đều check `is_busy()`; batch check `_wizard_gpu_busy` (Task video + omni-tts) + `tts_worker.any_story_active()`.
+> 1. GPU guard viết lại `try_acquire/release/is_busy` atomic — acquire đồng bộ ở endpoint (hết TOCTOU), release trong `_run_batch finally`. Chặn 2 chiều: wizard render (`video.py`) + wizard AI Voice local TTS (`tts.py start-merged`, `segments/run`) đều check `is_busy()`; batch check `_wizard_gpu_busy` (Task video + ai-voice-local-tts) + `tts_worker.any_story_active()`.
 > 2. `recover_interrupted` xử lý cả job `pending` (không còn kẹt "Chờ" vĩnh viễn).
 > 3. Validate `video_folder` sớm (đầu `_run_one_job` + trong `start`) — không phí lượt TTS.
 > 4. `_mark_job_error` defensive (không để job kẹt `running`) + sweep cuối `_run_batch`.
@@ -49,7 +49,7 @@ Thay vì đi hết wizard 8 bước cho từng truyện, người dùng:
 ```
 File .txt → tạo Story + tách chương + merged_content
          → [BỎ spellcheck] [auto-clean nếu bật]
-         → TTS (VBEE hoặc OmniVoice) → gộp audio
+         → TTS (VBEE hoặc AI Voice local) → gộp audio
          → [auto-SRT nếu bật — Phase 3.5]
          → render video (video_cfg + folder clip + banner) → xuất video
          → job tiếp theo
@@ -61,7 +61,7 @@ File .txt → tạo Story + tách chương + merged_content
 | Đọc file → tách chương | `services/chapter_splitter.py`: `read_text_from_file(path)`, `split_chapters(text)` |
 | Lưu chương + merged_content | logic `_persist_imported_chapters` (chapters.py) + join content (stories.py:401-408) |
 | TTS VBEE (1 file) | `services/tts_processor.py`: `VbeeTTSProcessor(db).process_merged_content(story_id, db, voice_code, audio_type, bitrate, speed)` |
-| TTS OmniVoice (1 file) | `services/omnivoice_processor.py`: `OmniVoiceProcessor(db).process_merged_content(story_id, db, config)` |
+| TTS AI Voice local (1 file) | `services/ai_voice_local_processor.py`: `AiVoiceLocalProcessor(db).process_merged_content(story_id, db, config)` |
 | Config TTS flatten | tham chiếu `_build_tts_config` (tts.py) — keys: engine, voice_code, audio_type, bitrate, speed, mode, model_key, preset_id, ref_text, instruct, language |
 | Lấy audio đã gộp | `MergedAudio` mới nhất của story → `.file_path` |
 | Render video | `workers/video_worker.py`: `run_video_task(task_id, story_id, config)` (wrapper sync). Keys config: xem video_worker.py:44-128 |
@@ -70,7 +70,7 @@ File .txt → tạo Story + tách chương + merged_content
 
 **Concurrency:** TTS + video đều nặng GPU → orchestrator chạy **tuần tự 1 job/lần** trong 1 background thread.
 
-> ⚠️ **GPU global lock (bắt buộc — review finding #1):** merged-TTS và render **KHÔNG** lấy lock `_active_stories` (lock đó chỉ cho segment-TTS). Nếu user vừa chạy batch vừa render trong wizard → 2 tiến trình NVENC/OmniVoice đụng GPU → OOM. Cần **1 lock/guard toàn cục**: chặn `POST /quick-build/start` khi đang có video task chạy (và wizard render nên kiểm tra batch đang chạy). Triển khai: 1 `threading.Lock` / flag process-wide dùng chung giữa quick_build và video worker.
+> ⚠️ **GPU global lock (bắt buộc — review finding #1):** merged-TTS và render **KHÔNG** lấy lock `_active_stories` (lock đó chỉ cho segment-TTS). Nếu user vừa chạy batch vừa render trong wizard → 2 tiến trình NVENC/AI Voice local đụng GPU → OOM. Cần **1 lock/guard toàn cục**: chặn `POST /quick-build/start` khi đang có video task chạy (và wizard render nên kiểm tra batch đang chạy). Triển khai: 1 `threading.Lock` / flag process-wide dùng chung giữa quick_build và video worker.
 
 ---
 
@@ -172,7 +172,7 @@ def _run_one_job(db, job):
 ```
 Helpers:
 - `_create_story_from_file(db, job, cfg)`: tạo `Story(title=_nice_title(source_path), url='')`; `read_text_from_file` → `split_chapters` → persist chương; set `story.merged_content` (join); nếu `cfg.options.auto_clean` → `story.merged_content = clean_story_text(...)`.
-- `_run_tts_sync(db, story, tts_cfg)`: `loop=asyncio.new_event_loop()`; route VBEE/OmniVoice `process_merged_content`.
+- `_run_tts_sync(db, story, tts_cfg)`: `loop=asyncio.new_event_loop()`; route VBEE/AI Voice local `process_merged_content`.
 - `_build_video_config(cfg, audio, banner)`: đổ `preset.video_cfg` + `video_source_folder=cfg.video_folder` + `audio_path=audio` + `banner_image=banner` + `bgm_path` + `watermark_image` + stickers → đúng keys `process_video_task` đọc.
 - `_auto_banner(txt_path, cfg)`: banner_mode `by_filename` → tìm `<basename>.{jpg,jpeg,png,webp}` cạnh file; `fixed` → `banner_fixed`; `none` → None.
 - `clean_story_text(text)` (conservative): bỏ dòng chứa url/website/"nguồn:"/"truyện được đăng tại", gộp >2 dòng trống. Không sửa nội dung câu.
@@ -218,7 +218,7 @@ Wrap: `scanFolder`, `startBatch`, `getBatchStatus`, `stopBatch`, `retryJob`, `li
 
 ## Phase 3.5 (tách riêng) — Auto-SRT
 Tự sinh phụ đề burn vào video từ timing TTS.
-- OmniVoice: có `duration` per-segment → dựng SRT theo mốc thời gian cộng dồn.
+- AI Voice local: có `duration` per-segment → dựng SRT theo mốc thời gian cộng dồn.
 - VBEE merged: không có timing per-câu → cần tách câu + ước lượng, hoặc bỏ.
 Mặc định **tắt**; bật qua toggle preset/override.
 
@@ -226,7 +226,7 @@ Mặc định **tắt**; bật qua toggle preset/override.
 
 ## Ước lượng & rủi ro
 - GĐ1 ~½ ngày · GĐ2 ~1–1.5 ngày · GĐ3 ~1 ngày · Phase 3.5 riêng.
-- VBEE cần quota, OmniVoice cần GPU — lỗi từng job đã cô lập, batch không dừng.
+- VBEE cần quota, AI Voice local cần GPU — lỗi từng job đã cô lập, batch không dừng.
 - Text nguồn bẩn = rủi ro chất lượng chính → `auto_clean` conservative + để người dùng tự chịu trách nhiệm file sạch.
 
 ## Thứ tự triển khai
@@ -238,7 +238,7 @@ Mặc định **tắt**; bật qua toggle preset/override.
 ---
 
 ## Review log (đã kiểm chứng với code)
-**Đã verify khớp code thật:** `create_all` không cần migration · `check_same_thread=False` (thread ghi DB OK) · VBEE & OmniVoice `process_merged_content` đọc `merged_content` + tạo `MergedAudio` · `split_chapters` không crash với file không heading · `StoryBase` chỉ cần title+url · `run_video_task` blocking (tuần tự tự nhiên).
+**Đã verify khớp code thật:** `create_all` không cần migration · `check_same_thread=False` (thread ghi DB OK) · VBEE & AI Voice local `process_merged_content` đọc `merged_content` + tạo `MergedAudio` · `split_chapters` không crash với file không heading · `StoryBase` chỉ cần title+url · `run_video_task` blocking (tuần tự tự nhiên).
 
 **5 finding đã vá vào plan:**
 1. [CAO] GPU global lock — chặn batch/wizard render đụng nhau (mục Concurrency).

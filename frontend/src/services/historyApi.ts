@@ -38,8 +38,8 @@ export interface HistBatchConfig {
   preset_name: string | null
   engine: string | null
   voice_code: string | null       // VBEE voice id
-  mode: string | null             // OmniVoice: auto | design | clone
-  clone_preset_name: string | null // OmniVoice clone voice display name
+  mode: string | null             // AI Voice local: auto | design | clone
+  clone_preset_name: string | null // AI Voice local clone voice display name
   speed: number | null
   resolution: string | null
   video_folder: string | null

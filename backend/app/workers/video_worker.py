@@ -29,14 +29,14 @@ async def process_video_task(
     try:
         logger.info(f"Starting video processing task {task_id} for story {story_id}")
 
-        # Free the OmniVoice model from VRAM before the GPU-heavy NVENC render —
+        # Free the AI Voice local model from VRAM before the GPU-heavy NVENC render —
         # otherwise the local TTS weights and FFmpeg's encoder contend for the
-        # same GPU and can OOM. No-op if OmniVoice was never loaded (or no GPU).
+        # same GPU and can OOM. No-op if AI Voice local was never loaded (or no GPU).
         try:
-            from app.services.omnivoice_processor import unload_model
+            from app.services.ai_voice_local_processor import unload_model
             unload_model()
         except Exception as e:
-            logger.warning(f"[video] omnivoice unload skipped: {e}")
+            logger.warning(f"[video] ai_voice_local unload skipped: {e}")
 
         if config is None:
             config = {}

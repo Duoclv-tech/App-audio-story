@@ -1,8 +1,8 @@
 """Process-wide GPU contention guard.
 
-Merged-TTS and video render both hammer the GPU (OmniVoice weights / NVENC).
-Running a quick-build batch at the same time as a wizard video render / OmniVoice
-TTS can OOM the GPU, so we serialise them.
+Merged-TTS and video render both hammer the GPU (AI Voice local weights / NVENC).
+Running a quick-build batch at the same time as a wizard video render / AI Voice
+local TTS can OOM the GPU, so we serialise them.
 
 The quick-build batch ACQUIRES this guard synchronously at request time (before
 the worker thread is spawned — otherwise there is a check-then-act window) and

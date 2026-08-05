@@ -35,7 +35,7 @@ else:
 
 BUNDLED_FONTS_DIR = BUNDLE_DIR / "assets" / "fonts"
 FFMPEG_BIN_DIR = BUNDLE_DIR / "bin"
-# Default OmniVoice clone-voice presets shipped read-only with the app; seeded
+# Default AI Voice local clone-voice presets shipped read-only with the app; seeded
 # into the writable CLONE_PRESETS_DIR on first run (see clone_preset_store).
 DEFAULT_CLONE_PRESETS_DIR = BUNDLE_DIR / "default_clone_presets"
 # Built-in sticker library shipped read-only with the app; seeded into the
@@ -94,12 +94,14 @@ STICKERS_DIR = DATA_DIR / "stickers"
 FONTS_DIR = DATA_DIR / "fonts"
 LOG_DIR = DATA_DIR / "logs"
 
-# OmniVoice local TTS: models are large (several GB) so they are NOT bundled in
+# AI Voice local TTS: models are large (several GB) so they are NOT bundled in
 # the .exe — they get downloaded at install / first run into the writable data
 # dir. Clone presets (reference audio + transcript) also live under DATA_DIR.
+# NOTE: the on-disk folder names below changed from an earlier build, so an
+# existing install re-downloads the model once into the new folder.
 MODELS_DIR = DATA_DIR / "models"
-OMNIVOICE_MODEL_DIR = MODELS_DIR / "khanhtts"        # fine-tune VN+EN
-OMNIVOICE_BASE_DIR = MODELS_DIR / "omnivoice-base"   # base omnilingual
+AIVOICE_LOCAL_MODEL_DIR = MODELS_DIR / "aivoice-local-model"   # fine-tune VN+EN
+AIVOICE_LOCAL_BASE_DIR = MODELS_DIR / "aivoice-local-base"     # base omnilingual
 CLONE_PRESETS_DIR = DATA_DIR / "clone_presets"
 
 DB_PATH = DATA_DIR / "app.db"

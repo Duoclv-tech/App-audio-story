@@ -11,7 +11,7 @@ For each chosen speaker we concatenate their first ``CLIPS_PER_SPEAKER``
 sentence recordings (~8-20s combined, in the same ballpark as the VBEE
 reference length) and encode to mp3. The transcript (``ref_text``) is the
 corpus's own prompts joined together, so audio/text stay in sync exactly like
-the VBEE presets need for OmniVoice clone mode.
+the VBEE presets need for AI Voice local clone mode.
 
 Usage:
     1. Download the corpus once (~1.4GB), not committed to the repo:
@@ -63,7 +63,7 @@ def _sentence_case(s: str) -> str:
     # The corpus prompts are ALL CAPS with no case info at all, so proper nouns
     # (place/person names) mid-sentence end up lowercased same as everything
     # else — there's no reliable way to recover them without an NER pass, and
-    # this text is only alignment reference for OmniVoice, not shown to users.
+    # this text is only alignment reference for AI Voice local, not shown to users.
     s = s.strip().lower()
     return s[:1].upper() + s[1:] if s else s
 

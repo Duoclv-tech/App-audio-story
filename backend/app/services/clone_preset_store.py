@@ -1,10 +1,10 @@
 """
-Clone-voice preset store for the OmniVoice engine.
+Clone-voice preset store for the AI Voice local engine.
 
 A preset is a folder under ``paths.CLONE_PRESETS_DIR`` holding a reference audio
-sample + its transcript + meta.json. Used by OmniVoice "clone" mode so a cloned
-voice can be reused across stories without re-uploading the sample each time.
-Ported from the standalone omivoice-tts server.
+sample + its transcript + meta.json. Used by AI Voice local "clone" mode so a
+cloned voice can be reused across stories without re-uploading the sample each
+time.
 """
 import json
 import re

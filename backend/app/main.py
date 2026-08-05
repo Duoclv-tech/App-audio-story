@@ -134,7 +134,29 @@ async def startup_event():
     from app.startup_recovery import run_startup_recovery
     run_startup_recovery()
 
-    # OmniVoice per-segment TTS: a segment left 'processing' by a closed app has
+    # One-time rename migration: an earlier build stored the local TTS engine as
+    # "omnivoice" and its CPU-mode setting key as "OMNIVOICE_USE_CPU". Rewrite any
+    # rows left from that build so history/filters keep matching the new name.
+    from app.database import SessionLocal
+    from sqlalchemy import text as _sql_text
+    _mdb = SessionLocal()
+    try:
+        _mdb.execute(_sql_text("UPDATE tasks SET engine='ai_voice_local' WHERE engine='omnivoice'"))
+        _mdb.execute(_sql_text("UPDATE merged_audio SET engine='ai_voice_local' WHERE engine='omnivoice'"))
+        _mdb.execute(_sql_text("UPDATE settings SET setting_key='AIVOICE_LOCAL_USE_CPU' WHERE setting_key='OMNIVOICE_USE_CPU'"))
+        # Batch history snapshots carry the engine inside a JSON blob.
+        _mdb.execute(_sql_text(
+            "UPDATE build_batches SET config_snapshot=json_set(config_snapshot,'$.engine','ai_voice_local') "
+            "WHERE json_extract(config_snapshot,'$.engine')='omnivoice'"
+        ))
+        _mdb.commit()
+    except Exception as _mig_e:  # noqa: BLE001
+        logger.warning(f"[startup] engine rename migration skipped: {_mig_e}")
+        _mdb.rollback()
+    finally:
+        _mdb.close()
+
+    # AI Voice local per-segment TTS: a segment left 'processing' by a closed app has
     # no live task generating it — reset it to 'pending' so it can be re-run.
     from app.workers.tts_worker import resume_stuck_segments
     resume_stuck_segments()

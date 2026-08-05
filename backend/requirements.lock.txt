@@ -1,5 +1,5 @@
 # ============================================================================
-# Frozen lock for the GPU build (backend/venv) — includes OmniVoice local TTS.
+# Frozen lock for the GPU build (backend/venv) — includes AI Voice local TTS.
 # Generated with: venv/Scripts/python.exe -m pip freeze
 #
 # Install:  pip install -r requirements.lock.txt

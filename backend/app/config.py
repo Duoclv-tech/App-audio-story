@@ -19,16 +19,19 @@ class Settings(BaseSettings):
     VBEE_API_URL: str = "https://vbee.vn/api/v1"
     VBEE_BEARER_TOKEN: str = ""  # optional .env fallback; primary source is DB
 
-    # OmniVoice local TTS (embedded engine, runs on GPU)
-    # Enabled by default; the engine self-disables at runtime if torch/omnivoice
-    # or a CUDA GPU or the downloaded model is missing (VBEE keeps working).
-    OMNIVOICE_ENABLED: bool = True
-    OMNIVOICE_DEVICE: str = "cuda:0"        # set to "cpu" to force CPU (slow)
-    OMNIVOICE_MODEL_PATH: str = str(paths.OMNIVOICE_MODEL_DIR)
-    OMNIVOICE_BASE_PATH: str = str(paths.OMNIVOICE_BASE_DIR)
-    # HuggingFace repos to pull at install / first run (see model download API)
-    OMNIVOICE_MODEL_REPO: str = "kjanh/KhanhTTS-OmniVoice"
-    OMNIVOICE_BASE_REPO: str = "k2-fsa/OmniVoice"
+    # AI Voice local TTS (embedded engine, runs on GPU)
+    # Enabled by default; the engine self-disables at runtime if torch / the
+    # model runtime, a CUDA GPU, or the downloaded model is missing (VBEE keeps
+    # working).
+    AIVOICE_LOCAL_ENABLED: bool = True
+    AIVOICE_LOCAL_DEVICE: str = "cuda:0"        # set to "cpu" to force CPU (slow)
+    AIVOICE_LOCAL_MODEL_PATH: str = str(paths.AIVOICE_LOCAL_MODEL_DIR)
+    AIVOICE_LOCAL_BASE_PATH: str = str(paths.AIVOICE_LOCAL_BASE_DIR)
+    # Upstream HuggingFace repo ids the weights are fetched from at install /
+    # first run (see model download API). These are real external identifiers —
+    # they must stay as-is or the download breaks.
+    AIVOICE_LOCAL_MODEL_REPO: str = "kjanh/KhanhTTS-OmniVoice"
+    AIVOICE_LOCAL_BASE_REPO: str = "k2-fsa/OmniVoice"
 
     # Gemini AI (for grammar checking) — configured via Settings UI (DB)
     GEMINI_API_KEY: str = ""  # optional .env fallback; primary source is DB

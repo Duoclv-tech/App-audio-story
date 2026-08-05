@@ -121,7 +121,7 @@ if ($running) {
     Start-Sleep -Milliseconds 800
 }
 
-Step "2/4 Đóng gói PyInstaller (bản FULL: VBEE + OmniVoice)"
+Step "2/4 Đóng gói PyInstaller (bản FULL: VBEE + AI Voice local)"
 & (Join-Path $Venv "pyinstaller.exe") (Join-Path $PSScriptRoot "truyenfull.spec") `
     --noconfirm --distpath (Join-Path $Repo "dist") --workpath (Join-Path $Repo "build")
 if ($LASTEXITCODE) { throw "PyInstaller failed" }

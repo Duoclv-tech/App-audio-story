@@ -86,7 +86,7 @@ class MergedAudio(Base):
     duration = Column(Float)
     format = Column(String(10), default='mp3')
     total_chapters = Column(Integer)
-    engine = Column(String(20))  # 'vbee' | 'omnivoice' — which TTS engine produced this file
+    engine = Column(String(20))  # 'vbee' | 'ai_voice_local' — which TTS engine produced this file
     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
 
     # Relationships
@@ -98,7 +98,7 @@ class Task(Base):
     id = Column(String(36), primary_key=True, default=generate_uuid)
     story_id = Column(String(36), ForeignKey('stories.id', ondelete='CASCADE'))
     type = Column(String(50), nullable=False)
-    engine = Column(String(20))  # 'vbee' | 'omnivoice' — which TTS engine this task belongs to
+    engine = Column(String(20))  # 'vbee' | 'ai_voice_local' — which TTS engine this task belongs to
     status = Column(String(50), default='queued')
     progress = Column(Integer, default=0)
     total_items = Column(Integer)
@@ -113,7 +113,7 @@ class Task(Base):
     story = relationship("Story", back_populates="tasks")
 
 class TtsSegment(Base):
-    """One sentence/line of a story queued for OmniVoice TTS.
+    """One sentence/line of a story queued for AI Voice local TTS.
 
     Splitting the merged story into segments lets each line be generated,
     inspected, retried and re-listened to independently, then concatenated
@@ -279,7 +279,7 @@ class BuildBatch(Base):
     # settings used even after the source preset is later edited or deleted.
     # {preset_name, engine, voice_code, mode, clone_preset_name, speed,
     #  resolution, video_folder, has_bgm, skip_spellcheck, auto_clean,
-    #  auto_subtitle}  (mode/clone_preset_name are OmniVoice-only)
+    #  auto_subtitle}  (mode/clone_preset_name are AI Voice local-only)
     config_snapshot = Column(JSON, nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())

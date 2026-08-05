@@ -32,7 +32,7 @@ const TOTAL_STEPS = 8 // WORKFLOW_STEPS length in ProcessorPage (step 2 "Tải" 
 const FLOW = [
   { icon: FileText, title: 'Nhập nội dung', desc: 'Dán văn bản, tải file .txt hoặc chọn cả thư mục truyện.' },
   { icon: PenLine, title: 'Biên tập & kiểm tra', desc: 'Tự tách chương, chỉnh sửa trực tiếp, kiểm duyệt từ ngữ.' },
-  { icon: Mic, title: 'Chuyển giọng đọc', desc: 'TTS từng câu (VBEE / OmniVoice), retry riêng rồi ghép 1 file.' },
+  { icon: Mic, title: 'Chuyển giọng đọc', desc: 'TTS từng câu (VBEE / AI Voice local), retry riêng rồi ghép 1 file.' },
   { icon: Video, title: 'Dựng video', desc: 'Ghép audio với hình nền, visualizer sóng nhạc, xuất video.' },
 ]
 

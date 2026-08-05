@@ -26,6 +26,9 @@ storage/*/
 *.log
 logs/
 
+# Linux ffmpeg/ffprobe fetched at build time by the Ubuntu CI (never commit)
+bin_linux/
+
 # Database
 *.db
 *.sqlite

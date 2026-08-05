@@ -1,0 +1,110 @@
+name: Build Ubuntu (VBEE-only)
+
+# Builds the lightweight Linux desktop app (cloud VBEE TTS only — no OmniVoice/
+# CUDA). Runs on manual dispatch or when a v* tag is pushed. Produces a
+# self-contained onedir tarball uploaded as a workflow artifact (and attached to
+# the GitHub Release when triggered by a tag).
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write   # needed to attach assets to a Release on tag builds
+
+jobs:
+  build-ubuntu:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # --- Frontend --------------------------------------------------------
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      # --- System libs for pywebview (GTK/WebKit) + PyGObject build --------
+      - name: Install GTK/WebKit + build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgirepository1.0-dev libcairo2-dev pkg-config gobject-introspection \
+            gir1.2-gtk-3.0 gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0 \
+            xz-utils
+
+      # --- Python ----------------------------------------------------------
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python deps
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip wheel
+          pip install -r requirements.txt
+          # GTK backend for pywebview on Linux (pulls PyGObject; needs the apt
+          # -dev libs installed above to build its wheel).
+          pip install "pywebview[gtk]"
+          pip install pyinstaller==6.11.1
+
+      # --- Bundle a static Linux ffmpeg/ffprobe ---------------------------
+      - name: Fetch static ffmpeg
+        working-directory: backend
+        run: |
+          mkdir -p bin_linux
+          curl -L -o ffmpeg.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+          tar -xf ffmpeg.tar.xz
+          d=$(find . -maxdepth 1 -type d -name 'ffmpeg-*-amd64-static' | head -n1)
+          cp "$d/ffmpeg"  bin_linux/ffmpeg
+          cp "$d/ffprobe" bin_linux/ffprobe
+          chmod +x bin_linux/ffmpeg bin_linux/ffprobe
+          rm -rf "$d" ffmpeg.tar.xz
+          ./bin_linux/ffmpeg -version | head -n1
+
+      # --- PyInstaller -----------------------------------------------------
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller packaging/truyenfull_linux.spec --noconfirm \
+            --distpath dist --workpath build
+
+      # --- Headless self-test ---------------------------------------------
+      # --selftest starts the backend and checks endpoints WITHOUT opening the
+      # GTK window, so no X display is needed.
+      - name: Self-test
+        run: |
+          ./dist/TruyenFullProcessor/TruyenFullProcessor --selftest
+          echo "selftest exit: $?"
+
+      # --- Package ---------------------------------------------------------
+      - name: Package tarball
+        run: |
+          cd dist
+          tar -czf TruyenFullProcessor-linux-x86_64.tar.gz TruyenFullProcessor
+          ls -lh TruyenFullProcessor-linux-x86_64.tar.gz
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TruyenFullProcessor-linux-x86_64
+          path: dist/TruyenFullProcessor-linux-x86_64.tar.gz
+          retention-days: 14
+
+      - name: Attach to Release (tag builds only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/TruyenFullProcessor-linux-x86_64.tar.gz

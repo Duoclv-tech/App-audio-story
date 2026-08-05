@@ -62,8 +62,17 @@ else:
 
 # --- Writable per-user data ------------------------------------------------
 if is_frozen():
-    _local = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
-    DATA_DIR = Path(_local) / APP_NAME
+    # Per-OS user data location so a frozen build writes to the platform-native
+    # spot: %LOCALAPPDATA% on Windows, ~/.local/share (XDG) on Linux,
+    # ~/Library/Application Support on macOS.
+    if sys.platform == "win32":
+        _local = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+        DATA_DIR = Path(_local) / APP_NAME
+    elif sys.platform == "darwin":
+        DATA_DIR = Path.home() / "Library" / "Application Support" / APP_NAME
+    else:  # linux / other posix
+        _xdg = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+        DATA_DIR = Path(_xdg) / APP_NAME
 else:
     DATA_DIR = Path(__file__).resolve().parent.parent  # backend/
 
@@ -141,6 +150,18 @@ def setup_ffmpeg_path() -> None:
     """
     if FFMPEG_BIN_DIR.is_dir():
         os.environ["PATH"] = str(FFMPEG_BIN_DIR) + os.pathsep + os.environ.get("PATH", "")
+        # On POSIX the bundled ffmpeg/ffprobe ship as PyInstaller ``datas`` which
+        # do NOT preserve the executable bit -> restore it so subprocess can run
+        # them. No-op on Windows (.exe needs no +x).
+        if sys.platform != "win32":
+            import stat
+            for name in ("ffmpeg", "ffprobe"):
+                p = FFMPEG_BIN_DIR / name
+                if p.exists():
+                    try:
+                        p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+                    except OSError:
+                        pass
 
 
 def hide_subprocess_windows() -> None:

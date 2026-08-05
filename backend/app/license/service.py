@@ -48,14 +48,19 @@ def get_device_id() -> str:
 def is_activated() -> bool:
     """Fast check used by the request gate. Offline verify of the stored token.
 
-    An online-only activation (server had no signing key -> token was null) is
-    treated as activated too; see activate().
+    An online-only record (server had no signing key -> token was null) is
+    honored ONLY in dev; a packaged (.exe) build rejects it and requires a real
+    signed token. See activate().
     """
     record = store.load()
     if not record:
         return False
     if record.get("online_only"):
-        return True
+        # Online-only records carry no signed token, so there is nothing to
+        # verify offline. Refuse to honor them in a packaged (.exe) build — a
+        # real, signed token is mandatory there (see activate()). Kept working
+        # in dev so a keyless mock storefront can still be tested.
+        return not paths.is_frozen()
     token = record.get("token")
     if not token:
         return False
@@ -78,11 +83,15 @@ def get_status() -> dict:
         }
 
     if record.get("online_only"):
+        # No signed token to verify offline. Only trusted outside a packaged
+        # build; in the .exe this record is not enough to unlock.
+        activated = not paths.is_frozen()
         return {
-            "activated": True,
+            "activated": activated,
             "enforced": enforced,
             "device_id": device_id,
             "online_only": True,
+            "reason": None if activated else "online_only_unsupported",
             "product_name": record.get("product_name"),
         }
 
@@ -119,10 +128,19 @@ def activate(license_key: str) -> dict:
     token = result.get("token")
 
     if not token:
-        # Server has no signing key configured -> can't verify offline. Accept
-        # activation as online-only and warn (recommend the server set a key).
+        # Server returned no signed token -> nothing we can verify offline.
+        if paths.is_frozen():
+            # Packaged (.exe): hard-block the online-only fallback. Without a
+            # signed token the license can't be node-locked or re-checked on
+            # later launches, so treat activation as failed.
+            logger.error("Activation returned no license_token; refusing "
+                         "online-only fallback in packaged build.")
+            return {"ok": False, "reason": "server_error",
+                    "message": "Không thể xác thực giấy phép. Vui lòng bật kết nối "
+                               "mạng và thử lại. Nếu vẫn lỗi, hãy liên hệ hỗ trợ."}
+        # Dev only: accept online-only so a keyless mock storefront can be tested.
         logger.warning("Activation succeeded but server returned no license_token "
-                       "(online-only mode). Offline verification is unavailable.")
+                       "(online-only mode, dev only). Offline verification is unavailable.")
         store.save({
             "online_only": True,
             "license_key": license_key,

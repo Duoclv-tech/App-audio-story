@@ -24,12 +24,13 @@ The desktop build runs the FastAPI server on `127.0.0.1:<random port>` and rende
 
 - **Download** chapters from supported hosts, or paste / upload content directly and auto-split into chapters.
 - **Edit & censor** — review chapter text, handle masked/censored/merged words, manage a banned-words list.
-- **AI grammar check** — Google Gemini reviews and improves merged content.
+- **AI grammar check** — reviews and improves merged content. Provider is selectable (`AI_GRAMMAR_PROVIDER`): **OpenAI** (default), **DeepSeek**, or **Google Gemini**.
 - **Text-to-speech, two engines:**
-  - **VBEE** (cloud API) — 14 Vietnamese voices, configured via the Settings UI.
+  - **VBEE** (cloud API) — 25 Vietnamese voices, configured via the Settings UI.
   - **AI Voice local** (local, embedded) — runs on NVIDIA GPU (or CPU, slower); self-disables if torch/CUDA/model is missing so VBEE keeps working.
 - **Merge audio** into a single file per story.
 - **Render video** from audio + background clips with subtitles (auto-detects NVENC GPU encoding, falls back to libx264). Includes a standalone **video trimmer**.
+- **Quick Build** — point at a folder of `.txt`/`.docx` story files and batch-build one video per file through the full pipeline (replaces the old `auto_run.py` CLI).
 - **Export** to documents (`python-docx`).
 - **Crash recovery** — reconciles orphaned tasks and cleans temp files / VRAM on restart.
 - **License activation** — node-locked, offline (Ed25519). Enforced in the packaged `.exe`.
@@ -41,7 +42,7 @@ Install and launch:
 1. Run `packaging/Output/TruyenFullProcessor-Setup.exe` (built with Inno Setup).
 2. Launch **TruyenFull Processor** from the Start menu.
 3. Activate your license on first run (Activation screen).
-4. Open **Settings** and enter your API keys (VBEE / Gemini / OpenAI) — keys are stored in the local SQLite DB, nothing is hardcoded.
+4. Open **Settings** and enter your API keys (VBEE / OpenAI / DeepSeek / Gemini) — keys are stored in the local SQLite DB, nothing is hardcoded.
 
 User data lives in `%LOCALAPPDATA%\TruyenFullProcessor\`: `app.db` (SQLite), `storage/`, `cache/`, `logs/`.
 
@@ -130,7 +131,8 @@ Optional `backend/.env` overrides:
 VBEE_APP_ID=
 VBEE_BEARER_TOKEN=
 GEMINI_API_KEY=
-OPENAI_API_KEY=          # only used by the OpenAI spellcheck step
+OPENAI_API_KEY=          # OpenAI grammar/spellcheck (default provider)
+DEEPSEEK_API_KEY=        # DeepSeek grammar/spellcheck (OpenAI-compatible)
 
 # AI Voice local TTS
 AIVOICE_LOCAL_ENABLED=True
@@ -146,7 +148,9 @@ DEBUG=False
 
 SQLite by default (`app.db`), created and migrated automatically on startup. Tables:
 
-`stories` · `chapters` · `audio_files` · `merged_audio` · `tasks` · `voices` · `censored_words` · `banned_words` · `video_outputs` · `video_presets` · `prompts` · `settings`
+`stories` · `chapters` · `audio_files` · `merged_audio` · `tts_segments` · `tasks` · `voices` · `censored_words` · `banned_words` · `video_outputs` · `video_presets` · `build_presets` · `build_batches` · `build_jobs` · `prompts` · `settings`
+
+(17 tables: `tts_segments` = per-segment AI Voice local TTS; `build_presets`/`build_batches`/`build_jobs` power Quick Build; `video_presets` is legacy and migrated into `build_presets` on startup.)
 
 ## 🎯 Workflow (8-step wizard)
 
@@ -161,7 +165,7 @@ State is tracked in `stories.current_step`; you can go back to any completed ste
 1. **Input** — story URL / title / chapter range, or pasted/uploaded content.
 2. **Download** — fetch chapters into the DB (auto).
 3. **Edit** — review text, handle censored/merged words.
-4. **Grammar** — AI grammar check (Gemini) on merged content.
+4. **Grammar** — AI grammar check (OpenAI / DeepSeek / Gemini) on merged content.
 5. **TTS Config** — pick engine (VBEE / AI Voice local), voice, speed, volume.
 6. **TTS Process** — synthesize audio, retry per chapter.
 7. **Video** — render video from audio + background clips with subtitles.
@@ -171,7 +175,7 @@ State is tracked in `stories.current_step`; you can go back to any completed ste
 
 All routers are mounted under `/api/v1/*`:
 
-`stories` · `chapters` · `download` · `text` · `tts` · `audio` · `video` · `video-presets` · `trim` · `settings` · `banned-words` · `prompts` · `export` · `license`
+`stories` · `chapters` · `download` · `text` · `tts` · `audio` · `video` · `video-presets` · `build-presets` · `quick-build` · `history` · `trim` · `settings` · `banned-words` · `prompts` · `export` · `license`
 
 See interactive docs at http://localhost:8000/docs.
 

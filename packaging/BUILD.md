@@ -9,7 +9,29 @@ Quy trình đóng gói web app thành app Windows cài-là-chạy.
 - FFmpeg static (`ffmpeg.exe`, `ffprobe.exe`) đặt sẵn trong `backend/bin/`
 - [Inno Setup 6](https://jrsoftware.org/isdl.php) (để tạo Setup.exe) — chỉ cần ở bước cuối
 
-## Các bước
+## Cách nhanh nhất: script tự động
+
+`packaging/build.ps1` chạy tuần tự toàn bộ: build frontend → PyInstaller → self-test → tạo Setup.exe.
+
+```powershell
+# Bản phát hành (DB ship kèm CHỈ reference data: từ kiểm duyệt + prompt)
+powershell -ExecutionPolicy Bypass -File packaging/build.ps1
+
+# Bản full-dev (ship TOÀN BỘ data test: app.db đầy đủ + storage audio/video)
+powershell -ExecutionPolicy Bypass -File packaging/build.ps1 -Mode fulldev
+
+# Chỉ build app trong dist/ (bỏ qua bước tạo Setup.exe)
+powershell -ExecutionPolicy Bypass -File packaging/build.ps1 -Fast
+
+# Tạo Setup.exe bằng installer-dev.iss (nén nhanh, cho vòng lặp dev)
+powershell -ExecutionPolicy Bypass -File packaging/build.ps1 -DevInstaller
+```
+
+> Seed DB được tạo bởi `packaging/make_seed_db.py` (build.ps1 gọi tự động): copy DB nguồn (mặc định `%LOCALAPPDATA%\TruyenFullProcessor\app.db`) rồi lược bỏ dữ liệu tùy chế độ (product = giữ reference; fulldev = giữ tất cả).
+
+Nếu muốn làm từng bước thủ công, xem bên dưới.
+
+## Các bước thủ công
 
 ### 1. Build frontend (React → static)
 ```bash
@@ -42,6 +64,32 @@ dist/TruyenFullProcessor/TruyenFullProcessor.exe --selftest
 iscc packaging\installer.iss
 # -> packaging/Output/TruyenFullProcessor-Setup.exe
 ```
+
+## Build bản Linux (VBEE-only)
+
+Có sẵn spec + script riêng cho Linux (mirror `.github/workflows/build-ubuntu.yml`):
+
+```bash
+# Deps hệ thống 1 lần (Ubuntu 22.04/24.04):
+sudo apt-get install -y libgirepository1.0-dev libcairo2-dev pkg-config \
+  gobject-introspection gir1.2-gtk-3.0 gir1.2-webkit2-4.1 libwebkit2gtk-4.1-0
+
+# Build (dùng packaging/truyenfull_linux.spec)
+./packaging/build-linux.sh [--skip-frontend]
+# -> dist/TruyenFullProcessor/TruyenFullProcessor
+# -> dist/TruyenFullProcessor-linux-x86_64.tar.gz
+```
+
+Bản Linux là **VBEE-only** (không nhúng AI Voice local).
+
+## Các file trong `packaging/`
+- `truyenfull.spec` — PyInstaller spec Windows (bản FULL: VBEE + AI Voice local).
+- `truyenfull_linux.spec` — PyInstaller spec Linux (VBEE-only).
+- `installer.iss` — Inno Setup (nén tối đa, bản phát hành).
+- `installer-dev.iss` — Inno Setup (nén nhanh, cho vòng lặp dev).
+- `build.ps1` — script build tự động Windows (frontend → PyInstaller → selftest → iscc).
+- `build-linux.sh` — script build tự động Linux.
+- `make_seed_db.py` — tạo `default_seed.db` (seed DB ship kèm bản cài).
 
 ## Kiến trúc runtime
 - **Tài nguyên đóng gói (read-only)** nằm trong `_internal/`: `frontend/dist`, `bin/ffmpeg.exe`, `bin/ffprobe.exe`, `assets/fonts`.

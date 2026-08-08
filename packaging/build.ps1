@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Build TruyenFull Processor desktop app (.exe) end-to-end.
+    Build AudioStory desktop app (.exe) end-to-end.
 
 .DESCRIPTION
     Chạy tuần tự: build frontend -> đóng gói PyInstaller -> self-test -> tạo Setup.exe.
@@ -13,7 +13,7 @@
         để bản cài mới lên là có sẵn mọi truyện bạn đã tạo.
 
 .PARAMETER SeedSource
-    DB nguồn để tạo seed (mặc định: %LOCALAPPDATA%\TruyenFullProcessor\app.db —
+    DB nguồn để tạo seed (mặc định: %LOCALAPPDATA%\AudioStory\app.db —
     chính là DB của bản .exe đang dùng).
 
 .PARAMETER Fast
@@ -50,7 +50,7 @@ param(
     [ValidateSet("product", "fulldev")]
     [string]$Mode = "product",
     # Source DB to build the seed from. Default = the packaged app's live DB.
-    [string]$SeedSource = "$env:LOCALAPPDATA\TruyenFullProcessor\app.db",
+    [string]$SeedSource = "$env:LOCALAPPDATA\AudioStory\app.db",
     [switch]$Fast,
     [switch]$DevInstaller,
     [switch]$SkipFrontend,
@@ -63,7 +63,7 @@ $ErrorActionPreference = "Stop"
 $Repo    = Split-Path -Parent $PSScriptRoot
 $Backend = Join-Path $Repo "backend"
 $Venv    = Join-Path $Backend "venv\Scripts"
-$ExePath = Join-Path $Repo "dist\TruyenFullProcessor\TruyenFullProcessor.exe"
+$ExePath = Join-Path $Repo "dist\AudioStory\AudioStory.exe"
 
 function Step($msg) { Write-Host "`n=== $msg ===" -ForegroundColor Cyan }
 
@@ -114,7 +114,7 @@ if ($Mode -eq "fulldev") {
 # --- 2. PyInstaller -----------------------------------------------------
 # Bản dist cũ có thể đang bị khoá bởi app đang chạy -> tắt trước khi ghi đè,
 # nếu không PyInstaller sẽ chết với PermissionError [WinError 5].
-$running = Get-Process TruyenFullProcessor -ErrorAction SilentlyContinue
+$running = Get-Process AudioStory -ErrorAction SilentlyContinue
 if ($running) {
     Write-Host "  App đang chạy (PID $($running.Id)) — tắt để ghi đè dist/..." -ForegroundColor Yellow
     $running | Stop-Process -Force
@@ -122,7 +122,7 @@ if ($running) {
 }
 
 Step "2/4 Đóng gói PyInstaller (bản FULL: VBEE + AI Voice local)"
-& (Join-Path $Venv "pyinstaller.exe") (Join-Path $PSScriptRoot "truyenfull.spec") `
+& (Join-Path $Venv "pyinstaller.exe") (Join-Path $PSScriptRoot "audiostory.spec") `
     --noconfirm --distpath (Join-Path $Repo "dist") --workpath (Join-Path $Repo "build")
 if ($LASTEXITCODE) { throw "PyInstaller failed" }
 
@@ -130,7 +130,7 @@ if ($LASTEXITCODE) { throw "PyInstaller failed" }
 if (-not $SkipSelftest) {
     Step "3/4 Self-test bản đóng gói"
     & $ExePath --selftest
-    if ($LASTEXITCODE) { throw "SELFTEST FAILED (exit $LASTEXITCODE) — xem %LOCALAPPDATA%\TruyenFullProcessor\selftest_result.txt" }
+    if ($LASTEXITCODE) { throw "SELFTEST FAILED (exit $LASTEXITCODE) — xem %LOCALAPPDATA%\AudioStory\selftest_result.txt" }
     Write-Host "SELFTEST OK" -ForegroundColor Green
 } else {
     Step "3/4 Self-test — BỎ QUA (-SkipSelftest)"

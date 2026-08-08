@@ -1,24 +1,24 @@
-; Inno Setup script for TruyenFull Processor
-; Build: iscc packaging\installer.iss   (run AFTER pyinstaller produces dist\TruyenFullProcessor)
-; Produces: packaging\Output\TruyenFullProcessor-Setup.exe
+; Inno Setup script for AudioStory
+; Build: iscc packaging\installer.iss   (run AFTER pyinstaller produces dist\AudioStory)
+; Produces: packaging\Output\AudioStory-Setup.exe
 
-#define AppName "TruyenFull Processor"
+#define AppName "AudioStory"
 #define AppVersion "1.0.0"
-#define AppPublisher "TruyenFull Processor"
-#define AppExeName "TruyenFullProcessor.exe"
+#define AppPublisher "AudioStory"
+#define AppExeName "AudioStory.exe"
 
 [Setup]
 AppId={{8F3A2C10-4E6B-4C2A-9E7D-TRUYENFULL01}}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
-DefaultDirName={autopf}\TruyenFullProcessor
+DefaultDirName={autopf}\AudioStory
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 ; Install per-machine (needs admin) so Program Files is used; data lives in %LOCALAPPDATA%.
 PrivilegesRequired=admin
 OutputDir=Output
-OutputBaseFilename=TruyenFullProcessor-Setup
+OutputBaseFilename=AudioStory-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -31,9 +31,15 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
 
+[InstallDelete]
+; App was renamed TruyenFullProcessor -> AudioStory. On an upgrade-in-place
+; (same AppId) Inno keeps the old install dir; delete the stale old-named exe so
+; it doesn't linger next to the new one.
+Type: files; Name: "{app}\TruyenFullProcessor.exe"
+
 [Files]
 ; The entire PyInstaller onedir output.
-Source: "..\dist\TruyenFullProcessor\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "..\dist\AudioStory\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"

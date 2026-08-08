@@ -1,4 +1,4 @@
-# 📚 Tài liệu dự án — TruyenFull Processor
+# 📚 Tài liệu dự án — AudioStory
 
 > Tài liệu tổng hợp: kiến trúc, stack công nghệ, luồng nghiệp vụ (flow) và chi tiết từng chức năng.
 > Cập nhật: 2026-08-08.
@@ -7,7 +7,7 @@
 
 ## 1. Tổng quan
 
-**TruyenFull Processor** là một ứng dụng biến **truyện chữ thành audiobook và video**. Nó không "chỉ chạy web" — giao diện chỉ là bảng điều khiển; phần lõi là một **pipeline xử lý media** nhiều bước.
+**AudioStory** là một ứng dụng biến **truyện chữ thành audiobook và video**. Nó không "chỉ chạy web" — giao diện chỉ là bảng điều khiển; phần lõi là một **pipeline xử lý media** nhiều bước.
 
 Luồng giá trị cốt lõi:
 
@@ -370,12 +370,12 @@ Hệ thống bản quyền **node-locked, xác thực offline** (Ed25519). Chi t
 
 ### 7.1. Bản Desktop (người dùng cuối)
 
-1. Chạy `packaging/Output/TruyenFullProcessor-Setup.exe`.
-2. Mở **TruyenFull Processor** từ Start menu.
+1. Chạy `packaging/Output/AudioStory-Setup.exe`.
+2. Mở **AudioStory** từ Start menu.
 3. **Kích hoạt license** lần đầu (màn Activation).
 4. Vào **Cài đặt** nhập API key (VBEE / Gemini / DeepSeek) — lưu vào SQLite.
 
-Không cần Docker/Python/Node/FFmpeg. Dữ liệu ở `%LOCALAPPDATA%\TruyenFullProcessor\`.
+Không cần Docker/Python/Node/FFmpeg. Dữ liệu ở `%LOCALAPPDATA%\AudioStory\`.
 
 ### 7.2. Web dev mode (lập trình viên)
 
@@ -406,7 +406,7 @@ Sau khi chạy:
 
 ### 7.3. Build bản Desktop
 
-Xem [../packaging/BUILD.md](../packaging/BUILD.md). Tóm tắt: `npm run build` (frontend) → `pyinstaller packaging/truyenfull.spec` → `--selftest` → `iscc packaging/installer.iss`. Có script tự động `packaging/build.ps1`.
+Xem [../packaging/BUILD.md](../packaging/BUILD.md). Tóm tắt: `npm run build` (frontend) → `pyinstaller packaging/audiostory.spec` → `--selftest` → `iscc packaging/installer.iss`. Có script tự động `packaging/build.ps1`.
 
 ---
 
@@ -736,22 +736,22 @@ Bản đóng gói **cài-là-chạy** — không cần Docker/Python/Node/FFmpeg
 | Giao diện | Vite `:5173` + backend `:8000` | 1 cửa sổ WebView2 (pywebview), FastAPI serve `dist` same-origin, port động |
 | FFmpeg | đặt trong `backend/bin/` hoặc PATH | **bundled** trong `_internal/bin/` |
 | License | tắt (trừ `LICENSE_ENFORCE`) | **bắt buộc kích hoạt** |
-| Chạy | uvicorn + Vite | double-click `TruyenFullProcessor.exe` |
+| Chạy | uvicorn + Vite | double-click `AudioStory.exe` |
 | Đóng gói | — | PyInstaller onedir + Inno Setup → `Setup.exe` |
 
 ### Vị trí dữ liệu (khi chạy bản đóng gói)
 - **Read-only (trong thư mục cài):** `_internal/frontend/dist`, `_internal/bin/ffmpeg.exe|ffprobe.exe`, `_internal/assets/fonts`, `default_seed.db`.
-- **Ghi được (per-user):** `%LOCALAPPDATA%\TruyenFullProcessor\` — chứa `app.db`, `license.json`, `storage/`, `cache/`, `logs/`.
+- **Ghi được (per-user):** `%LOCALAPPDATA%\AudioStory\` — chứa `app.db`, `license.json`, `storage/`, `cache/`, `logs/`.
 
 ### File cốt lõi của bản desktop
 - `backend/app/paths.py` — trung tâm hóa đường dẫn (phân biệt dev / frozen qua `sys.frozen` + `sys._MEIPASS`).
 - `backend/app/database.py` — engine SQLite + PRAGMA (WAL, foreign_keys=ON, busy_timeout=30000, synchronous=NORMAL); giữ nhánh MySQL nếu override `DATABASE_URL`.
 - `backend/app/seed.py` — nạp **25 giọng VBEE** + **9 settings** mặc định khi DB rỗng; chép `default_seed.db` cho bản cài mới (`restore_seed_data_if_fresh`).
 - `backend/desktop.py` — entry point: uvicorn chạy nền (port động) + cửa sổ pywebview; có `--selftest` để smoke-test.
-- `packaging/truyenfull.spec` (PyInstaller Windows), `packaging/truyenfull_linux.spec` (Linux), `packaging/installer.iss` (Inno Setup + bootstrap WebView2), `packaging/build.ps1` (script build tự động).
+- `packaging/audiostory.spec` (PyInstaller Windows), `packaging/audiostory_linux.spec` (Linux), `packaging/installer.iss` (Inno Setup + bootstrap WebView2), `packaging/build.ps1` (script build tự động).
 
 ### Cách build lại
-Xem [../packaging/BUILD.md](../packaging/BUILD.md). Tóm tắt: `npm run build` (frontend) → `pyinstaller packaging/truyenfull.spec` → `--selftest` → `iscc packaging/installer.iss` → `packaging/Output/TruyenFullProcessor-Setup.exe`. Hoặc chạy `packaging/build.ps1` để tự động toàn bộ.
+Xem [../packaging/BUILD.md](../packaging/BUILD.md). Tóm tắt: `npm run build` (frontend) → `pyinstaller packaging/audiostory.spec` → `--selftest` → `iscc packaging/installer.iss` → `packaging/Output/AudioStory-Setup.exe`. Hoặc chạy `packaging/build.ps1` để tự động toàn bộ.
 
 ### API key & License
 App **không** ship kèm key. Lần đầu mở phải **kích hoạt license** (màn Activation), sau đó vào **Cài đặt** nhập VBEE/Gemini/DeepSeek key (lưu vào bảng `settings` của SQLite). `.env` không được đóng gói.

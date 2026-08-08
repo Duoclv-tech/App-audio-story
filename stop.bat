@@ -2,7 +2,7 @@
 chcp 65001 >nul
 
 echo ========================================
-echo   TruyenFull Processor - Stopping...
+echo   AudioStory - Stopping...
 echo ========================================
 echo.
 

@@ -2,24 +2,24 @@
 ; Khác installer.iss: Compression=none + SolidCompression=no => iscc chạy nhanh
 ; hơn nhiều, đổi lại Setup.exe to hơn. KHÔNG dùng để phát hành.
 ; Build: iscc packaging\installer-dev.iss   (sau khi pyinstaller xong)
-; Produces: packaging\Output\TruyenFullProcessor-Setup-dev.exe
+; Produces: packaging\Output\AudioStory-Setup-dev.exe
 
-#define AppName "TruyenFull Processor"
+#define AppName "AudioStory"
 #define AppVersion "1.0.0"
-#define AppPublisher "TruyenFull Processor"
-#define AppExeName "TruyenFullProcessor.exe"
+#define AppPublisher "AudioStory"
+#define AppExeName "AudioStory.exe"
 
 [Setup]
 AppId={{8F3A2C10-4E6B-4C2A-9E7D-TRUYENFULL01}}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
-DefaultDirName={autopf}\TruyenFullProcessor
+DefaultDirName={autopf}\AudioStory
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=admin
 OutputDir=Output
-OutputBaseFilename=TruyenFullProcessor-Setup-dev
+OutputBaseFilename=AudioStory-Setup-dev
 ; --- Khác biệt so với bản release: nén nhanh nhất ---
 Compression=none
 SolidCompression=no
@@ -33,8 +33,12 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
 
+[InstallDelete]
+; Remove the stale old-named exe on upgrade-in-place (rename TruyenFullProcessor -> AudioStory).
+Type: files; Name: "{app}\TruyenFullProcessor.exe"
+
 [Files]
-Source: "..\dist\TruyenFullProcessor\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "..\dist\AudioStory\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"

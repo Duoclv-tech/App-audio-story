@@ -29,7 +29,7 @@ logger.add(str(paths.LOG_DIR / "app.log"), rotation="10 MB", level="DEBUG")
 
 # Create FastAPI app
 app = FastAPI(
-    title="TruyenFull Processor API",
+    title="AudioStory API",
     description="API for processing stories from TruyenFull",
     version="1.0.0",
     debug=settings.DEBUG
@@ -95,7 +95,7 @@ app.include_router(license_api.router, prefix="/api/v1/license", tags=["license"
 @app.on_event("startup")
 async def startup_event():
     """Startup event handler"""
-    logger.info("Starting TruyenFull Processor API...")
+    logger.info("Starting AudioStory API...")
     logger.info(f"Debug mode: {settings.DEBUG}")
     logger.info(f"CORS origins: {settings.cors_origins_list}")
 
@@ -168,13 +168,13 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """Shutdown event handler"""
-    logger.info("Shutting down TruyenFull Processor API...")
+    logger.info("Shutting down AudioStory API...")
 
 @app.get("/api/info")
 async def api_info():
     """API info endpoint"""
     return {
-        "message": "TruyenFull Processor API",
+        "message": "AudioStory API",
         "version": "1.0.0",
         "docs": "/docs",
         "health": "/health"
@@ -221,7 +221,7 @@ if paths.FRONTEND_DIST.is_dir():
 else:
     @app.get("/")
     async def root_no_frontend():
-        return {"message": "TruyenFull Processor API (frontend not built)", "docs": "/docs"}
+        return {"message": "AudioStory API (frontend not built)", "docs": "/docs"}
 
 if __name__ == "__main__":
     import uvicorn

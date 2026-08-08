@@ -78,7 +78,7 @@ jobs:
       # --- PyInstaller -----------------------------------------------------
       - name: Build with PyInstaller
         run: |
-          pyinstaller packaging/truyenfull_linux.spec --noconfirm \
+          pyinstaller packaging/audiostory_linux.spec --noconfirm \
             --distpath dist --workpath build
 
       # --- Headless self-test ---------------------------------------------
@@ -86,25 +86,25 @@ jobs:
       # GTK window, so no X display is needed.
       - name: Self-test
         run: |
-          ./dist/TruyenFullProcessor/TruyenFullProcessor --selftest
+          ./dist/AudioStory/AudioStory --selftest
           echo "selftest exit: $?"
 
       # --- Package ---------------------------------------------------------
       - name: Package tarball
         run: |
           cd dist
-          tar -czf TruyenFullProcessor-linux-x86_64.tar.gz TruyenFullProcessor
-          ls -lh TruyenFullProcessor-linux-x86_64.tar.gz
+          tar -czf AudioStory-linux-x86_64.tar.gz AudioStory
+          ls -lh AudioStory-linux-x86_64.tar.gz
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TruyenFullProcessor-linux-x86_64
-          path: dist/TruyenFullProcessor-linux-x86_64.tar.gz
+          name: AudioStory-linux-x86_64
+          path: dist/AudioStory-linux-x86_64.tar.gz
           retention-days: 14
 
       - name: Attach to Release (tag builds only)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/TruyenFullProcessor-linux-x86_64.tar.gz
+          files: dist/AudioStory-linux-x86_64.tar.gz

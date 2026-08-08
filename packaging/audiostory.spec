@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec for TruyenFull Processor (Windows desktop app) — FULL build.
+PyInstaller spec for AudioStory (Windows desktop app) — FULL build.
 
 Bundles the local AI Voice local TTS engine (torch + CUDA + transformers)
 alongside the cloud VBEE engine, so the shipped app supports BOTH. Large
@@ -9,9 +9,9 @@ and automatically falls back to CPU (slower) on GPU-less machines — see
 app/services/ai_voice_local_processor.
 
 Build from the repo root (venv must have requirements.lock.txt installed):
-    backend/venv/Scripts/pyinstaller.exe packaging/truyenfull.spec --noconfirm
+    backend/venv/Scripts/pyinstaller.exe packaging/audiostory.spec --noconfirm
 
-Produces dist/TruyenFullProcessor/TruyenFullProcessor.exe (onedir).
+Produces dist/AudioStory/AudioStory.exe (onedir).
 """
 import os
 from PyInstaller.utils.hooks import collect_all, collect_submodules
@@ -115,7 +115,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="TruyenFullProcessor",
+    name="AudioStory",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -132,5 +132,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="TruyenFullProcessor",
+    name="AudioStory",
 )

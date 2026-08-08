@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec for TruyenFull Processor — LINUX (Ubuntu) build.
+PyInstaller spec for AudioStory — LINUX (Ubuntu) build.
 
 This is the LIGHTWEIGHT / VBEE-only variant: it ships the cloud VBEE TTS engine
 only. It deliberately does NOT bundle the local AI Voice local engine (torch +
@@ -14,9 +14,9 @@ therefore needs the WebKit2GTK runtime; the .github workflow installs it at
 build time and PyInstaller's gi hooks bundle the GObject typelibs.
 
 Build from the repo root (Linux, venv with requirements.txt installed):
-    backend/venv/bin/pyinstaller packaging/truyenfull_linux.spec --noconfirm
+    backend/venv/bin/pyinstaller packaging/audiostory_linux.spec --noconfirm
 
-Produces dist/TruyenFullProcessor/TruyenFullProcessor (onedir, ELF binary).
+Produces dist/AudioStory/AudioStory (onedir, ELF binary).
 """
 import os
 from PyInstaller.utils.hooks import collect_all, collect_submodules
@@ -106,7 +106,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="TruyenFullProcessor",
+    name="AudioStory",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -122,5 +122,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="TruyenFullProcessor",
+    name="AudioStory",
 )

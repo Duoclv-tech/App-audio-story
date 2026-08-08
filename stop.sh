@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🛑 Stopping TruyenFull Processor..."
+echo "🛑 Stopping AudioStory..."
 echo ""
 
 GREEN='\033[0;32m'

@@ -1,5 +1,5 @@
 """
-Desktop entry point for TruyenFull Processor.
+Desktop entry point for AudioStory.
 
 Runs the FastAPI app with uvicorn in a background thread bound to a free
 localhost port, waits until it answers /health, then opens a native window
@@ -60,7 +60,7 @@ from loguru import logger
 # as dependencies and bundles them.
 from app.main import app as fastapi_app
 
-WINDOW_TITLE = "TruyenFull Processor"
+WINDOW_TITLE = "AudioStory"
 
 
 class NativeApi:
@@ -178,7 +178,7 @@ def selftest() -> int:
     """Start the backend, verify a few endpoints, and exit — no GUI.
 
     Used to smoke-test a frozen build: proves PyInstaller bundled the frontend,
-    ffmpeg, sqlite and all hidden imports correctly. Run: TruyenFullProcessor.exe --selftest
+    ffmpeg, sqlite and all hidden imports correctly. Run: AudioStory.exe --selftest
     """
     # Disable the license gate for this in-process smoke test only, so protected
     # routes (e.g. /tts/voices) can be checked without a real activation.

@@ -10,7 +10,7 @@ Usage:
   python migrate_mysql_to_sqlite.py [target_sqlite_path]
 
 By default the target is the installed desktop app's DB:
-  %LOCALAPPDATA%\\TruyenFullProcessor\\app.db
+  %LOCALAPPDATA%\\AudioStory\\app.db
 
 Idempotent: rows already present in the target (matched by primary key, or by
 setting_key for settings) are skipped, so it's safe to run more than once.
@@ -52,7 +52,7 @@ def _target_db_path() -> Path:
     if len(sys.argv) > 1:
         return Path(sys.argv[1])
     local = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
-    return Path(local) / "TruyenFullProcessor" / "app.db"
+    return Path(local) / "AudioStory" / "app.db"
 
 
 def copy_model(Model, src, dst) -> tuple[int, int]:

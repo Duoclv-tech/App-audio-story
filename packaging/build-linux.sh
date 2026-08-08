@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Build the TruyenFull Processor Linux desktop app (VBEE-only) locally.
+# Build the AudioStory Linux desktop app (VBEE-only) locally.
 #
 # Mirrors .github/workflows/build-ubuntu.yml for people building on their own
-# Ubuntu machine. Produces dist/TruyenFullProcessor/TruyenFullProcessor and a
-# dist/TruyenFullProcessor-linux-x86_64.tar.gz.
+# Ubuntu machine. Produces dist/AudioStory/AudioStory and a
+# dist/AudioStory-linux-x86_64.tar.gz.
 #
 # One-time system deps (Ubuntu 22.04/24.04):
 #   sudo apt-get install -y libgirepository1.0-dev libcairo2-dev pkg-config \
@@ -55,14 +55,14 @@ fi
 
 # --- 3. PyInstaller --------------------------------------------------------
 step "3/4 PyInstaller (Linux VBEE-only)"
-pyinstaller "$REPO/packaging/truyenfull_linux.spec" --noconfirm \
+pyinstaller "$REPO/packaging/audiostory_linux.spec" --noconfirm \
   --distpath "$REPO/dist" --workpath "$REPO/build"
 
 # --- 3b. Self-test (headless) ---------------------------------------------
 step "Self-test"
-"$REPO/dist/TruyenFullProcessor/TruyenFullProcessor" --selftest
+"$REPO/dist/AudioStory/AudioStory" --selftest
 
 # --- 4. Package ------------------------------------------------------------
 step "4/4 Package tarball"
-( cd "$REPO/dist" && tar -czf TruyenFullProcessor-linux-x86_64.tar.gz TruyenFullProcessor )
-echo "Done: $REPO/dist/TruyenFullProcessor-linux-x86_64.tar.gz"
+( cd "$REPO/dist" && tar -czf AudioStory-linux-x86_64.tar.gz AudioStory )
+echo "Done: $REPO/dist/AudioStory-linux-x86_64.tar.gz"

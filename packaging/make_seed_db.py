@@ -13,7 +13,7 @@ Two modes:
 Either way the source DB's WAL is checkpointed into a clean single file.
 
 Usage (from repo root):
-    python packaging/make_seed_db.py                      # product, source = %LOCALAPPDATA%\\TruyenFullProcessor\\app.db
+    python packaging/make_seed_db.py                      # product, source = %LOCALAPPDATA%\\AudioStory\\app.db
     python packaging/make_seed_db.py path\\to\\app.db      # product, explicit source
     python packaging/make_seed_db.py --full               # full,    default source
     python packaging/make_seed_db.py --full path\\to\\app.db
@@ -42,7 +42,7 @@ CREDENTIAL_KEYS = (
 
 def default_source() -> str:
     local = os.environ.get("LOCALAPPDATA") or os.path.expanduser(r"~\AppData\Local")
-    return os.path.join(local, "TruyenFullProcessor", "app.db")
+    return os.path.join(local, "AudioStory", "app.db")
 
 
 def main() -> None:

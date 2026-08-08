@@ -1,4 +1,4 @@
-# 🖥️ Kế hoạch: Đóng gói TruyenFull Processor thành App Windows (.exe)
+# 🖥️ Kế hoạch: Đóng gói AudioStory thành App Windows (.exe)
 
 > Chuyển từ web app (React + FastAPI + MySQL/Docker) sang **một app Windows cài-là-chạy**.
 > Trạng thái: **Bản kế hoạch — chờ triển khai**. Cập nhật: 2026-07-06.
@@ -28,7 +28,7 @@
 ## 2. Kiến trúc sau khi đóng gói
 
 ```
-TruyenFullProcessor.exe  (PyInstaller onedir + launcher pywebview)
+AudioStory.exe  (PyInstaller onedir + launcher pywebview)
 │
 ├─ khởi động uvicorn (FastAPI) trên 127.0.0.1:<port ngẫu nhiên rảnh>, KHÔNG reload
 ├─ mở cửa sổ WebView2 trỏ http://127.0.0.1:<port> → FastAPI serve frontend dist
@@ -38,7 +38,7 @@ TruyenFullProcessor.exe  (PyInstaller onedir + launcher pywebview)
 │    ├─ bin/ffmpeg.exe, ffprobe.exe
 │    └─ assets/fonts, mask defaults
 │
-└─ [ghi được, per-user]  %LOCALAPPDATA%\TruyenFullProcessor\
+└─ [ghi được, per-user]  %LOCALAPPDATA%\AudioStory\
      ├─ app.db                    (SQLite)
      ├─ storage/ (audio, videos, exports, trim_temp, stickers)
      └─ cache/  (masks, previews, srt, fonts tải thêm)
@@ -57,7 +57,7 @@ TruyenFullProcessor.exe  (PyInstaller onedir + launcher pywebview)
 **Tạo module mới `backend/app/paths.py`:**
 - `is_frozen()` = `getattr(sys, 'frozen', False)`.
 - `BUNDLE_DIR`: frozen = `sys._MEIPASS`; dev = gốc `backend/`. Chứa tài nguyên read-only (ffmpeg, fonts mặc định, frontend dist).
-- `DATA_DIR`: frozen = `%LOCALAPPDATA%\TruyenFullProcessor`; dev = `backend/`. Chứa `app.db`, `storage/`, `cache/`.
+- `DATA_DIR`: frozen = `%LOCALAPPDATA%\AudioStory`; dev = `backend/`. Chứa `app.db`, `storage/`, `cache/`.
 - Export: `STORAGE_DIR, AUDIO_DIR, VIDEO_DIR, EXPORTS_DIR, TRIM_TEMP_DIR, STICKERS_DIR, CACHE_DIR, MASK_DIR, FONTS_DIR, DB_PATH` — tạo thư mục khi import.
 
 **Sửa các chỗ tự định nghĩa path để dùng `paths.py`:**
@@ -129,7 +129,7 @@ TruyenFullProcessor.exe  (PyInstaller onedir + launcher pywebview)
 2. Chọn **port rảnh động** (`socket` bind `:0`) tránh xung đột.
 3. Chạy uvicorn trong **thread nền** (`host=127.0.0.1`, không reload, log ra file trong DATA_DIR).
 4. **Chờ health**: poll `GET /health` tới OK (timeout ~30s) rồi mới mở cửa sổ.
-5. `webview.create_window("TruyenFull Processor", url, width=1400, height=900)` + `webview.start()`.
+5. `webview.create_window("AudioStory", url, width=1400, height=900)` + `webview.start()`.
 6. Cửa sổ đóng → shutdown uvicorn + terminate thread/ffmpeg subprocess còn chạy.
 
 **`requirements.txt`:** thêm `pywebview` (Windows dùng WebView2). Nhóm build thêm `pyinstaller`.
@@ -140,21 +140,21 @@ TruyenFullProcessor.exe  (PyInstaller onedir + launcher pywebview)
 
 ### Phase 6 — Đóng gói PyInstaller (onedir)
 
-**Tạo `packaging/truyenfull.spec`:**
+**Tạo `packaging/audiostory.spec`:**
 - Entry = `backend/desktop.py`.
 - `datas`: `frontend/dist` → `frontend/dist`; `backend/bin/*.exe` → `bin/`; fonts → `assets/fonts`.
 - `hiddenimports`: uvicorn loops/protocols/lifespan, `sqlalchemy.dialects.sqlite`, `loguru`, `docx`, `PIL`, và **pywebview**: `webview.platforms.edgechromium` + `clr` (pythonnet). pywebview có PyInstaller hook riêng — cần cài `pywebview` kèm `pythonnet`; kiểm tra WebView2 loader được đóng gói.
-- `console=False`, `name='TruyenFullProcessor'`, icon `.ico`, **onedir** (khởi động nhanh, không giải nén temp mỗi lần).
+- `console=False`, `name='AudioStory'`, icon `.ico`, **onedir** (khởi động nhanh, không giải nén temp mỗi lần).
 - `paths.py` đọc tài nguyên từ `sys._MEIPASS` khi frozen (đã thiết kế Phase 1).
 
-**Verify:** `pyinstaller packaging/truyenfull.spec` → chạy `dist/TruyenFullProcessor/TruyenFullProcessor.exe`: DB ở `%LOCALAPPDATA%`, UI mở, render video OK, export Word OK.
+**Verify:** `pyinstaller packaging/audiostory.spec` → chạy `dist/AudioStory/AudioStory.exe`: DB ở `%LOCALAPPDATA%`, UI mở, render video OK, export Word OK.
 
 ---
 
 ### Phase 7 — Installer (Inno Setup) + WebView2 bootstrap
 
 **Tạo `packaging/installer.iss`:**
-- Đóng gói `dist/TruyenFullProcessor/` vào `Setup.exe`; cài vào `{autopf}\TruyenFullProcessor`; shortcut Start Menu + Desktop.
+- Đóng gói `dist/AudioStory/` vào `Setup.exe`; cài vào `{autopf}\AudioStory`; shortcut Start Menu + Desktop.
 - **Bootstrap WebView2**: kiểm tra registry; nếu thiếu, tải & chạy Evergreen Bootstrapper (Win11 thường có sẵn).
 - Uninstaller chuẩn; tùy chọn giữ/xoá dữ liệu `%LOCALAPPDATA%` khi gỡ.
 - (tùy chọn) code signing giảm cảnh báo SmartScreen (cần chứng chỉ, làm sau).
@@ -201,7 +201,7 @@ Verify end-to-end sau **mỗi** phase (Phase 1–5 test chế độ dev; Phase 6
 - `backend/app/paths.py` — trung tâm hóa đường dẫn (bundle vs data dir)
 - `backend/app/seed.py` — seed voices/settings mặc định
 - `backend/desktop.py` — entry point launcher (pywebview + uvicorn)
-- `packaging/truyenfull.spec` — cấu hình PyInstaller
+- `packaging/audiostory.spec` — cấu hình PyInstaller
 - `packaging/installer.iss` — cấu hình Inno Setup
 - `backend/bin/ffmpeg.exe`, `ffprobe.exe` — binary bundled
 
@@ -225,11 +225,11 @@ Verify end-to-end sau **mỗi** phase (Phase 1–5 test chế độ dev; Phase 6
 - [x] **Phase 3** — Bundle FFmpeg (prepend PATH, binary trong `backend/bin/`) — verified: app dùng ffmpeg bundled
 - [x] **Phase 4** — FastAPI serve `frontend/dist` + SPA fallback — verified: `/`, `/history`, assets, API cùng origin; fix `tsc`→`vite build`
 - [x] **Phase 5** — `desktop.py` launcher (pywebview + uvicorn thread + port động) — verified: cửa sổ WebView2 mở & render UI
-- [x] **Phase 6** — PyInstaller onedir (`truyenfull.spec`) — verified: `--selftest` all PASS trên exe đóng gói
-- [x] **Phase 7** — Inno Setup installer + WebView2 bootstrap — `packaging/Output/TruyenFullProcessor-Setup.exe` (79MB)
+- [x] **Phase 6** — PyInstaller onedir (`audiostory.spec`) — verified: `--selftest` all PASS trên exe đóng gói
+- [x] **Phase 7** — Inno Setup installer + WebView2 bootstrap — `packaging/Output/AudioStory-Setup.exe` (79MB)
 - [x] **Phase 8** — First-run banner nhắc API key, `.gitignore`, cập nhật docs
 
-**Sản phẩm cuối:** `packaging/Output/TruyenFullProcessor-Setup.exe` — tải về, cài, chạy như app Windows thường.
+**Sản phẩm cuối:** `packaging/Output/AudioStory-Setup.exe` — tải về, cài, chạy như app Windows thường.
 
 ### Nhật ký / lưu ý khi làm
 - **FFmpeg**: dùng bản Gyan Essentials 8.0 (static) copy từ winget vào `backend/bin/` (~95MB mỗi file).

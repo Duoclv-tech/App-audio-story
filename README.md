@@ -1,4 +1,4 @@
-# 📖 TruyenFull Processor
+# 📖 AudioStory
 
 Turns web novels into **audiobooks and subtitled videos** through a guided, multi-step media pipeline:
 
@@ -39,14 +39,14 @@ The desktop build runs the FastAPI server on `127.0.0.1:<random port>` and rende
 
 Install and launch:
 
-1. Run `packaging/Output/TruyenFullProcessor-Setup.exe` (built with Inno Setup).
-2. Launch **TruyenFull Processor** from the Start menu.
+1. Run `packaging/Output/AudioStory-Setup.exe` (built with Inno Setup).
+2. Launch **AudioStory** from the Start menu.
 3. Activate your license on first run (Activation screen).
 4. Open **Settings** and enter your API keys (VBEE / OpenAI / DeepSeek / Gemini) — keys are stored in the local SQLite DB, nothing is hardcoded.
 
-User data lives in `%LOCALAPPDATA%\TruyenFullProcessor\`: `app.db` (SQLite), `storage/`, `cache/`, `logs/`.
+User data lives in `%LOCALAPPDATA%\AudioStory\`: `app.db` (SQLite), `storage/`, `cache/`, `logs/`.
 
-To run the frozen build without installing, from the repo: `dist/TruyenFullProcessor/TruyenFullProcessor.exe`.
+To run the frozen build without installing, from the repo: `dist/AudioStory/AudioStory.exe`.
 
 ## 🧑‍💻 Option B — Run in dev mode (developers)
 
@@ -110,10 +110,10 @@ web_app/
 ├── frontend/                  # React + Vite frontend
 │   └── src/{components,pages,services}
 ├── packaging/                 # PyInstaller specs + Inno Setup installer
-│   ├── truyenfull.spec        # PyInstaller spec (full build: VBEE + AI Voice local)
+│   ├── audiostory.spec        # PyInstaller spec (full build: VBEE + AI Voice local)
 │   ├── installer.iss          # Inno Setup script
 │   └── BUILD.md               # Build instructions
-├── dist/                      # PyInstaller output (TruyenFullProcessor.exe)
+├── dist/                      # PyInstaller output (AudioStory.exe)
 └── docs/PROJECT_DOCUMENTATION.md   # Full architecture & flow reference
 ```
 
@@ -188,15 +188,15 @@ See [`packaging/BUILD.md`](packaging/BUILD.md) for the full process. In short:
 cd frontend && npm run build
 
 # 2. Package with PyInstaller (from repo root)
-backend/venv/Scripts/pyinstaller.exe packaging/truyenfull.spec --noconfirm
+backend/venv/Scripts/pyinstaller.exe packaging/audiostory.spec --noconfirm
 #   (full build: nhúng cả VBEE + AI Voice local; AI Voice local tự chạy GPU hoặc CPU)
 
 # 3. Smoke-test the frozen build (no window)
-dist/TruyenFullProcessor/TruyenFullProcessor.exe --selftest
+dist/AudioStory/AudioStory.exe --selftest
 
 # 4. Create the installer (requires Inno Setup 6)
 iscc packaging\installer.iss
-#   -> packaging/Output/TruyenFullProcessor-Setup.exe
+#   -> packaging/Output/AudioStory-Setup.exe
 ```
 
 ## 📄 License

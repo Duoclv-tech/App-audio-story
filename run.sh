@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🚀 Starting TruyenFull Processor..."
+echo "🚀 Starting AudioStory..."
 echo ""
 
 # Colors

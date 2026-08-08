@@ -17,12 +17,46 @@ import os
 import sys
 from pathlib import Path
 
-APP_NAME = "TruyenFullProcessor"
+APP_NAME = "AudioStory"
+# Former app-folder name(s). The app was renamed 2026-08 from "TruyenFullProcessor"
+# to "AudioStory"; existing installs still have their data under the old folder.
+# _migrate_legacy_data_dir() below moves it once so a rename doesn't orphan users'
+# stories / DB / license / settings.
+_LEGACY_APP_NAMES = ("TruyenFullProcessor",)
 
 
 def is_frozen() -> bool:
     """True when running from a PyInstaller-built executable."""
     return bool(getattr(sys, "frozen", False))
+
+
+def _migrate_legacy_data_dir(new_dir: Path) -> None:
+    """One-time migration for the TruyenFullProcessor -> AudioStory rename.
+
+    If this machine has per-user data under an old app-folder name but nothing
+    under the new one yet, move the old directory to the new location so the
+    rename doesn't strand the user's stories, SQLite DB, license token and
+    settings. Runs before any of DATA_DIR's children are created.
+
+    Move (os.replace), not copy: the storage tree can be many GB, and a
+    same-volume rename is instant and atomic. Best-effort — on ANY failure
+    (dir locked by another process, cross-volume, permissions) we leave the old
+    directory untouched and fall through to a fresh empty new_dir rather than
+    crash startup; nothing is ever deleted.
+    """
+    if new_dir.exists():
+        return
+    for legacy in _LEGACY_APP_NAMES:
+        old = new_dir.parent / legacy
+        if old.is_dir():
+            try:
+                new_dir.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(old, new_dir)   # atomic move within the same volume
+            except OSError:
+                # Leave the old dir in place; the app starts with an empty new
+                # dir. The user can copy it over manually — data is preserved.
+                continue
+            return
 
 
 # --- Read-only bundled resources -------------------------------------------
@@ -73,6 +107,8 @@ if is_frozen():
     else:  # linux / other posix
         _xdg = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
         DATA_DIR = Path(_xdg) / APP_NAME
+    # Inherit an old-named data dir before anything writes under DATA_DIR.
+    _migrate_legacy_data_dir(DATA_DIR)
 else:
     DATA_DIR = Path(__file__).resolve().parent.parent  # backend/
 

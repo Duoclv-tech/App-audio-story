@@ -170,7 +170,17 @@ class GeminiService:
             if "candidates" not in result or not result["candidates"]:
                 continue
 
-            content = result["candidates"][0]["content"]["parts"][0]["text"].strip()
+            cand = result["candidates"][0]
+            parts = (cand.get("content") or {}).get("parts") or []
+            if not parts:
+                # Gemini blocked the chunk (SAFETY) or hit MAX_TOKENS -> no parts.
+                # Skip this chunk instead of crashing; keep other chunks' results.
+                logger.warning(f"Gemini returned no parts (chunk {idx}); "
+                               f"finishReason={cand.get('finishReason')}")
+                continue
+            content = (parts[0].get("text") or "").strip()
+            if not content:
+                continue
             if content.startswith("```json"):
                 content = content[7:]
             if content.startswith("```"):

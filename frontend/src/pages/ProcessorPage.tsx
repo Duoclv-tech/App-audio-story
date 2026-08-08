@@ -1221,9 +1221,17 @@ export default function ProcessorPage() {
       clearInterval(videoPollingRef.current)
       videoPollingRef.current = null
     }
+    // Guard against a race when switching stories fast: this component is reused
+    // across /processor/:storyId (no remount), so a slow loadStory for the
+    // previous id can resolve AFTER the new one and clobber state — writing the
+    // wrong story's tts_config, which the debounced persist effect then PUTs to
+    // the wrong row. The cancelled flag makes a superseded load bail before any
+    // setState.
+    let cancelled = false
     if (storyId) {
-      loadStory(storyId)
+      loadStory(storyId, () => cancelled)
     }
+    return () => { cancelled = true }
   }, [storyId])
 
   // Fetch available voices on mount
@@ -1242,11 +1250,15 @@ export default function ProcessorPage() {
     return () => clearInterval(id)
   }, [localVoiceStatus?.downloads?.base?.state])
 
-  const loadStory = async (id: string) => {
+  const loadStory = async (id: string, isCancelled: () => boolean = () => false) => {
     try {
       console.log('Loading story:', id)
       const response = await axios.get(`/api/v1/stories/${id}`)
       console.log('Story loaded:', response.data)
+      // A newer story load (or unmount) superseded this one while the request
+      // was in flight — bail before touching state so we never render/persist a
+      // stale story's data under the current URL.
+      if (isCancelled()) return
       const story = response.data
 
       setStoryData({
@@ -1282,6 +1294,7 @@ export default function ProcessorPage() {
       if (!ttsRestored) {
         try {
           const segResp = await axios.get(`/api/v1/tts/segments/${story.id}`)
+          if (isCancelled()) return
           const segs = segResp.data?.segments || []
           const segCfg = segs.find((s: any) => s.config)?.config
           if (segCfg) {
@@ -1312,6 +1325,7 @@ export default function ProcessorPage() {
       if (story.status !== 'draft' && story.status !== 'created') {
         await fetchChapters(id)
       }
+      if (isCancelled()) return
 
       // Set current step from database
       // current_step in DB is the max step reached - we can navigate to any step <= this
@@ -1332,12 +1346,14 @@ export default function ProcessorPage() {
         if (story.current_step >= 7) {
           try {
             const audioResp = await axios.get(`/api/v1/video/audio-path/${id}`)
+            if (isCancelled()) return
             if (audioResp.data.found && audioResp.data.audio_path) {
               setVideoConfig(prev => ({ ...prev, audioPath: audioResp.data.audio_path }))
             }
           } catch {}
           try {
             const videoResp = await axios.get(`/api/v1/video/result/${id}`)
+            if (isCancelled()) return
             if (videoResp.data) {
               setVideoStatus({
                 status: videoResp.data.status as any,

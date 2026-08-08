@@ -27,7 +27,7 @@ if _is_sqlite:
         cur = dbapi_conn.cursor()
         cur.execute("PRAGMA journal_mode=WAL")     # concurrent read while writing
         cur.execute("PRAGMA foreign_keys=ON")      # SQLite defaults OFF -> enable cascade delete
-        cur.execute("PRAGMA busy_timeout=5000")    # wait instead of instantly erroring on lock
+        cur.execute("PRAGMA busy_timeout=30000")   # wait up to 30s instead of failing fast on lock
         cur.execute("PRAGMA synchronous=NORMAL")   # safe with WAL, much faster
         cur.close()
 else:

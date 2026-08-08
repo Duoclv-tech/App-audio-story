@@ -14,7 +14,7 @@ from loguru import logger
 from app import paths
 from app.config import settings
 from app.license import client, store
-from app.license.device_id import compute_device_id
+from app.license.device_id import compute_device_id, has_hardware_anchor
 from app.license.token import verify_token
 
 
@@ -119,6 +119,22 @@ def activate(license_key: str) -> dict:
                 "message": "Mã kích hoạt phải dài 12–64 ký tự."}
 
     device_id = get_device_id()
+
+    # Refuse activation on a machine with no tamper-resistant hardware anchor
+    # (BIOS + disk serial both unreadable — typical of a VM). There the device_id
+    # reduces to sha256(MachineGuid|na|na), and MachineGuid is an admin-writable
+    # registry value, so the issued token would be portable to any machine with
+    # the same forged GUID — defeating node-locking. Enforced only in the
+    # packaged build so dev/CI on non-Windows (where serials are always 'na')
+    # isn't blocked.
+    if paths.is_frozen() and not has_hardware_anchor():
+        logger.error("Refusing activation: no hardware anchor (BIOS + disk "
+                     "serial both 'na'); device_id would not be node-lockable.")
+        return {"ok": False, "reason": "no_hardware_anchor",
+                "message": "Không thể kích hoạt trên máy này: thiếu định danh phần "
+                           "cứng hợp lệ (thường gặp trên máy ảo). Vui lòng cài đặt "
+                           "trên máy tính vật lý."}
+
     result = client.activate(license_key, device_id)
     if not result["ok"]:
         return {"ok": False, "reason": result["reason"], "message": result["message"]}

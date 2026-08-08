@@ -189,10 +189,12 @@ def _create_story_from_file(db, job: "models.BuildJob", cfg: Dict) -> "models.St
             status="pending",
         ))
 
-    # merged_content = chapter bodies concatenated (headings excluded), matching
-    # the wizard's /merged-content behavior. Persisted because the TTS processors
-    # read story.merged_content directly.
-    merged = "".join(c["content"].strip() for c in chapters)
+    # merged_content = chapter bodies joined by a blank line (headings excluded),
+    # matching the wizard's /merged-content behavior (see stories.get_merged_content).
+    # The blank-line separator keeps adjacent chapters' words from gluing together.
+    # Persisted because the TTS processors read story.merged_content directly.
+    _parts = [(c.get("content") or "").strip() for c in chapters]
+    merged = "\n\n".join(p for p in _parts if p)
     if (cfg.get("options") or {}).get("auto_clean"):
         merged = clean_story_text(merged)
     story.merged_content = merged
@@ -267,7 +269,7 @@ def _probe_audio_duration(path: str) -> float:
     try:
         out = subprocess.run(
             ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", path],
-            capture_output=True, text=True,
+            capture_output=True, text=True, timeout=30,
         )
         if out.returncode == 0:
             return float(json.loads(out.stdout)["format"]["duration"])

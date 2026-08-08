@@ -63,7 +63,7 @@ class AudioMerger:
                 'ffprobe', '-v', 'quiet', '-print_format', 'json',
                 '-show_format', file_path
             ]
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
             if result.returncode == 0:
                 data = json.loads(result.stdout)
                 return float(data['format']['duration'])

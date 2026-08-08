@@ -79,12 +79,19 @@ async def merge_audio_task(
     except Exception as e:
         logger.error(f"Error in audio merge task {task_id}: {e}")
 
-        # Update task with error
-        task = db.query(models.Task).filter(models.Task.id == task_id).first()
-        if task:
-            task.status = "failed"
-            task.error_message = str(e)
-            db.commit()
+        # Update task with error. Roll back first: the exception may have come
+        # from db.commit() itself (e.g. SQLite lock timeout), leaving the session
+        # in a PendingRollbackError state that would poison the query/commit below
+        # and leave the task stuck "running" forever.
+        try:
+            db.rollback()
+            task = db.query(models.Task).filter(models.Task.id == task_id).first()
+            if task:
+                task.status = "failed"
+                task.error_message = str(e)
+                db.commit()
+        except Exception:
+            db.rollback()
 
         return {
             "success": False,

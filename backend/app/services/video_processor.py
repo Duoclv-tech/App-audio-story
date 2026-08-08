@@ -128,7 +128,7 @@ class VideoProcessor:
             ]
             result = subprocess.run(
                 cmd, capture_output=True, text=True,
-                encoding='utf-8', errors='replace'
+                encoding='utf-8', errors='replace', timeout=30
             )
             if result.returncode != 0:
                 return 0
@@ -161,13 +161,17 @@ class VideoProcessor:
             ]
             result = subprocess.run(
                 cmd, capture_output=True, text=True,
-                encoding='utf-8', errors='replace'
+                encoding='utf-8', errors='replace', timeout=30
             )
             if result.returncode != 0:
                 return False
             data = json.loads(result.stdout or '{}')
             return bool(data.get('streams'))
-        except Exception:
+        except Exception as e:
+            # Includes ffprobe TimeoutExpired. Log it: returning False here makes
+            # callers treat the file as audioless and drop the audio map, so a
+            # silent probe failure would silently strip audio from the output.
+            logger.warning(f"has_audio_stream probe failed for {file_path}: {e}")
             return False
 
     def get_video_dimensions(self, file_path: str) -> tuple:
@@ -181,7 +185,7 @@ class VideoProcessor:
             ]
             result = subprocess.run(
                 cmd, capture_output=True, text=True,
-                encoding='utf-8', errors='replace'
+                encoding='utf-8', errors='replace', timeout=30
             )
             if result.returncode == 0:
                 data = json.loads(result.stdout)
@@ -966,13 +970,45 @@ class VideoProcessor:
 
         threading.Thread(target=_drain_stderr, daemon=True).start()
 
+        # The stdout read loop below blocks on each readline, so it can neither
+        # enforce the deadline nor notice a *silent* stall (filtergraph deadlock:
+        # process alive but emitting no progress -> readline blocks forever, and
+        # proc.wait() would never return either). A separate watchdog thread kills
+        # the process when the hard timeout is exceeded OR no progress line has
+        # arrived for STALL_TIMEOUT seconds.
+        # 15 min with no progress => assume deadlock. Kept well above legitimate
+        # silent phases (slow input open, +faststart moov relocation on huge
+        # outputs) so a healthy-but-quiet ffmpeg isn't killed; a real filtergraph
+        # deadlock hangs forever, so a longer threshold still catches it.
+        STALL_TIMEOUT = 900
         deadline = time.monotonic() + timeout
+        last_activity = [time.monotonic()]
+        killed = {"reason": None}
+        stop_watchdog = threading.Event()
+
+        def _watchdog():
+            while not stop_watchdog.wait(5):
+                now = time.monotonic()
+                if now > deadline:
+                    killed["reason"] = "FFmpeg timeout"
+                elif now - last_activity[0] > STALL_TIMEOUT:
+                    killed["reason"] = "FFmpeg stalled (no progress)"
+                else:
+                    continue
+                logger.error(f"FFmpeg watchdog killing process: {killed['reason']}")
+                try:
+                    proc.kill()
+                except OSError:
+                    pass
+                return
+
+        threading.Thread(target=_watchdog, daemon=True).start()
+
         last_pct = progress_start
+        loop_ok = False
         try:
             for raw in proc.stdout:
-                if time.monotonic() > deadline:
-                    proc.kill()
-                    return {"success": False, "error": "FFmpeg timeout"}
+                last_activity[0] = time.monotonic()
                 line = raw.decode(errors='replace').strip()
                 if line.startswith('out_time_us=') and total_duration > 0 and task:
                     val = line.split('=', 1)[1]
@@ -989,11 +1025,28 @@ class VideoProcessor:
                             last_pct = new_pct
                     except (ValueError, ZeroDivisionError):
                         pass
+            loop_ok = True  # drained stdout to EOF => ffmpeg is finishing on its own
         finally:
+            stop_watchdog.set()
+            # If we're leaving the loop via an exception (e.g. db.commit() hit a
+            # SQLite lock) rather than EOF, ffmpeg may still be running fine. Kill
+            # it so the wait() below can't block for the whole remaining encode —
+            # otherwise disarming the watchdog just above would reintroduce an
+            # indefinite hang. On the normal/watchdog paths the process is already
+            # exiting, so don't kill (avoids truncating a finalizing output).
+            if not loop_ok and proc.poll() is None:
+                try:
+                    proc.kill()
+                except OSError:
+                    pass
             proc.wait()
 
+        # A process that exited 0 succeeded even if the watchdog flagged it a beat
+        # late (encode finished just past the deadline) — check returncode first.
         if proc.returncode == 0:
             return {"success": True}
+        if killed["reason"]:
+            return {"success": False, "error": killed["reason"]}
         error_msg = b''.join(stderr_buf).decode(errors='replace')[-500:]
         return {"success": False, "error": error_msg}
 

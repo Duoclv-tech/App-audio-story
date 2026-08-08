@@ -86,8 +86,13 @@ def _bios_and_disk_serials() -> tuple[str, str]:
 
 
 @functools.lru_cache(maxsize=1)
-def compute_device_id() -> str:
-    """Return the 64-char hex fingerprint for this machine (cached per process)."""
+def _probe() -> tuple[str, str, str]:
+    """(machine_guid, bios_serial, disk_serial) — each 'na' when unreadable.
+
+    Cached per process: the WMI/PowerShell probe is slow (spawns a subprocess)
+    and the values never change at runtime. compute_device_id() and
+    has_hardware_anchor() share this single probe so they never disagree.
+    """
     if sys.platform == "win32":
         guid = _machine_guid()
         bios, disk = _bios_and_disk_serials()
@@ -96,6 +101,27 @@ def compute_device_id() -> str:
         import platform
         guid = (platform.node() or "na").strip()
         bios, disk = "na", "na"
+    return guid, bios, disk
 
+
+@functools.lru_cache(maxsize=1)
+def compute_device_id() -> str:
+    """Return the 64-char hex fingerprint for this machine (cached per process)."""
+    guid, bios, disk = _probe()
     raw = f"{guid}|{bios}|{disk}"
     return hashlib.sha256(raw.strip().lower().encode("utf-8")).hexdigest()
+
+
+def has_hardware_anchor() -> bool:
+    """True when at least one tamper-resistant hardware serial (BIOS or system
+    disk) was read successfully.
+
+    When BOTH are 'na' (typical of a VM whose hypervisor hides serials), the
+    device_id collapses to sha256(MachineGuid|na|na) — and MachineGuid is a mere
+    registry value an admin can overwrite. Any machine with the same forged
+    MachineGuid then reproduces the same device_id, so a copied license.json
+    verifies offline everywhere and node-locking is defeated. Activation refuses
+    this state (see app.license.service.activate) so no portable token is minted.
+    """
+    _guid, bios, disk = _probe()
+    return bios != "na" or disk != "na"

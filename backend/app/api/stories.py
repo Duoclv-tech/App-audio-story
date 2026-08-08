@@ -398,14 +398,17 @@ async def get_merged_content(story_id: str, db: Session = Depends(get_db)):
     if not chapters:
         raise HTTPException(status_code=404, detail="No chapters found")
 
-    # Merge all chapters - content only, no separators
+    # Merge all chapters - content only, headings excluded. Separate with a
+    # blank line so the last word of one chapter doesn't glue onto the first of
+    # the next (which TTS would then mispronounce). Must stay in sync with
+    # build_orchestrator._create_story_from_file, which persists merged_content
+    # for the batch-build path.
     merged_parts = []
     for chapter in chapters:
         if chapter.content and chapter.content.strip():
             merged_parts.append(chapter.content.strip())
 
-    # Join directly without any separators
-    merged_content = "".join(merged_parts)
+    merged_content = "\n\n".join(merged_parts)
 
     return {
         "story_id": story_id,

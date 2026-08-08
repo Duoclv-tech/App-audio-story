@@ -624,7 +624,8 @@ export default function VideoTrimmerPage({ sourceVideoPath }: VideoTrimmerPagePr
       setJobId(newJobId)
 
       esRef.current = openProgressStream(newJobId, (pct, status, error, outputPath) => {
-        setProcessProgress(pct)
+        // NaN pct signals a transient SSE reconnect — keep the bar where it is.
+        if (!Number.isNaN(pct)) setProcessProgress(pct)
         if (status === 'completed') {
           setProcessStatus('completed')
           // The server already saved the file into the configured output folder

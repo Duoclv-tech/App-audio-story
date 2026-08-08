@@ -5,6 +5,7 @@ from loguru import logger
 
 from app.database import get_db
 from app import models, schemas
+from app.api.video import require_local_origin
 from app.services.output_delivery import get_output_folder, default_output_folder
 
 router = APIRouter()
@@ -31,7 +32,11 @@ async def get_output_folder_info(db: Session = Depends(get_db)):
     }
 
 @router.put("/")
-async def update_settings(settings_data: dict, db: Session = Depends(get_db)):
+async def update_settings(
+    settings_data: dict,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_local_origin),   # CSRF: chặn ghi key/settings từ web ngoài
+):
     """Update settings"""
     for key, value in settings_data.items():
         setting = db.query(models.Setting).filter(models.Setting.setting_key == key).first()

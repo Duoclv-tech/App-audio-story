@@ -124,7 +124,12 @@
       "PowerShell($exe = \"D:\\\\Project\\\\web_app\\\\dist\\\\TruyenFullProcessor\\\\TruyenFullProcessor.exe\"; if \\(Test-Path $exe\\) { $f = Get-Item $exe; \"EXE: {0}  |  {1:N1} MB  |  {2}\" -f $f.Name, \\($f.Length/1MB\\), $f.LastWriteTime } else { \"EXE NOT FOUND\" })",
       "PowerShell(Get-ChildItem *)",
       "PowerShell(& \".\\\\packaging\\\\build.ps1\" -SkipFrontend)",
-      "WebFetch(domain:huggingface.co)"
+      "WebFetch(domain:huggingface.co)",
+      "Bash(ls ~/.claude/CLAUDE.md)",
+      "Bash(ls /d/Project/web_app/CLAUDE.md)",
+      "Bash(ls /d/Project/web_app/backend/CLAUDE.md)",
+      "Bash(ls /d/Project/web_app/backend/app/CLAUDE.md)",
+      "Bash(ls /d/Project/web_app/backend/app/workers/CLAUDE.md)"
     ],
     "deny": [
       "Bash(sudo:*)"

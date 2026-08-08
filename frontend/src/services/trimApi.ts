@@ -222,7 +222,18 @@ export function openProgressStream(
   onEvent: (pct: number, status: string, error?: string, outputPath?: string) => void
 ): EventSource {
   const es = new EventSource(`${BASE}/progress/${jobId}`)
+  // EventSource fires onerror on any transient drop (network blip, proxy idle
+  // timeout, OS sleep/resume, backend reload) and would normally auto-reconnect.
+  // Reporting 'failed' + close() on the first error defeats that reconnect and
+  // permanently reds-out a job the backend is still finishing (the worker runs
+  // independently of this stream and keeps the job in _jobs after completion, so
+  // a reconnect resumes cleanly). Only surface a failure once the browser has
+  // truly given up (readyState CLOSED) or errors persist; otherwise let the
+  // built-in reconnect run. Progress is passed as NaN so the caller leaves the
+  // bar untouched instead of snapping it back to 0 during a transient reconnect.
+  let consecutiveErrors = 0
   es.onmessage = (e) => {
+    consecutiveErrors = 0
     const payload = JSON.parse(e.data) as {
       percent: number; status: string; error?: string; output_path?: string
     }
@@ -230,8 +241,12 @@ export function openProgressStream(
     if (payload.status !== 'running') es.close()
   }
   es.onerror = () => {
-    onEvent(0, 'failed', 'SSE connection error')
-    es.close()
+    consecutiveErrors += 1
+    if (es.readyState === EventSource.CLOSED || consecutiveErrors >= 5) {
+      onEvent(NaN, 'failed', 'Mất kết nối tiến trình')
+      es.close()
+    }
+    // else: transient — let EventSource auto-reconnect and keep current progress.
   }
   return es
 }
